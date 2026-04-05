@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class SessionListViewModelTests: XCTestCase {
-    func testStatusSummaryFromProcessMonitor() async {
+    func testStatusSummary() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234\n5678"
         shell.responses["ps -p"] = "20.0"
@@ -17,10 +17,10 @@ final class SessionListViewModelTests: XCTestCase {
         XCTAssertEqual(vm.busyCount, 2)
     }
 
-    func testTerminalSessionsStartEmpty() {
+    func testSessionsEmpty() {
         let monitor = ProcessMonitor(pollingInterval: 1)
         let vm = SessionListViewModel(processMonitor: monitor)
-        XCTAssertTrue(vm.terminalSessions.isEmpty)
-        XCTAssertNil(vm.selectedSession)
+        XCTAssertTrue(vm.sessions.isEmpty)
+        XCTAssertEqual(vm.sessionCount, 0)
     }
 }

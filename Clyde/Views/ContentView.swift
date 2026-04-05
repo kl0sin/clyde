@@ -13,10 +13,7 @@ struct ContentView: View {
             } else {
                 ExpandedView(
                     appViewModel: appViewModel,
-                    sessionViewModel: sessionViewModel,
-                    onNewSession: {
-                        sessionViewModel.createNewSession()
-                    }
+                    sessionViewModel: sessionViewModel
                 )
             }
         }
