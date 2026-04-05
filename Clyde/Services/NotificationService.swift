@@ -6,10 +6,17 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     var onNotificationClicked: ((pid_t) -> Void)?
 
     func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            self.isAuthorized = granted
-        }
         UNUserNotificationCenter.current().delegate = self
+        Task {
+            do {
+                let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+                await MainActor.run {
+                    self.isAuthorized = granted
+                }
+            } catch {
+                // Permission denied or unavailable — notifications will be silently skipped
+            }
+        }
     }
 
     func buildNotificationContent(for session: Session) -> UNMutableNotificationContent {
