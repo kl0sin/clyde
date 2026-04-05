@@ -39,6 +39,9 @@ struct ExpandedView: View {
                     sessions: sessionViewModel.sessions,
                     onRename: { id, name in
                         sessionViewModel.renameSession(id: id, to: name)
+                    },
+                    onFocus: { session in
+                        appViewModel.focusSession(session)
                     }
                 )
             }
@@ -111,15 +114,19 @@ struct TitleBar: View {
 struct SessionListView: View {
     let sessions: [Session]
     let onRename: (UUID, String) -> Void
+    let onFocus: (Session) -> Void
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(sessions, id: \.pid) { session in
-                    SessionRow(session: session, onRename: { name in
-                        onRename(session.id, name)
-                    })
-                    if session.pid != sessions.last?.pid {
+                ForEach(disambiguated, id: \.session.pid) { item in
+                    SessionRow(
+                        session: item.session,
+                        disambiguator: item.suffix,
+                        onRename: { name in onRename(item.session.id, name) },
+                        onFocus: { onFocus(item.session) }
+                    )
+                    if item.session.pid != sessions.last?.pid {
                         Divider()
                             .background(Color(white: 0.15))
                             .padding(.leading, 52)
@@ -129,23 +136,44 @@ struct SessionListView: View {
             .padding(.vertical, 4)
         }
     }
+
+    /// Add numbered suffix for sessions sharing the same project name
+    private var disambiguated: [(session: Session, suffix: String?)] {
+        var counts: [String: Int] = [:]
+        var indices: [String: Int] = [:]
+
+        // Count duplicates
+        for s in sessions {
+            counts[s.displayName, default: 0] += 1
+        }
+
+        return sessions.map { session in
+            let name = session.displayName
+            if (counts[name] ?? 0) > 1 {
+                indices[name, default: 0] += 1
+                return (session, "#\(indices[name]!)")
+            }
+            return (session, nil)
+        }
+    }
 }
 
 // MARK: - Session Row
 
 struct SessionRow: View {
     let session: Session
+    let disambiguator: String?
     let onRename: (String) -> Void
+    let onFocus: () -> Void
 
     @State private var isEditing = false
     @State private var editName = ""
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 12) {
-            // Animated status indicator — mini Clyde for processing, static for ready
             SessionStatusIndicator(status: session.status)
 
-            // Project info
             VStack(alignment: .leading, spacing: 3) {
                 if isEditing {
                     HStack(spacing: 6) {
@@ -189,17 +217,26 @@ struct SessionRow: View {
                             .foregroundColor(.white)
                             .lineLimit(1)
 
-                        Button(action: {
-                            editName = session.customName ?? ""
-                            isEditing = true
-                        }) {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 9))
+                        if let suffix = disambiguator {
+                            Text(suffix)
+                                .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(Color(white: 0.35))
-                                .frame(width: 18, height: 18)
-                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+
+                        if isHovered {
+                            Button(action: {
+                                editName = session.customName ?? ""
+                                isEditing = true
+                            }) {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(Color(white: 0.35))
+                                    .frame(width: 18, height: 18)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                        }
                     }
                 }
 
@@ -230,7 +267,10 @@ struct SessionRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .background(isHovered ? Color(white: 0.14) : Color.clear)
         .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .onTapGesture { onFocus() }
     }
 
     private func abbreviatePath(_ path: String) -> String {

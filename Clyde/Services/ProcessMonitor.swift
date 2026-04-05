@@ -26,7 +26,7 @@ final class ProcessMonitor: ObservableObject {
     @Published var clydeState: ClydeState = .sleeping
 
     private let shell: ShellExecutor
-    let pollingInterval: TimeInterval
+    private(set) var pollingInterval: TimeInterval
 
     var onSessionBecameIdle: ((Session) -> Void)?
 
@@ -106,6 +106,10 @@ final class ProcessMonitor: ObservableObject {
 
         sessions = updatedSessions
         clydeState = sessions.contains(where: { $0.status == .busy }) ? .busy : .idle
+    }
+
+    func updatePollingInterval(_ interval: TimeInterval) {
+        pollingInterval = max(1, min(interval, 10))
     }
 
     func startPolling() {

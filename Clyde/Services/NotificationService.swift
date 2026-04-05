@@ -3,16 +3,18 @@ import UserNotifications
 import AppKit
 
 final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
-    /// Play a subtle system sound when a session becomes ready
-    func playReadySound() {
-        NSSound(named: .init("Glass"))?.play()
-    }
-
     private var isAuthorized = false
     var onNotificationClicked: ((pid_t) -> Void)?
 
+    var soundEnabled: Bool = UserDefaults.standard.object(forKey: "soundEnabled") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(soundEnabled, forKey: "soundEnabled") }
+    }
+
+    var selectedSound: String = UserDefaults.standard.string(forKey: "selectedSound") ?? "Glass" {
+        didSet { UserDefaults.standard.set(selectedSound, forKey: "selectedSound") }
+    }
+
     func requestPermission() {
-        // UNUserNotificationCenter requires a valid app bundle (won't work from bare executable)
         guard Bundle.main.bundleIdentifier != nil else { return }
         UNUserNotificationCenter.current().delegate = self
         Task {
@@ -21,10 +23,13 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                 await MainActor.run {
                     self.isAuthorized = granted
                 }
-            } catch {
-                // Permission denied or unavailable — notifications will be silently skipped
-            }
+            } catch {}
         }
+    }
+
+    func playReadySound() {
+        guard soundEnabled else { return }
+        NSSound(named: NSSound.Name(selectedSound))?.play()
     }
 
     func buildNotificationContent(for session: Session) -> UNMutableNotificationContent {

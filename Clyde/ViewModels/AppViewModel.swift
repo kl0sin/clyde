@@ -67,9 +67,26 @@ final class AppViewModel: ObservableObject {
         isCollapsed.toggle()
     }
 
+    func updatePollingInterval(_ interval: Double) {
+        processMonitor.updatePollingInterval(interval)
+    }
+
+    func focusSession(_ session: Session) {
+        Task {
+            try? await terminalLauncher.focusSession(session)
+        }
+    }
+
     func start() {
         notificationService.requestPermission()
         terminalLauncher.detectTerminals()
+
+        // Apply saved polling interval
+        let saved = UserDefaults.standard.double(forKey: "pollingInterval")
+        if saved > 0 {
+            processMonitor.updatePollingInterval(saved)
+        }
+
         processMonitor.startPolling()
     }
 }

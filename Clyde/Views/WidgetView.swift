@@ -36,6 +36,18 @@ struct WidgetView: View {
         .onTapGesture {
             viewModel.toggleExpanded()
         }
+        .contextMenu {
+            Button(action: { viewModel.toggleExpanded() }) {
+                Label("Open", systemImage: "rectangle.expand.vertical")
+            }
+            Button(action: { viewModel.showSettings = true; viewModel.isCollapsed = false }) {
+                Label("Settings", systemImage: "gearshape")
+            }
+            Divider()
+            Button(action: { NSApplication.shared.terminate(nil) }) {
+                Label("Quit Clyde", systemImage: "power")
+            }
+        }
     }
 
     private var statusColor: Color {
