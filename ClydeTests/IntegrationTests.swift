@@ -6,18 +6,17 @@ final class IntegrationTests: XCTestCase {
     func testFullPollingCycleUpdatesViewModels() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1111\n2222"
-        shell.responses["ps -p"] = "30.0"
-        shell.responses["lsof"] = "n/Users/me/project-a"
+        shell.responses["pgrep -P"] = "9999" // children = busy
+        shell.responses["lsof"] = "n/Users/me/project-a/.claude/settings.local.json"
 
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
         let appVM = AppViewModel(processMonitor: monitor)
         let sessionVM = SessionListViewModel(processMonitor: monitor)
 
-        // Poll: 2 busy sessions
         await monitor.poll()
 
         XCTAssertEqual(appVM.clydeState, .busy)
-        XCTAssertEqual(appVM.statusText, "2 active")
+        XCTAssertEqual(appVM.statusText, "2 busy")
         XCTAssertEqual(sessionVM.sessionCount, 2)
         XCTAssertEqual(sessionVM.busyCount, 2)
 
@@ -26,15 +25,15 @@ final class IntegrationTests: XCTestCase {
         await monitor.poll()
 
         XCTAssertEqual(appVM.clydeState, .sleeping)
-        XCTAssertEqual(appVM.statusText, "sleeping")
+        XCTAssertEqual(appVM.statusText, "no sessions")
         XCTAssertEqual(sessionVM.sessionCount, 0)
     }
 
     func testNotificationFiringOnIdleTransition() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["ps -p"] = "30.0"
-        shell.responses["lsof"] = "n/Users/me/shipyard"
+        shell.responses["pgrep -P"] = "9999" // busy
+        shell.responses["lsof"] = "n/Users/me/shipyard/.claude/settings.local.json"
 
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
@@ -43,16 +42,15 @@ final class IntegrationTests: XCTestCase {
             notifiedSession = session
         }
 
-        // First poll: busy
+        // First poll: busy (has children)
         await monitor.poll()
         XCTAssertNil(notifiedSession)
+        XCTAssertEqual(monitor.sessions.first?.status, .busy)
 
-        // Two consecutive idle reads to trigger
-        shell.responses["ps -p"] = "0.0"
-        await monitor.poll() // 1st idle read
-        XCTAssertNil(notifiedSession) // Not yet — need 2 consecutive
+        // Children gone = idle, notification fires immediately
+        shell.responses.removeValue(forKey: "pgrep -P")
+        await monitor.poll()
 
-        await monitor.poll() // 2nd idle read
         XCTAssertNotNil(notifiedSession)
         XCTAssertEqual(notifiedSession?.displayName, "shipyard")
     }

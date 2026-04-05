@@ -6,8 +6,8 @@ final class SessionListViewModelTests: XCTestCase {
     func testStatusSummary() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234\n5678"
-        shell.responses["ps -p"] = "20.0"
-        shell.responses["lsof"] = "n/Users/me/test"
+        shell.responses["pgrep -P"] = "9999" // children = busy
+        shell.responses["lsof"] = "n/Users/me/test/.claude/settings.local.json"
 
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
         let vm = SessionListViewModel(processMonitor: monitor)

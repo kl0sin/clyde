@@ -27,8 +27,6 @@ final class ProcessMonitor: ObservableObject {
 
     private let shell: ShellExecutor
     let pollingInterval: TimeInterval
-    private let cpuThreshold: Double = 5.0
-    private let requiredIdleReads: Int = 2
 
     var onSessionBecameIdle: ((Session) -> Void)?
 
@@ -47,30 +45,25 @@ final class ProcessMonitor: ObservableObject {
             .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
     }
 
+    /// Classify status by checking if Claude has active child processes.
+    /// When Claude processes a request, it spawns child processes (node, bash, etc.).
+    /// When waiting for user input, it has no children — it's idle.
     func classifyStatus(pid: pid_t) async -> SessionStatus {
-        guard let output = try? await shell.run("ps -p \(pid) -o %cpu="),
-              let cpu = Double(output.trimmingCharacters(in: .whitespaces)) else {
-            return .idle
+        guard let output = try? await shell.run("pgrep -P \(pid)"),
+              !output.isEmpty else {
+            return .idle // No children = waiting for input
         }
-        return cpu > cpuThreshold ? .busy : .idle
+        return .busy // Has children = processing
     }
 
     func detectCWD(pid: pid_t) async -> String {
-        // Claude Code changes its CWD to /, so we detect the project directory
-        // by finding .claude/settings.local.json in the process's open files
+        // Claude Code sets CWD to /, so detect project dir from open files
         if let output = try? await shell.run("lsof -p \(pid) -Fn 2>/dev/null | grep '/.claude/settings' | head -1"),
            !output.isEmpty {
-            // output is like "n/Users/me/project/.claude/settings.local.json"
             let path = String(output.dropFirst()) // Remove leading 'n'
             if let range = path.range(of: "/.claude/") {
                 return String(path[path.startIndex..<range.lowerBound])
             }
-        }
-        // Fallback: try lsof cwd
-        if let output = try? await shell.run("lsof -p \(pid) -d cwd -Fn 2>/dev/null | grep '^n/' | head -1"),
-           !output.isEmpty {
-            let cwd = String(output.dropFirst())
-            if cwd != "/" { return cwd }
         }
         return ""
     }
@@ -87,24 +80,14 @@ final class ProcessMonitor: ObservableObject {
         var updatedSessions: [Session] = []
 
         for pid in pids {
-            let rawStatus = await classifyStatus(pid: pid)
+            let newStatus = await classifyStatus(pid: pid)
 
             if var existing = sessions.first(where: { $0.pid == pid }) {
-                // Only detect CWD if we don't have it yet
                 if existing.workingDirectory.isEmpty {
-                    let cwd = await detectCWD(pid: pid)
-                    existing.workingDirectory = cwd
-                }
-
-                if rawStatus == .idle {
-                    existing.consecutiveIdleReads += 1
-                } else {
-                    existing.consecutiveIdleReads = 0
+                    existing.workingDirectory = await detectCWD(pid: pid)
                 }
 
                 let previousStatus = existing.status
-                let newStatus: SessionStatus = (rawStatus == .idle && existing.consecutiveIdleReads >= requiredIdleReads) ? .idle : .busy
-
                 if previousStatus != newStatus {
                     existing.status = newStatus
                     existing.statusChangedAt = Date()
@@ -116,10 +99,7 @@ final class ProcessMonitor: ObservableObject {
                 updatedSessions.append(existing)
             } else {
                 let cwd = await detectCWD(pid: pid)
-                var newSession = Session(pid: pid, workingDirectory: cwd, status: .busy)
-                if rawStatus == .idle {
-                    newSession.consecutiveIdleReads = 1
-                }
+                let newSession = Session(pid: pid, workingDirectory: cwd, status: newStatus)
                 updatedSessions.append(newSession)
             }
         }

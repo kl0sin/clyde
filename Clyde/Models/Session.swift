@@ -12,11 +12,13 @@ struct Session: Identifiable, Equatable {
     var workingDirectory: String
     var customName: String?
     var statusChangedAt: Date
-    var consecutiveIdleReads: Int
 
     var displayName: String {
         if let customName, !customName.isEmpty {
             return customName
+        }
+        if workingDirectory.isEmpty {
+            return "Session \(pid)"
         }
         return (workingDirectory as NSString).lastPathComponent
     }
@@ -28,6 +30,5 @@ struct Session: Identifiable, Equatable {
         self.workingDirectory = workingDirectory
         self.customName = nil
         self.statusChangedAt = Date()
-        self.consecutiveIdleReads = 0
     }
 }

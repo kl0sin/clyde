@@ -16,7 +16,12 @@ struct ExpandedView: View {
             if sessionViewModel.sessions.isEmpty {
                 EmptyStateView()
             } else {
-                SessionListView(sessions: sessionViewModel.sessions)
+                SessionListView(
+                    sessions: sessionViewModel.sessions,
+                    onRename: { path, name in
+                        sessionViewModel.renameSession(workingDirectory: path, to: name)
+                    }
+                )
             }
 
             Spacer(minLength: 0)
@@ -87,15 +92,20 @@ struct TitleBar: View {
 
 struct SessionListView: View {
     let sessions: [Session]
+    let onRename: (String, String) -> Void  // (workingDirectory, newName)
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(sessions, id: \.pid) { session in
-                    SessionRow(session: session)
-                    Divider()
-                        .background(Color(white: 0.15))
-                        .padding(.leading, 44)
+                    SessionRow(session: session, onRename: { name in
+                        onRename(session.workingDirectory, name)
+                    })
+                    if session.pid != sessions.last?.pid {
+                        Divider()
+                            .background(Color(white: 0.15))
+                            .padding(.leading, 52)
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -105,6 +115,10 @@ struct SessionListView: View {
 
 struct SessionRow: View {
     let session: Session
+    let onRename: (String) -> Void
+
+    @State private var isEditing = false
+    @State private var editName = ""
 
     var body: some View {
         HStack(spacing: 12) {
@@ -121,46 +135,72 @@ struct SessionRow: View {
 
             // Project info
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.displayName)
+                if isEditing {
+                    TextField("Session name", text: $editName, onCommit: {
+                        onRename(editName)
+                        isEditing = false
+                    })
+                    .textFieldStyle(.plain)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.white)
-                    .lineLimit(1)
+                } else {
+                    Text(session.displayName)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .onTapGesture(count: 2) {
+                            editName = session.customName ?? ""
+                            isEditing = true
+                        }
+                }
 
-                Text(session.workingDirectory.isEmpty ? "Unknown path" : session.workingDirectory)
+                Text(session.workingDirectory.isEmpty ? "Unknown path" : abbreviatePath(session.workingDirectory))
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(Color(white: 0.45))
+                    .foregroundColor(Color(white: 0.4))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
 
             Spacer()
 
-            // Status badge
+            // Status badge + time
             VStack(alignment: .trailing, spacing: 3) {
-                Text(statusLabel)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(statusColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(statusColor.opacity(0.12))
-                    .clipShape(Capsule())
+                HStack(spacing: 5) {
+                    if session.status == .busy {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                    }
+
+                    Text(statusLabel)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(statusColor)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(statusColor.opacity(0.1))
+                .clipShape(Capsule())
 
                 Text(timeAgo(session.statusChangedAt))
                     .font(.system(size: 9))
-                    .foregroundColor(Color(white: 0.4))
+                    .foregroundColor(Color(white: 0.35))
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
 
     private var statusColor: Color {
-        session.status == .busy ? .red : .green
+        session.status == .busy ? .orange : .green
     }
 
     private var statusLabel: String {
         session.status == .busy ? "Processing" : "Ready"
+    }
+
+    private func abbreviatePath(_ path: String) -> String {
+        path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
     }
 
     private func timeAgo(_ date: Date) -> String {

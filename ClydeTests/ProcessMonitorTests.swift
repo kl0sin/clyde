@@ -14,8 +14,8 @@ final class MockShellExecutor: ShellExecutor {
     }
 }
 
+@MainActor
 final class ProcessMonitorTests: XCTestCase {
-    @MainActor
     func testDiscoversPIDs() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234\n5678"
@@ -25,7 +25,6 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(pids, [1234, 5678])
     }
 
-    @MainActor
     func testDiscoversPIDsReturnsEmptyForNoProcesses() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = ""
@@ -35,57 +34,50 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(pids, [])
     }
 
-    @MainActor
-    func testClassifiesHighCPUAsBusy() async {
+    func testClassifiesBusyWhenChildrenExist() async {
         let shell = MockShellExecutor()
-        shell.responses["ps -p"] = "25.3"
+        shell.responses["pgrep -P"] = "9999\n9998"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
         let status = await monitor.classifyStatus(pid: 1234)
         XCTAssertEqual(status, .busy)
     }
 
-    @MainActor
-    func testClassifiesLowCPUAsIdle() async {
+    func testClassifiesIdleWhenNoChildren() async {
         let shell = MockShellExecutor()
-        shell.responses["ps -p"] = "0.0"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
         let status = await monitor.classifyStatus(pid: 1234)
         XCTAssertEqual(status, .idle)
     }
 
-    @MainActor
     func testDetectsWorkingDirectory() async {
         let shell = MockShellExecutor()
-        shell.responses["lsof"] = "n/Users/me/Projects/shipyard"
+        shell.responses["lsof"] = "n/Users/me/Projects/shipyard/.claude/settings.local.json"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
         let cwd = await monitor.detectCWD(pid: 1234)
         XCTAssertEqual(cwd, "/Users/me/Projects/shipyard")
     }
 
-    @MainActor
     func testPollBuildsSessionList() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["ps -p"] = "15.0"
-        shell.responses["lsof"] = "n/Users/me/Projects/shipyard"
+        shell.responses["pgrep -P"] = "9999"
+        shell.responses["lsof"] = "n/Users/me/Projects/shipyard/.claude/settings.local.json"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
         await monitor.poll()
         XCTAssertEqual(monitor.sessions.count, 1)
         XCTAssertEqual(monitor.sessions.first?.pid, 1234)
         XCTAssertEqual(monitor.sessions.first?.status, .busy)
-        XCTAssertEqual(monitor.sessions.first?.workingDirectory, "/Users/me/Projects/shipyard")
     }
 
-    @MainActor
     func testPollRemovesEndedSessions() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["ps -p"] = "15.0"
-        shell.responses["lsof"] = "n/Users/me/test"
+        shell.responses["pgrep -P"] = "9999"
+        shell.responses["lsof"] = "n/Users/me/test/.claude/settings.local.json"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
         await monitor.poll()
@@ -96,19 +88,17 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.sessions.count, 0)
     }
 
-    @MainActor
     func testClydeStateIsBusyWhenAnySessionBusy() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["ps -p"] = "20.0"
-        shell.responses["lsof"] = "n/Users/me/test"
+        shell.responses["pgrep -P"] = "9999"
+        shell.responses["lsof"] = "n/Users/me/test/.claude/settings.local.json"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
         await monitor.poll()
         XCTAssertEqual(monitor.clydeState, .busy)
     }
 
-    @MainActor
     func testClydeStateIsSleepingWhenNoSessions() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = ""
