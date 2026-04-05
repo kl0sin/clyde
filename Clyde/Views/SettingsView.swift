@@ -17,8 +17,10 @@ struct SettingsView: View {
                 Spacer()
                 Button(action: { appViewModel.showSettings = false }) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.gray)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }

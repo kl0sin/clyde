@@ -65,11 +65,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func animateTransition(collapsed: Bool) {
         let currentFrame = panel.frame
         let newSize = collapsed ? collapsedSize : expandedSize
+        let screenFrame = NSScreen.main?.visibleFrame ?? .zero
 
-        let newOrigin = NSPoint(
+        // Anchor top-right corner
+        var newOrigin = NSPoint(
             x: currentFrame.maxX - newSize.width,
             y: currentFrame.maxY - newSize.height
         )
+
+        // Clamp to screen bounds
+        newOrigin.x = max(screenFrame.minX, min(newOrigin.x, screenFrame.maxX - newSize.width))
+        newOrigin.y = max(screenFrame.minY, min(newOrigin.y, screenFrame.maxY - newSize.height))
 
         let newFrame = NSRect(origin: newOrigin, size: newSize)
 
@@ -78,7 +84,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             panel.animator().setFrame(newFrame, display: true)
         }
-
-        panel.isMovableByWindowBackground = collapsed
     }
 }
