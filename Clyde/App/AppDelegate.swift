@@ -6,9 +6,6 @@ final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    private var isDragging = false
-    private var dragOffset = NSPoint.zero
-
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
@@ -28,16 +25,24 @@ final class FloatingPanel: NSPanel {
     }
 }
 
+// MARK: - Edge Snapping
+
+enum ScreenEdge {
+    case none, left, right, top, bottom, topLeft, topRight, bottomLeft, bottomRight
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var panel: FloatingPanel!
     var appViewModel: AppViewModel!
     var sessionViewModel: SessionListViewModel!
+    var statusItem: NSStatusItem?
 
     private let collapsedSize = NSSize(width: 150, height: 52)
     private let defaultExpandedSize = NSSize(width: 400, height: 420)
     private var lastExpandedSize: NSSize?
     private var isAnimating = false
     private var cancellables = Set<AnyCancellable>()
+    private let snapMargin: CGFloat = 12
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appViewModel = AppViewModel()
@@ -50,19 +55,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let screenFrame = NSScreen.main?.visibleFrame ?? .zero
         let initialOrigin = NSPoint(
-            x: screenFrame.maxX - collapsedSize.width - 20,
-            y: screenFrame.maxY - collapsedSize.height - 20
+            x: screenFrame.maxX - collapsedSize.width - snapMargin,
+            y: screenFrame.maxY - collapsedSize.height - snapMargin
         )
 
         panel = FloatingPanel(contentRect: NSRect(origin: initialOrigin, size: collapsedSize))
 
         let hostingView = NSHostingView(rootView: contentView)
-        hostingView.layer?.cornerRadius = 12
-        hostingView.layer?.masksToBounds = true
         panel.contentView = hostingView
 
         panel.orderFront(nil)
+        setupMenuBarIcon()
         appViewModel.start()
+
+        // Window move → snap to edges
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(windowDidMove),
+            name: NSWindow.didMoveNotification, object: panel
+        )
 
         appViewModel.$isCollapsed
             .dropFirst()
@@ -73,6 +83,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
     }
 
+    // MARK: - Menu Bar Icon
+
+    @MainActor private func setupMenuBarIcon() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+
+        if let button = statusItem?.button {
+            button.image = NSImage(systemSymbolName: "cpu", accessibilityDescription: "Clyde")
+            button.image?.size = NSSize(width: 16, height: 16)
+            button.action = #selector(menuBarClicked)
+            button.target = self
+        }
+
+        updateMenuBarMenu()
+
+        // Update menu when sessions change
+        appViewModel.processMonitor.objectWillChange
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .sink { [weak self] _ in self?.updateMenuBarMenu() }
+            .store(in: &cancellables)
+    }
+
+    @MainActor @objc private func menuBarClicked() {
+        if appViewModel.isCollapsed {
+            appViewModel.isCollapsed = false
+        } else {
+            panel.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    @MainActor private func updateMenuBarMenu() {
+        let menu = NSMenu()
+
+        let sessions = appViewModel.processMonitor.sessions
+        if sessions.isEmpty {
+            let item = NSMenuItem(title: "No Claude sessions", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+        } else {
+            for session in sessions {
+                let status = session.status == .busy ? "⏳" : "✅"
+                let title = "\(status) \(session.displayName)"
+                let item = NSMenuItem(title: title, action: #selector(menuSessionClicked(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = session.pid
+                menu.addItem(item)
+            }
+        }
+
+        menu.addItem(.separator())
+
+        let showItem = NSMenuItem(title: "Show Clyde", action: #selector(menuBarClicked), keyEquivalent: "")
+        showItem.target = self
+        menu.addItem(showItem)
+
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        menu.addItem(.separator())
+
+        let quitItem = NSMenuItem(title: "Quit Clyde", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(quitItem)
+
+        statusItem?.menu = menu
+    }
+
+    @MainActor @objc private func menuSessionClicked(_ sender: NSMenuItem) {
+        guard let pid = sender.representedObject as? pid_t,
+              let session = appViewModel.processMonitor.sessions.first(where: { $0.pid == pid }) else { return }
+        appViewModel.focusSession(session)
+    }
+
+    @MainActor @objc private func openSettings() {
+        appViewModel.showSettings = true
+        appViewModel.isCollapsed = false
+    }
+
+    // MARK: - Expand/Collapse Animation
+
     private func performTransition(collapsed: Bool) {
         guard !isAnimating else { return }
         isAnimating = true
@@ -80,76 +169,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let currentFrame = panel.frame
         let screenFrame = NSScreen.main?.visibleFrame ?? .zero
 
-        // Save expanded size before collapsing
         if collapsed {
             lastExpandedSize = currentFrame.size
         }
 
         let targetSize = collapsed ? collapsedSize : (lastExpandedSize ?? defaultExpandedSize)
 
-        // Anchor: keep top-right corner fixed
-        let newOrigin = NSPoint(
-            x: max(screenFrame.minX, min(currentFrame.maxX - targetSize.width, screenFrame.maxX - targetSize.width)),
-            y: max(screenFrame.minY, min(currentFrame.maxY - targetSize.height, screenFrame.maxY - targetSize.height))
+        // Anchor top-right corner
+        var newOrigin = NSPoint(
+            x: currentFrame.maxX - targetSize.width,
+            y: currentFrame.maxY - targetSize.height
         )
+
+        // Clamp to screen
+        newOrigin.x = max(screenFrame.minX + snapMargin, min(newOrigin.x, screenFrame.maxX - targetSize.width - snapMargin))
+        newOrigin.y = max(screenFrame.minY + snapMargin, min(newOrigin.y, screenFrame.maxY - targetSize.height - snapMargin))
 
         let targetFrame = NSRect(origin: newOrigin, size: targetSize)
 
-        // Phase 1: Fade out content
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.12
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            panel.contentView?.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            guard let self else { return }
-
-            // Phase 2: Resize window with spring-like ease
-            self.animateFrame(to: targetFrame, duration: 0.28) {
-                // Phase 3: Fade in new content
-                NSAnimationContext.runAnimationGroup({ ctx in
-                    ctx.duration = 0.15
-                    ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                    self.panel.contentView?.animator().alphaValue = 1
-                }, completionHandler: {
-                    self.isAnimating = false
-                })
-            }
-        })
+        // Simultaneous: resize window + SwiftUI handles content transition via its own animation
+        animateFrame(to: targetFrame, duration: 0.35) { [weak self] in
+            self?.isAnimating = false
+        }
     }
 
-    /// Custom frame animation using CVDisplayLink for ultra-smooth 60fps
     private func animateFrame(to target: NSRect, duration: TimeInterval, completion: @escaping () -> Void) {
         let start = panel.frame
         let startTime = CACurrentMediaTime()
+        let interval = 1.0 / 120.0 // 120fps for ultra smooth
 
-        // Use a high-frequency timer for smooth animation
-        let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] timer in
-            guard let self else {
-                timer.invalidate()
-                return
-            }
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
 
             let elapsed = CACurrentMediaTime() - startTime
             let progress = min(elapsed / duration, 1.0)
 
-            // Cubic ease-in-out for smooth feel
-            let t = progress < 0.5
-                ? 4 * progress * progress * progress
-                : 1 - pow(-2 * progress + 2, 3) / 2
+            // Quartic ease-out: fast start, gentle settle
+            let t = 1 - pow(1 - progress, 4)
 
             let x = start.origin.x + (target.origin.x - start.origin.x) * t
             let y = start.origin.y + (target.origin.y - start.origin.y) * t
             let w = start.size.width + (target.size.width - start.size.width) * t
             let h = start.size.height + (target.size.height - start.size.height) * t
 
-            self.panel.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
+            self.panel.setFrame(NSRect(x: x, y: y, width: w, height: h), display: false)
 
             if progress >= 1.0 {
                 timer.invalidate()
+                self.panel.setFrame(target, display: true)
                 completion()
             }
         }
 
         RunLoop.main.add(timer, forMode: .common)
     }
+
+    // MARK: - Edge Snapping
+
+    @MainActor @objc private func windowDidMove(_ notification: Notification) {
+        guard !isAnimating, !appViewModel.isCollapsed else { return }
+        // Don't snap during animation or when collapsed (widget is tiny)
+    }
+
+    func snapToNearestEdge() {
+        let frame = panel.frame
+        guard let screen = NSScreen.main?.visibleFrame else { return }
+        var snapped = frame.origin
+
+        // Horizontal snap
+        if frame.minX < screen.minX + snapMargin * 3 {
+            snapped.x = screen.minX + snapMargin
+        } else if frame.maxX > screen.maxX - snapMargin * 3 {
+            snapped.x = screen.maxX - frame.width - snapMargin
+        }
+
+        // Vertical snap
+        if frame.maxY > screen.maxY - snapMargin * 3 {
+            snapped.y = screen.maxY - frame.height - snapMargin
+        } else if frame.minY < screen.minY + snapMargin * 3 {
+            snapped.y = screen.minY + snapMargin
+        }
+
+        if snapped != frame.origin {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrameOrigin(snapped)
+            }
+        }
+    }
 }
+

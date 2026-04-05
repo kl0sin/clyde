@@ -55,7 +55,22 @@ struct ExpandedView: View {
                 clydeState: appViewModel.clydeState
             )
         }
-        .background(Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1)))
+        .background(
+            ZStack {
+                // Glassmorphism base
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.ultraThinMaterial)
+                    .environment(\.colorScheme, .dark)
+                // Dark overlay for readability
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(nsColor: NSColor(red: 0.08, green: 0.08, blue: 0.1, alpha: 0.85)))
+            }
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.4), radius: 16, y: 4)
     }
 }
 
@@ -101,7 +116,7 @@ struct TitleBar: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color(white: 0.13))
+        .background(Color.white.opacity(0.04))
         .overlay(
             Rectangle().frame(height: 1).foregroundColor(Color(white: 0.2)),
             alignment: .bottom
@@ -169,6 +184,8 @@ struct SessionRow: View {
     @State private var isEditing = false
     @State private var editName = ""
     @State private var isHovered = false
+    @State private var stateFlash = false
+    @State private var lastSeenStatus: SessionStatus?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -267,10 +284,30 @@ struct SessionRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(isHovered ? Color(white: 0.14) : Color.clear)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(stateFlash
+                    ? SessionTheme.color(for: session.status).opacity(0.15)
+                    : (isHovered ? Color(white: 0.14) : Color.clear))
+        )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture { onFocus() }
+        .onChange(of: session.status) { newStatus in
+            if lastSeenStatus != nil && lastSeenStatus != newStatus {
+                // Flash the row on state change
+                withAnimation(.easeIn(duration: 0.15)) {
+                    stateFlash = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    withAnimation(.easeOut(duration: 0.5)) {
+                        stateFlash = false
+                    }
+                }
+            }
+            lastSeenStatus = newStatus
+        }
+        .onAppear { lastSeenStatus = session.status }
     }
 
     private func abbreviatePath(_ path: String) -> String {
@@ -380,7 +417,7 @@ struct SummaryBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(Color(white: 0.11))
+        .background(Color.white.opacity(0.03))
         .overlay(
             Rectangle().frame(height: 1).foregroundColor(Color(white: 0.18)),
             alignment: .top
