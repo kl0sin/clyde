@@ -56,11 +56,23 @@ final class ProcessMonitor: ObservableObject {
     }
 
     func detectCWD(pid: pid_t) async -> String {
-        guard let output = try? await shell.run("lsof -p \(pid) -d cwd -Fn 2>/dev/null | grep '^n/' | head -1"),
-              !output.isEmpty else {
-            return ""
+        // Claude Code changes its CWD to /, so we detect the project directory
+        // by finding .claude/settings.local.json in the process's open files
+        if let output = try? await shell.run("lsof -p \(pid) -Fn 2>/dev/null | grep '/.claude/settings' | head -1"),
+           !output.isEmpty {
+            // output is like "n/Users/me/project/.claude/settings.local.json"
+            let path = String(output.dropFirst()) // Remove leading 'n'
+            if let range = path.range(of: "/.claude/") {
+                return String(path[path.startIndex..<range.lowerBound])
+            }
         }
-        return String(output.dropFirst()) // Remove leading 'n'
+        // Fallback: try lsof cwd
+        if let output = try? await shell.run("lsof -p \(pid) -d cwd -Fn 2>/dev/null | grep '^n/' | head -1"),
+           !output.isEmpty {
+            let cwd = String(output.dropFirst())
+            if cwd != "/" { return cwd }
+        }
+        return ""
     }
 
     func poll() async {

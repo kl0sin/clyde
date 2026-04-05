@@ -21,6 +21,8 @@ struct ExpandedView: View {
                 selectedID: sessionViewModel.selectedSessionID ?? sessionViewModel.sessions.first?.id,
                 onSelect: { session in
                     sessionViewModel.selectSession(session)
+                },
+                onDoubleClick: { session in
                     onFocusSession(session)
                 },
                 onNewSession: onNewSession

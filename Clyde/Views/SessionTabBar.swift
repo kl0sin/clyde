@@ -4,6 +4,7 @@ struct SessionTabBar: View {
     let sessions: [Session]
     let selectedID: UUID?
     let onSelect: (Session) -> Void
+    let onDoubleClick: (Session) -> Void
     let onNewSession: () -> Void
 
     var body: some View {
@@ -14,12 +15,13 @@ struct SessionTabBar: View {
                         session: session,
                         isSelected: session.id == selectedID
                     )
+                    .onTapGesture(count: 2) { onDoubleClick(session) }
                     .onTapGesture { onSelect(session) }
                 }
 
                 Button(action: onNewSession) {
-                    Text("＋")
-                        .font(.system(size: 12))
+                    Text("+")
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.gray)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
@@ -48,6 +50,7 @@ struct SessionTab: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+        .contentShape(Rectangle())
         .background(isSelected ? Color(white: 0.17) : Color.clear)
         .overlay(
             Rectangle()
