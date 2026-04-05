@@ -1,5 +1,4 @@
 import SwiftUI
-import ClydeCore
 
 @main
 struct ClydeApp: App {

@@ -4,23 +4,14 @@ import PackageDescription
 let package = Package(
     name: "Clyde",
     platforms: [.macOS(.v13)],
-    products: [
-        .executable(name: "Clyde", targets: ["Clyde"])
-    ],
     targets: [
-        .target(
-            name: "ClydeCore",
-            path: "Clyde",
-            sources: ["Models"]
-        ),
         .executableTarget(
             name: "Clyde",
-            dependencies: ["ClydeCore"],
-            path: "Clyde/App"
+            path: "Clyde"
         ),
         .testTarget(
             name: "ClydeTests",
-            dependencies: ["ClydeCore"],
+            dependencies: ["Clyde"],
             path: "ClydeTests"
         )
     ]

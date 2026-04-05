@@ -1,5 +1,5 @@
 import XCTest
-@testable import ClydeCore
+@testable import Clyde
 
 final class SessionTests: XCTestCase {
     func testDisplayNameUsesCustomNameWhenSet() {
