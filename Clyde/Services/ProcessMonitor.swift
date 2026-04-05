@@ -88,10 +88,13 @@ final class ProcessMonitor: ObservableObject {
 
         for pid in pids {
             let rawStatus = await classifyStatus(pid: pid)
-            let cwd = await detectCWD(pid: pid)
 
             if var existing = sessions.first(where: { $0.pid == pid }) {
-                existing.workingDirectory = cwd.isEmpty ? existing.workingDirectory : cwd
+                // Only detect CWD if we don't have it yet
+                if existing.workingDirectory.isEmpty {
+                    let cwd = await detectCWD(pid: pid)
+                    existing.workingDirectory = cwd
+                }
 
                 if rawStatus == .idle {
                     existing.consecutiveIdleReads += 1
@@ -112,6 +115,7 @@ final class ProcessMonitor: ObservableObject {
 
                 updatedSessions.append(existing)
             } else {
+                let cwd = await detectCWD(pid: pid)
                 var newSession = Session(pid: pid, workingDirectory: cwd, status: .busy)
                 if rawStatus == .idle {
                     newSession.consecutiveIdleReads = 1

@@ -9,24 +9,18 @@ final class FloatingPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
-            styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView],
+            styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
         )
 
         level = .floating
         isFloatingPanel = true
-        titleVisibility = .hidden
-        titlebarAppearsTransparent = true
         isMovableByWindowBackground = true
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-        standardWindowButton(.closeButton)?.isHidden = true
-        standardWindowButton(.miniaturizeButton)?.isHidden = true
-        standardWindowButton(.zoomButton)?.isHidden = true
     }
 }
 
@@ -79,14 +73,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let newFrame = NSRect(origin: newOrigin, size: newSize)
 
-        panel.setFrame(newFrame, display: true, animate: true)
-        panel.isMovableByWindowBackground = collapsed
-
-        if !collapsed {
-            panel.styleMask.insert(.resizable)
-            panel.minSize = NSSize(width: 300, height: 300)
-        } else {
-            panel.styleMask.remove(.resizable)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().setFrame(newFrame, display: true)
         }
+
+        panel.isMovableByWindowBackground = collapsed
     }
 }

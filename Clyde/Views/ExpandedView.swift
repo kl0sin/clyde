@@ -76,18 +76,22 @@ struct TitleBar: View {
 
             Spacer()
 
-            HStack(spacing: 8) {
+            HStack(spacing: 4) {
                 Button(action: onSettings) {
                     Image(systemName: "gearshape")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(.gray)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
                 Button(action: onCollapse) {
                     Image(systemName: "minus")
-                        .font(.system(size: 14))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.gray)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }

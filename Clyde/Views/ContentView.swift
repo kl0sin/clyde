@@ -22,7 +22,11 @@ struct ContentView: View {
                         },
                         onNewSession: {
                             Task {
-                                try? await appViewModel.terminalLauncher.openNewSession()
+                                do {
+                                    try await appViewModel.terminalLauncher.openNewSession()
+                                } catch {
+                                    print("Failed to open new session: \(error)")
+                                }
                             }
                         }
                     )
@@ -30,5 +34,6 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .edgesIgnoringSafeArea(.all)
     }
 }
