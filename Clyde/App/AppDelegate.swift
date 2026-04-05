@@ -227,9 +227,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Edge Snapping
 
     @MainActor @objc private func windowDidMove(_ notification: Notification) {
-        guard !isAnimating, !appViewModel.isCollapsed else { return }
-        // Don't snap during animation or when collapsed (widget is tiny)
+        guard !isAnimating else { return }
+        // Debounce — snap after user stops dragging (no move for 0.15s)
+        snapDebounceWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.snapToNearestEdge()
+        }
+        snapDebounceWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
+
+    private var snapDebounceWork: DispatchWorkItem?
 
     func snapToNearestEdge() {
         let frame = panel.frame
