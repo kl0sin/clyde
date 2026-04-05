@@ -17,13 +17,13 @@ final class AppViewModel: ObservableObject {
     var statusText: String {
         let sessions = processMonitor.sessions
         if sessions.isEmpty { return "no sessions" }
-        let busyCount = sessions.filter { $0.status == .busy }.count
-        let idleCount = sessions.count - busyCount
-        if busyCount > 0 && idleCount > 0 {
-            return "\(busyCount) busy · \(idleCount) ready"
+        let processingCount = sessions.filter { $0.status == .busy }.count
+        let readyCount = sessions.count - processingCount
+        if processingCount > 0 && readyCount > 0 {
+            return "\(processingCount) working · \(readyCount) ready"
         }
-        if busyCount > 0 { return "\(busyCount) busy" }
-        return "\(idleCount) ready"
+        if processingCount > 0 { return "\(processingCount) working" }
+        return "\(readyCount) ready"
     }
 
     private var cancellables = Set<AnyCancellable>()
@@ -55,6 +55,7 @@ final class AppViewModel: ObservableObject {
 
         processMonitor.onSessionBecameIdle = { [weak notificationService] session in
             notificationService?.sendNotification(for: session)
+            notificationService?.playReadySound()
         }
 
         processMonitor.objectWillChange

@@ -1,7 +1,13 @@
 import Foundation
 import UserNotifications
+import AppKit
 
 final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
+    /// Play a subtle system sound when a session becomes ready
+    func playReadySound() {
+        NSSound(named: .init("Glass"))?.play()
+    }
+
     private var isAuthorized = false
     var onNotificationClicked: ((pid_t) -> Void)?
 

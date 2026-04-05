@@ -1,4 +1,24 @@
 import SwiftUI
+import AppKit
+
+// MARK: - Colors & Labels (single source of truth)
+
+enum SessionTheme {
+    static let processingColor = Color.orange
+    static let readyColor = Color.green
+    static let processingLabel = "Processing"
+    static let readyLabel = "Ready"
+
+    static func color(for status: SessionStatus) -> Color {
+        status == .busy ? processingColor : readyColor
+    }
+
+    static func label(for status: SessionStatus) -> String {
+        status == .busy ? processingLabel : readyLabel
+    }
+}
+
+// MARK: - Expanded View
 
 struct ExpandedView: View {
     @ObservedObject var appViewModel: AppViewModel
@@ -12,7 +32,6 @@ struct ExpandedView: View {
                 onCollapse: { appViewModel.toggleExpanded() }
             )
 
-            // Session list
             if sessionViewModel.sessions.isEmpty {
                 EmptyStateView()
             } else {
@@ -26,7 +45,6 @@ struct ExpandedView: View {
 
             Spacer(minLength: 0)
 
-            // Summary bar
             SummaryBar(
                 sessionCount: sessionViewModel.sessionCount,
                 busyCount: sessionViewModel.busyCount,
@@ -113,6 +131,8 @@ struct SessionListView: View {
     }
 }
 
+// MARK: - Session Row
+
 struct SessionRow: View {
     let session: Session
     let onRename: (String) -> Void
@@ -122,16 +142,8 @@ struct SessionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Status indicator
-            ZStack {
-                Circle()
-                    .fill(statusColor.opacity(0.15))
-                    .frame(width: 32, height: 32)
-
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-            }
+            // Animated status indicator — mini Clyde for processing, static for ready
+            SessionStatusIndicator(status: session.status)
 
             // Project info
             VStack(alignment: .leading, spacing: 3) {
@@ -200,24 +212,15 @@ struct SessionRow: View {
 
             Spacer()
 
-            // Status badge + time
             if !isEditing {
                 VStack(alignment: .trailing, spacing: 3) {
-                    HStack(spacing: 5) {
-                        if session.status == .busy {
-                            ProgressView()
-                                .scaleEffect(0.5)
-                                .frame(width: 12, height: 12)
-                        }
-
-                        Text(statusLabel)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(statusColor)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(statusColor.opacity(0.1))
-                    .clipShape(Capsule())
+                    Text(SessionTheme.label(for: session.status))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(SessionTheme.color(for: session.status))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(SessionTheme.color(for: session.status).opacity(0.1))
+                        .clipShape(Capsule())
 
                     Text(timeAgo(session.statusChangedAt))
                         .font(.system(size: 9))
@@ -228,14 +231,6 @@ struct SessionRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .contentShape(Rectangle())
-    }
-
-    private var statusColor: Color {
-        session.status == .busy ? .orange : .green
-    }
-
-    private var statusLabel: String {
-        session.status == .busy ? "Processing" : "Ready"
     }
 
     private func abbreviatePath(_ path: String) -> String {
@@ -249,6 +244,39 @@ struct SessionRow: View {
         if minutes < 60 { return "\(minutes)m" }
         let hours = minutes / 60
         return "\(hours)h \(minutes % 60)m"
+    }
+}
+
+// MARK: - Session Status Indicator (animated mini Clyde)
+
+struct SessionStatusIndicator: View {
+    let status: SessionStatus
+
+    @State private var bounce = false
+
+    var body: some View {
+        ZStack {
+            // Background glow
+            Circle()
+                .fill(SessionTheme.color(for: status).opacity(0.1))
+                .frame(width: 36, height: 36)
+
+            if status == .busy {
+                // Animated mini Clyde for processing
+                ClydeAnimationView(state: .busy, pixelSize: 1.2)
+                    .frame(width: 20, height: 20)
+                    .offset(y: bounce ? -1 : 1)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                            bounce = true
+                        }
+                    }
+            } else {
+                // Static checkmark-style idle indicator
+                ClydeAnimationView(state: .idle, pixelSize: 1.2)
+                    .frame(width: 20, height: 20)
+            }
+        }
     }
 }
 
@@ -290,10 +318,10 @@ struct SummaryBar: View {
             if sessionCount > 0 {
                 HStack(spacing: 6) {
                     if busyCount > 0 {
-                        StatusPill(count: busyCount, label: "processing", color: .red, pulse: true)
+                        StatusPill(count: busyCount, label: "processing", color: SessionTheme.processingColor, pulse: true)
                     }
                     if idleCount > 0 {
-                        StatusPill(count: idleCount, label: "ready", color: .green, pulse: false)
+                        StatusPill(count: idleCount, label: "ready", color: SessionTheme.readyColor, pulse: false)
                     }
                 }
             } else {

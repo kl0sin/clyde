@@ -16,7 +16,7 @@ final class IntegrationTests: XCTestCase {
         await monitor.poll()
 
         XCTAssertEqual(appVM.clydeState, .busy)
-        XCTAssertEqual(appVM.statusText, "2 busy")
+        XCTAssertEqual(appVM.statusText, "2 working")
         XCTAssertEqual(sessionVM.sessionCount, 2)
         XCTAssertEqual(sessionVM.busyCount, 2)
 
