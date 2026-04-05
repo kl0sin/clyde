@@ -175,11 +175,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let targetSize = collapsed ? collapsedSize : (lastExpandedSize ?? defaultExpandedSize)
 
-        // Anchor top-right corner
-        var newOrigin = NSPoint(
-            x: currentFrame.maxX - targetSize.width,
-            y: currentFrame.maxY - targetSize.height
-        )
+        // Smart anchor: left half of screen → anchor left edge, right half → anchor right edge
+        let screenMidX = screenFrame.midX
+        let widgetMidX = currentFrame.midX
+        let anchorRight = widgetMidX > screenMidX
+
+        var newOrigin: NSPoint
+        if anchorRight {
+            // Keep right edge fixed
+            newOrigin = NSPoint(
+                x: currentFrame.maxX - targetSize.width,
+                y: currentFrame.maxY - targetSize.height
+            )
+        } else {
+            // Keep left edge fixed
+            newOrigin = NSPoint(
+                x: currentFrame.minX,
+                y: currentFrame.maxY - targetSize.height
+            )
+        }
 
         // Clamp to screen
         newOrigin.x = max(screenFrame.minX + snapMargin, min(newOrigin.x, screenFrame.maxX - targetSize.width - snapMargin))
