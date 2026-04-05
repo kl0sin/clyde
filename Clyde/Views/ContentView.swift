@@ -8,29 +8,16 @@ struct ContentView: View {
         Group {
             if appViewModel.isCollapsed {
                 WidgetView(viewModel: appViewModel)
+            } else if appViewModel.showSettings {
+                SettingsView(appViewModel: appViewModel)
             } else {
-                if appViewModel.showSettings {
-                    SettingsView(appViewModel: appViewModel)
-                } else {
-                    ExpandedView(
-                        appViewModel: appViewModel,
-                        sessionViewModel: sessionViewModel,
-                        onFocusSession: { session in
-                            Task {
-                                try? await appViewModel.terminalLauncher.focusSession(session)
-                            }
-                        },
-                        onNewSession: {
-                            Task {
-                                do {
-                                    try await appViewModel.terminalLauncher.openNewSession()
-                                } catch {
-                                    print("Failed to open new session: \(error)")
-                                }
-                            }
-                        }
-                    )
-                }
+                ExpandedView(
+                    appViewModel: appViewModel,
+                    sessionViewModel: sessionViewModel,
+                    onNewSession: {
+                        sessionViewModel.createNewSession()
+                    }
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

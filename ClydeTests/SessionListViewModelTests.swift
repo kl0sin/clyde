@@ -3,38 +3,7 @@ import XCTest
 
 @MainActor
 final class SessionListViewModelTests: XCTestCase {
-    func testSelectedSessionDefaultsToFirst() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["ps -p"] = "20.0"
-        shell.responses["lsof"] = "n/Users/me/test"
-
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
-        let vm = SessionListViewModel(processMonitor: monitor)
-        await monitor.poll()
-
-        XCTAssertEqual(vm.selectedSession?.pid, 1234)
-    }
-
-    func testRenameSession() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["ps -p"] = "20.0"
-        shell.responses["lsof"] = "n/Users/me/test"
-
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
-        let vm = SessionListViewModel(processMonitor: monitor)
-        await monitor.poll()
-
-        guard let session = vm.selectedSession else {
-            XCTFail("No session")
-            return
-        }
-        vm.renameSession(id: session.id, to: "My Project")
-        XCTAssertEqual(vm.selectedSession?.displayName, "My Project")
-    }
-
-    func testStatusSummary() async {
+    func testStatusSummaryFromProcessMonitor() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234\n5678"
         shell.responses["ps -p"] = "20.0"
@@ -46,5 +15,12 @@ final class SessionListViewModelTests: XCTestCase {
 
         XCTAssertEqual(vm.sessionCount, 2)
         XCTAssertEqual(vm.busyCount, 2)
+    }
+
+    func testTerminalSessionsStartEmpty() {
+        let monitor = ProcessMonitor(pollingInterval: 1)
+        let vm = SessionListViewModel(processMonitor: monitor)
+        XCTAssertTrue(vm.terminalSessions.isEmpty)
+        XCTAssertNil(vm.selectedSession)
     }
 }
