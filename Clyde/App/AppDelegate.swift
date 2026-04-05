@@ -175,26 +175,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let targetSize = collapsed ? collapsedSize : (lastExpandedSize ?? defaultExpandedSize)
 
-        // Smart anchor based on widget position
-        let screenMidX = screenFrame.midX
-        let anchorRight = currentFrame.midX > screenMidX
+        // Anchor: keep top-center of widget aligned with top-center of expanded
+        let centerX = currentFrame.midX
+        let topY = currentFrame.maxY  // macOS: maxY = top edge
 
-        var newOrigin: NSPoint
-        if anchorRight {
-            // Keep right edge aligned with widget's right edge
-            newOrigin = NSPoint(
-                x: currentFrame.maxX - targetSize.width,
-                y: currentFrame.maxY - targetSize.height
-            )
-        } else {
-            // Keep left edge aligned with widget's left edge
-            newOrigin = NSPoint(
-                x: currentFrame.minX,
-                y: currentFrame.maxY - targetSize.height
-            )
-        }
+        var newOrigin = NSPoint(
+            x: centerX - targetSize.width / 2,
+            y: topY - targetSize.height
+        )
 
-        // Clamp to screen bounds only (no extra margin — just prevent going off-screen)
+        // Clamp to screen bounds
         newOrigin.x = max(screenFrame.minX, min(newOrigin.x, screenFrame.maxX - targetSize.width))
         newOrigin.y = max(screenFrame.minY, min(newOrigin.y, screenFrame.maxY - targetSize.height))
 
