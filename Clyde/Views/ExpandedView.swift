@@ -49,7 +49,8 @@ struct ExpandedView: View {
                 terminalCount: sessionViewModel.terminalSessions.count,
                 claudeSessionCount: sessionViewModel.sessionCount,
                 busyCount: sessionViewModel.busyCount,
-                idleCount: sessionViewModel.idleCount
+                idleCount: sessionViewModel.idleCount,
+                clydeState: appViewModel.clydeState
             )
         }
         .background(Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1)))
@@ -187,38 +188,85 @@ struct StatusBar: View {
     let claudeSessionCount: Int
     let busyCount: Int
     let idleCount: Int
+    let clydeState: ClydeState
 
     var body: some View {
-        HStack {
-            Text("\(terminalCount) tabs")
-                .foregroundColor(.gray)
+        HStack(spacing: 10) {
+            // Mini Clyde indicator
+            ClydeAnimationView(state: clydeState, pixelSize: 0.75)
+                .frame(width: 12, height: 12)
+
+            // Claude sessions status
+            if claudeSessionCount > 0 {
+                HStack(spacing: 8) {
+                    if busyCount > 0 {
+                        StatusPill(
+                            count: busyCount,
+                            label: "processing",
+                            color: .red,
+                            pulse: true
+                        )
+                    }
+                    if idleCount > 0 {
+                        StatusPill(
+                            count: idleCount,
+                            label: "ready",
+                            color: .green,
+                            pulse: false
+                        )
+                    }
+                }
+            } else {
+                Text("No Claude sessions detected")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(white: 0.4))
+            }
 
             Spacer()
 
-            if claudeSessionCount > 0 {
-                HStack(spacing: 12) {
-                    if busyCount > 0 {
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.red).frame(width: 6, height: 6)
-                            Text("\(busyCount) busy").foregroundColor(.red)
-                        }
-                    }
-                    if idleCount > 0 {
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.green).frame(width: 6, height: 6)
-                            Text("\(idleCount) idle").foregroundColor(.green)
-                        }
-                    }
+            Text("\(terminalCount) \(terminalCount == 1 ? "tab" : "tabs")")
+                .font(.system(size: 10))
+                .foregroundColor(Color(white: 0.4))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color(white: 0.11))
+        .overlay(
+            Rectangle().frame(height: 1).foregroundColor(Color(white: 0.18)),
+            alignment: .top
+        )
+    }
+}
+
+struct StatusPill: View {
+    let count: Int
+    let label: String
+    let color: Color
+    let pulse: Bool
+
+    @State private var isPulsing = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+                .opacity(pulse && isPulsing ? 0.4 : 1.0)
+
+            Text("\(count) \(label)")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(color.opacity(0.9))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.1))
+        .clipShape(Capsule())
+        .onAppear {
+            if pulse {
+                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                    isPulsing = true
                 }
             }
         }
-        .font(.system(size: 11))
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(Color(white: 0.13))
-        .overlay(
-            Rectangle().frame(height: 1).foregroundColor(Color(white: 0.2)),
-            alignment: .top
-        )
     }
 }

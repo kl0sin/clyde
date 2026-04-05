@@ -35,8 +35,12 @@ struct TerminalContentView: NSViewRepresentable {
         scrollView.documentView = textView
 
         // Make text view first responder for keyboard input
-        DispatchQueue.main.async {
-            textView.window?.makeFirstResponder(textView)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let window = textView.window {
+                // Ensure the panel is key and can receive keyboard
+                window.makeKey()
+                window.makeFirstResponder(textView)
+            }
         }
 
         return scrollView
