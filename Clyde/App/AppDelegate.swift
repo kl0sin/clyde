@@ -175,14 +175,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let targetSize = collapsed ? collapsedSize : (lastExpandedSize ?? defaultExpandedSize)
 
-        // Anchor: keep top-center of widget aligned with top-center of expanded
-        let centerX = currentFrame.midX
-        let topY = currentFrame.maxY  // macOS: maxY = top edge
+        // Widget has 10pt horizontal padding — visual edge is inset from panel frame
+        let widgetPadding: CGFloat = collapsed ? 0 : 10
 
-        var newOrigin = NSPoint(
-            x: centerX - targetSize.width / 2,
-            y: topY - targetSize.height
-        )
+        // Anchor based on which half of screen the widget is on
+        let anchorRight = currentFrame.midX > screenFrame.midX
+
+        var newOrigin: NSPoint
+        if anchorRight {
+            // Align visual right edges: expanded right = widget visual right
+            let visualRight = currentFrame.maxX - widgetPadding
+            newOrigin = NSPoint(
+                x: visualRight - targetSize.width,
+                y: currentFrame.maxY - targetSize.height
+            )
+        } else {
+            // Align visual left edges: expanded left = widget visual left
+            let visualLeft = currentFrame.minX + widgetPadding
+            newOrigin = NSPoint(
+                x: visualLeft,
+                y: currentFrame.maxY - targetSize.height
+            )
+        }
 
         // Clamp to screen bounds
         newOrigin.x = max(screenFrame.minX, min(newOrigin.x, screenFrame.maxX - targetSize.width))
