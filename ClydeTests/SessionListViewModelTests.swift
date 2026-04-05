@@ -1,0 +1,50 @@
+import XCTest
+@testable import Clyde
+
+@MainActor
+final class SessionListViewModelTests: XCTestCase {
+    func testSelectedSessionDefaultsToFirst() async {
+        let shell = MockShellExecutor()
+        shell.responses["pgrep -x claude"] = "1234"
+        shell.responses["ps -p"] = "20.0"
+        shell.responses["lsof"] = "n/Users/me/test"
+
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+        let vm = SessionListViewModel(processMonitor: monitor)
+        await monitor.poll()
+
+        XCTAssertEqual(vm.selectedSession?.pid, 1234)
+    }
+
+    func testRenameSession() async {
+        let shell = MockShellExecutor()
+        shell.responses["pgrep -x claude"] = "1234"
+        shell.responses["ps -p"] = "20.0"
+        shell.responses["lsof"] = "n/Users/me/test"
+
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+        let vm = SessionListViewModel(processMonitor: monitor)
+        await monitor.poll()
+
+        guard let session = vm.selectedSession else {
+            XCTFail("No session")
+            return
+        }
+        vm.renameSession(id: session.id, to: "My Project")
+        XCTAssertEqual(vm.selectedSession?.displayName, "My Project")
+    }
+
+    func testStatusSummary() async {
+        let shell = MockShellExecutor()
+        shell.responses["pgrep -x claude"] = "1234\n5678"
+        shell.responses["ps -p"] = "20.0"
+        shell.responses["lsof"] = "n/Users/me/test"
+
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+        let vm = SessionListViewModel(processMonitor: monitor)
+        await monitor.poll()
+
+        XCTAssertEqual(vm.sessionCount, 2)
+        XCTAssertEqual(vm.busyCount, 2)
+    }
+}
