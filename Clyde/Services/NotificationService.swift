@@ -6,6 +6,8 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     var onNotificationClicked: ((pid_t) -> Void)?
 
     func requestPermission() {
+        // UNUserNotificationCenter requires a valid app bundle (won't work from bare executable)
+        guard Bundle.main.bundleIdentifier != nil else { return }
         UNUserNotificationCenter.current().delegate = self
         Task {
             do {
