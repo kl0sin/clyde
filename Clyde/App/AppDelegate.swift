@@ -9,24 +9,18 @@ final class FloatingPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
         level = .floating
         isFloatingPanel = true
-        titleVisibility = .hidden
-        titlebarAppearsTransparent = true
         isMovableByWindowBackground = true
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-        standardWindowButton(.closeButton)?.isHidden = true
-        standardWindowButton(.miniaturizeButton)?.isHidden = true
-        standardWindowButton(.zoomButton)?.isHidden = true
     }
 }
 
@@ -72,15 +66,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setCollapsedConstraints() {
-        panel.styleMask.remove(.resizable)
+        panel.styleMask = [.borderless, .nonactivatingPanel]
         panel.minSize = collapsedSize
         panel.maxSize = collapsedSize
+        panel.hasShadow = false
     }
 
     private func setExpandedConstraints() {
-        panel.styleMask.insert(.resizable)
+        panel.styleMask = [.titled, .resizable, .fullSizeContentView, .nonactivatingPanel]
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.standardWindowButton(.closeButton)?.isHidden = true
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
         panel.minSize = NSSize(width: 320, height: 300)
         panel.maxSize = NSSize(width: 700, height: 800)
+        panel.hasShadow = true
     }
 
     private func animateTransition(collapsed: Bool) {

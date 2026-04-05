@@ -16,10 +16,14 @@ final class AppViewModel: ObservableObject {
 
     var statusText: String {
         let sessions = processMonitor.sessions
-        if sessions.isEmpty { return "sleeping" }
+        if sessions.isEmpty { return "no sessions" }
         let busyCount = sessions.filter { $0.status == .busy }.count
-        if busyCount > 0 { return "\(busyCount) active" }
-        return "all idle"
+        let idleCount = sessions.count - busyCount
+        if busyCount > 0 && idleCount > 0 {
+            return "\(busyCount) busy · \(idleCount) ready"
+        }
+        if busyCount > 0 { return "\(busyCount) busy" }
+        return "\(idleCount) ready"
     }
 
     private var cancellables = Set<AnyCancellable>()
