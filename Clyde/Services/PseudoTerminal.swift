@@ -56,10 +56,6 @@ final class PseudoTerminal {
         }
 
         // Parent process
-        // Set non-blocking
-        let flags = fcntl(masterFD, F_GETFL)
-        _ = fcntl(masterFD, F_SETFL, flags | O_NONBLOCK)
-
         return PseudoTerminal(masterFD: masterFD, childPID: pid)
     }
 

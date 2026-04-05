@@ -45,9 +45,9 @@ struct ExpandedView: View {
             }
 
             // Status bar — shows Claude process monitoring info
-            StatusBar(
+            StatusBarWithDetail(
+                sessions: sessionViewModel.monitoredSessions,
                 terminalCount: sessionViewModel.terminalSessions.count,
-                claudeSessionCount: sessionViewModel.sessionCount,
                 busyCount: sessionViewModel.busyCount,
                 idleCount: sessionViewModel.idleCount,
                 clydeState: appViewModel.clydeState
@@ -235,6 +235,73 @@ struct StatusBar: View {
             Rectangle().frame(height: 1).foregroundColor(Color(white: 0.18)),
             alignment: .top
         )
+    }
+}
+
+struct StatusBarWithDetail: View {
+    let sessions: [Session]
+    let terminalCount: Int
+    let busyCount: Int
+    let idleCount: Int
+    let clydeState: ClydeState
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Expandable detail panel
+            if isExpanded && !sessions.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(sessions, id: \.pid) { session in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(session.status == .busy ? Color.red : Color.green)
+                                .frame(width: 6, height: 6)
+
+                            Text(session.displayName)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            Text(session.status == .busy ? "processing" : "ready")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(session.status == .busy ? .red : .green)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background((session.status == .busy ? Color.red : Color.green).opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                    }
+                }
+                .background(Color(white: 0.11))
+                .overlay(
+                    Rectangle().frame(height: 1).foregroundColor(Color(white: 0.18)),
+                    alignment: .bottom
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            // Main status bar
+            StatusBar(
+                terminalCount: terminalCount,
+                claudeSessionCount: sessions.count,
+                busyCount: busyCount,
+                idleCount: idleCount,
+                clydeState: clydeState
+            )
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if !sessions.isEmpty {
+                        isExpanded.toggle()
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+        }
     }
 }
 

@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var appViewModel: AppViewModel!
     var sessionViewModel: SessionListViewModel!
 
-    private let collapsedSize = NSSize(width: 90, height: 120)
+    private let collapsedSize = NSSize(width: 150, height: 52)
     private let defaultExpandedSize = NSSize(width: 480, height: 520)
     private var lastExpandedFrame: NSRect?
     private var cancellables = Set<AnyCancellable>()

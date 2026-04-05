@@ -10,8 +10,8 @@ final class TerminalSession: ObservableObject, Identifiable {
     @Published var isRunning: Bool = true
     @Published var title: String
 
-    private var readTask: Task<Void, Never>?
-    private let maxOutputLength = 50_000 // Trim output to prevent memory bloat
+    private var readSource: DispatchSourceRead?
+    private let maxOutputLength = 100_000
 
     init(pty: PseudoTerminal, title: String = "Terminal") {
         self.pty = pty
@@ -20,34 +20,48 @@ final class TerminalSession: ObservableObject, Identifiable {
     }
 
     private func startReading() {
-        let pty = self.pty
-        readTask = Task.detached { [weak self] in
-            while !Task.isCancelled {
-                guard let self = self else { break }
+        // Use GCD dispatch source for efficient PTY reading
+        let source = DispatchSource.makeReadSource(
+            fileDescriptor: pty.masterFD,
+            queue: DispatchQueue.global(qos: .userInteractive)
+        )
 
-                if let data = pty.read(),
-                   let text = String(data: data, encoding: .utf8) {
-                    await MainActor.run {
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            var buffer = [UInt8](repeating: 0, count: 8192)
+            let bytesRead = Darwin.read(self.pty.masterFD, &buffer, buffer.count)
+            if bytesRead > 0 {
+                let data = Data(buffer[0..<bytesRead])
+                if let text = String(data: data, encoding: .utf8) {
+                    DispatchQueue.main.async {
                         self.appendOutput(text)
                     }
                 }
-
-                // Check if process ended
-                if !pty.isRunning {
-                    await MainActor.run {
-                        self.isRunning = false
-                    }
-                    break
+            } else if bytesRead == 0 {
+                // EOF — process ended
+                DispatchQueue.main.async {
+                    self.isRunning = false
                 }
-
-                try? await Task.sleep(for: .milliseconds(16)) // ~60fps read rate
+                source.cancel()
             }
         }
+
+        source.setCancelHandler { [weak self] in
+            DispatchQueue.main.async {
+                self?.isRunning = false
+            }
+        }
+
+        // Need to set FD back to blocking for dispatch source
+        let flags = fcntl(pty.masterFD, F_GETFL)
+        _ = fcntl(pty.masterFD, F_SETFL, flags & ~O_NONBLOCK)
+
+        source.resume()
+        readSource = source
     }
 
     private func appendOutput(_ text: String) {
         outputText += text
-        // Trim if too long — keep the tail
         if outputText.count > maxOutputLength {
             let startIndex = outputText.index(outputText.endIndex, offsetBy: -maxOutputLength)
             outputText = String(outputText[startIndex...])
@@ -59,8 +73,7 @@ final class TerminalSession: ObservableObject, Identifiable {
     }
 
     func sendKey(_ key: UInt8) {
-        let data = Data([key])
-        pty.write(data)
+        pty.write(Data([key]))
     }
 
     func resize(cols: UInt16, rows: UInt16) {
@@ -68,22 +81,20 @@ final class TerminalSession: ObservableObject, Identifiable {
     }
 
     func terminate() {
-        readTask?.cancel()
-        // PTY deinit handles kill + close
+        readSource?.cancel()
+        readSource = nil
     }
 
     deinit {
-        readTask?.cancel()
+        readSource?.cancel()
     }
 
-    /// Create a new terminal session with a shell
     static func createShell(cwd: String? = nil) throws -> TerminalSession {
         let pty = try PseudoTerminal.spawn(cwd: cwd)
         let dirName = cwd.map { ($0 as NSString).lastPathComponent } ?? "Terminal"
         return TerminalSession(pty: pty, title: dirName)
     }
 
-    /// Create a new terminal session running claude
     static func createClaude(cwd: String? = nil) throws -> TerminalSession {
         let pty = try PseudoTerminal.spawn(cwd: cwd, command: "claude")
         let dirName = cwd.map { ($0 as NSString).lastPathComponent } ?? "claude"

@@ -4,24 +4,33 @@ struct WidgetView: View {
     @ObservedObject var viewModel: AppViewModel
 
     var body: some View {
-        VStack(spacing: 8) {
+        HStack(spacing: 10) {
             ClydeAnimationView(
                 state: viewModel.clydeState,
-                pixelSize: 3
+                pixelSize: 2
             )
+            .frame(width: 32, height: 32)
 
-            Text(viewModel.statusText)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundColor(statusColor)
-                .tracking(0.5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Clyde")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+
+                Text(viewModel.statusText)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundColor(statusColor)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1)))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: NSColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 0.95)))
+                .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color(white: 0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(statusBorderColor.opacity(0.3), lineWidth: 1)
         )
         .onTapGesture {
             viewModel.toggleExpanded()
@@ -32,7 +41,15 @@ struct WidgetView: View {
         switch viewModel.clydeState {
         case .busy: return .red
         case .idle: return .green
-        case .sleeping: return .gray
+        case .sleeping: return Color(white: 0.5)
+        }
+    }
+
+    private var statusBorderColor: Color {
+        switch viewModel.clydeState {
+        case .busy: return .red
+        case .idle: return .green
+        case .sleeping: return Color(white: 0.3)
         }
     }
 }
