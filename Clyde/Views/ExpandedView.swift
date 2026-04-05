@@ -18,8 +18,8 @@ struct ExpandedView: View {
             } else {
                 SessionListView(
                     sessions: sessionViewModel.sessions,
-                    onRename: { path, name in
-                        sessionViewModel.renameSession(workingDirectory: path, to: name)
+                    onRename: { id, name in
+                        sessionViewModel.renameSession(id: id, to: name)
                     }
                 )
             }
@@ -92,14 +92,14 @@ struct TitleBar: View {
 
 struct SessionListView: View {
     let sessions: [Session]
-    let onRename: (String, String) -> Void  // (workingDirectory, newName)
+    let onRename: (UUID, String) -> Void
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(sessions, id: \.pid) { session in
                     SessionRow(session: session, onRename: { name in
-                        onRename(session.workingDirectory, name)
+                        onRename(session.id, name)
                     })
                     if session.pid != sessions.last?.pid {
                         Divider()
@@ -136,22 +136,59 @@ struct SessionRow: View {
             // Project info
             VStack(alignment: .leading, spacing: 3) {
                 if isEditing {
-                    TextField("Session name", text: $editName, onCommit: {
-                        onRename(editName)
-                        isEditing = false
-                    })
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white)
-                } else {
-                    Text(session.displayName)
+                    HStack(spacing: 6) {
+                        TextField("Session name", text: $editName, onCommit: {
+                            onRename(editName)
+                            isEditing = false
+                        })
+                        .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.white)
-                        .lineLimit(1)
-                        .onTapGesture(count: 2) {
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color(white: 0.2))
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+
+                        Button(action: {
+                            onRename(editName)
+                            isEditing = false
+                        }) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.green)
+                                .frame(width: 20, height: 20)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: { isEditing = false }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.gray)
+                                .frame(width: 20, height: 20)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    HStack(spacing: 6) {
+                        Text(session.displayName)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+
+                        Button(action: {
                             editName = session.customName ?? ""
                             isEditing = true
+                        }) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 9))
+                                .foregroundColor(Color(white: 0.35))
+                                .frame(width: 18, height: 18)
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                    }
                 }
 
                 Text(session.workingDirectory.isEmpty ? "Unknown path" : abbreviatePath(session.workingDirectory))
@@ -164,26 +201,28 @@ struct SessionRow: View {
             Spacer()
 
             // Status badge + time
-            VStack(alignment: .trailing, spacing: 3) {
-                HStack(spacing: 5) {
-                    if session.status == .busy {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
+            if !isEditing {
+                VStack(alignment: .trailing, spacing: 3) {
+                    HStack(spacing: 5) {
+                        if session.status == .busy {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12, height: 12)
+                        }
+
+                        Text(statusLabel)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(statusColor)
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(statusColor.opacity(0.1))
+                    .clipShape(Capsule())
 
-                    Text(statusLabel)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(statusColor)
+                    Text(timeAgo(session.statusChangedAt))
+                        .font(.system(size: 9))
+                        .foregroundColor(Color(white: 0.35))
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(statusColor.opacity(0.1))
-                .clipShape(Capsule())
-
-                Text(timeAgo(session.statusChangedAt))
-                    .font(.system(size: 9))
-                    .foregroundColor(Color(white: 0.35))
             }
         }
         .padding(.horizontal, 14)

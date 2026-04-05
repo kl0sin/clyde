@@ -6,13 +6,13 @@ final class SessionListViewModel: ObservableObject {
     let processMonitor: ProcessMonitor
     private var cancellables = Set<AnyCancellable>()
 
-    /// Custom names persisted by PID path (workingDirectory -> name)
-    @Published var customNames: [String: String] = [:]
+    /// Custom names keyed by session UUID
+    @Published var customNames: [UUID: String] = [:]
 
     var sessions: [Session] {
         processMonitor.sessions.map { session in
             var s = session
-            if let name = customNames[session.workingDirectory], !name.isEmpty {
+            if let name = customNames[session.id], !name.isEmpty {
                 s.customName = name
             }
             return s
@@ -25,20 +25,13 @@ final class SessionListViewModel: ObservableObject {
 
     init(processMonitor: ProcessMonitor) {
         self.processMonitor = processMonitor
-
-        // Load saved names
-        if let saved = UserDefaults.standard.dictionary(forKey: "sessionNames") as? [String: String] {
-            customNames = saved
-        }
-
         processMonitor.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
     }
 
-    func renameSession(workingDirectory: String, to name: String) {
-        customNames[workingDirectory] = name.isEmpty ? nil : name
-        UserDefaults.standard.set(customNames, forKey: "sessionNames")
+    func renameSession(id: UUID, to name: String) {
+        customNames[id] = name.isEmpty ? nil : name
         objectWillChange.send()
     }
 }
