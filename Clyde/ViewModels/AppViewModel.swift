@@ -6,6 +6,7 @@ final class AppViewModel: ObservableObject {
     @Published var isCollapsed = true
     @Published var showSettings = false
     @Published var lastError: String?
+    @Published var hookHealthIssue: HookInstaller.HealthIssue?
 
     let processMonitor: ProcessMonitor
     let terminalLauncher: TerminalLauncher
@@ -121,6 +122,8 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    private static let hookOptOutKey = "hookAutoInstallOptOut"
+
     func start() {
         notificationService.requestPermission()
         terminalLauncher.detectTerminals()
@@ -132,7 +135,60 @@ final class AppViewModel: ObservableObject {
 
         processMonitor.startPolling()
         attentionMonitor.start()
+        ensureHookHealthy()
         ClydeLog.general.info("Clyde started")
+    }
+
+    /// Auto-install or auto-repair the hook on startup.
+    ///
+    /// We never silently overwrite a working install. We only act when:
+    ///  - the hook is missing AND the user hasn't explicitly opted out, or
+    ///  - the install is corrupt / outdated / missing events (always repair).
+    private func ensureHookHealthy() {
+        let issue = HookInstaller.healthCheck()
+        guard let issue else {
+            hookHealthIssue = nil
+            return
+        }
+
+        let optedOut = UserDefaults.standard.bool(forKey: Self.hookOptOutKey)
+        let shouldAutoInstall: Bool
+        switch issue {
+        case .notInstalled:
+            shouldAutoInstall = !optedOut
+        case .scriptMissing, .scriptNotExecutable, .outdated, .missingEvents:
+            // Repair broken / stale installs unconditionally — these are not
+            // user opt-out states, they're inconsistent state.
+            shouldAutoInstall = true
+        }
+
+        if shouldAutoInstall {
+            do {
+                try HookInstaller.install()
+                ClydeLog.hooks.info("Auto-installed/repaired Claude hook (\(issue.bannerMessage, privacy: .public))")
+                hookHealthIssue = HookInstaller.healthCheck()
+            } catch {
+                ClydeLog.hooks.error("Auto-install failed: \(error.localizedDescription, privacy: .public)")
+                hookHealthIssue = issue
+            }
+        } else {
+            hookHealthIssue = issue
+        }
+    }
+
+    /// Re-runs the hook installer's health check. Call this after the user
+    /// toggles the install button in Settings.
+    func refreshHookHealth() {
+        hookHealthIssue = HookInstaller.healthCheck()
+        if let issue = hookHealthIssue {
+            ClydeLog.hooks.info("Hook health issue: \(issue.bannerMessage, privacy: .public)")
+        }
+    }
+
+    /// Persist the user's choice to remove the hook so we don't re-install
+    /// on the next launch.
+    func setHookOptOut(_ optedOut: Bool) {
+        UserDefaults.standard.set(optedOut, forKey: Self.hookOptOutKey)
     }
 
     private func showError(_ message: String) {

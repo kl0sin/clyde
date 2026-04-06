@@ -16,8 +16,14 @@ enum HookInstaller {
         }
     }
 
+    /// Bumped whenever the embedded hook script changes. The version line is
+    /// embedded in the script itself; Clyde reads it from the installed copy
+    /// at startup and prompts a reinstall if it's older.
+    static let currentScriptVersion = 2
+
     static let hookScript = ##"""
     #!/bin/bash
+    # clyde-hook-version: 2
     # Clyde notification hook — signals Clyde about Claude session state transitions.
     # Installed automatically by Clyde. Safe to remove manually.
     #
@@ -25,10 +31,14 @@ enum HookInstaller {
     # PID recycling cannot produce false positives. Each file's content is
     # JSON with the live PID + cwd, which Clyde reads to do PID-keyed lookups.
     #
-    # Handles three event types:
-    #   PermissionRequest → writes events/<session_id>.json (attention flag)
-    #   UserPromptSubmit  → creates state/<session_id>-busy marker
-    #   Stop              → removes state/<session_id>-busy marker
+    # Writes are atomic (mktemp + mv) so concurrent hooks can't corrupt files.
+    #
+    # Handled events:
+    #   SessionStart      → state/<session_id>-info (alive marker)
+    #   SessionEnd        → removes info + busy + event for that session
+    #   UserPromptSubmit  → state/<session_id>-busy marker
+    #   Stop              → removes busy marker
+    #   PermissionRequest → events/<session_id>.json (attention flag)
 
     set -e
     EVENTS_DIR="$HOME/.clyde/events"
@@ -80,24 +90,31 @@ enum HookInstaller {
     ESC_CWD=$(printf '%s' "$CWD" | sed 's/\\/\\\\/g; s/"/\\"/g')
     ESC_SID=$(printf '%s' "$SESSION_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
+    # Atomic write helper: stage to a temp file in the same dir, then mv.
+    atomic_write() {
+        local target=$1
+        local body=$2
+        local tmp
+        tmp=$(mktemp "$(dirname "$target")/.clyde-tmp.XXXXXX") || return 1
+        printf '%s\n' "$body" > "$tmp"
+        mv -f "$tmp" "$target"
+    }
+
     case "$HOOK_EVENT" in
         SessionStart)
-            cat > "$STATE_DIR/$KEY-info" <<EOF
-    {"session_id": "$ESC_SID", "pid": $CLAUDE_PID, "cwd": "$ESC_CWD", "started_at": $TIMESTAMP}
-    EOF
+            atomic_write "$STATE_DIR/$KEY-info" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP}"
             ;;
         SessionEnd)
             rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$EVENTS_DIR/$KEY.json"
             ;;
         PermissionRequest)
-            cat > "$EVENTS_DIR/$KEY.json" <<EOF
-    {"session_id": "$ESC_SID", "pid": $CLAUDE_PID, "cwd": "$ESC_CWD", "event": "$HOOK_EVENT", "timestamp": $TIMESTAMP}
-    EOF
+            atomic_write "$EVENTS_DIR/$KEY.json" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"event\": \"$HOOK_EVENT\", \"timestamp\": $TIMESTAMP}"
             ;;
         UserPromptSubmit)
-            cat > "$STATE_DIR/$KEY-busy" <<EOF
-    {"session_id": "$ESC_SID", "pid": $CLAUDE_PID, "cwd": "$ESC_CWD", "timestamp": $TIMESTAMP}
-    EOF
+            atomic_write "$STATE_DIR/$KEY-busy" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"timestamp\": $TIMESTAMP}"
             ;;
         Stop)
             rm -f "$STATE_DIR/$KEY-busy"
@@ -123,6 +140,104 @@ enum HookInstaller {
 
     static var isInstalled: Bool {
         FileManager.default.fileExists(atPath: AppPaths.clydeHookScript.path)
+    }
+
+    /// Result of the startup health check.
+    enum HealthIssue: Equatable {
+        case notInstalled
+        case scriptMissing                      // settings registers it but file is gone
+        case scriptNotExecutable
+        case outdated(installed: Int, current: Int)
+        case missingEvents([String])            // events that are missing from settings.json
+
+        var bannerMessage: String {
+            switch self {
+            case .notInstalled:
+                return "Claude hook not installed. Real-time tracking is disabled."
+            case .scriptMissing:
+                return "Hook script is missing. Reinstall to restore real-time tracking."
+            case .scriptNotExecutable:
+                return "Hook script isn't executable. Reinstall to fix permissions."
+            case .outdated(let installed, let current):
+                return "Hook script is outdated (v\(installed) → v\(current)). Reinstall to upgrade."
+            case .missingEvents(let names):
+                return "Hook isn't registered for: \(names.joined(separator: ", ")). Reinstall to fix."
+            }
+        }
+    }
+
+    /// Inspect the installed hook on disk and the settings.json registration.
+    /// Returns nil if everything looks healthy.
+    static func healthCheck() -> HealthIssue? {
+        let scriptPath = AppPaths.clydeHookScript.path
+        let scriptExists = FileManager.default.fileExists(atPath: scriptPath)
+
+        // No script at all → user simply hasn't installed yet.
+        if !scriptExists {
+            // If the user previously installed but the script vanished, the
+            // settings.json will still reference it. Treat that as a corruption
+            // worth flagging; otherwise it's just "not installed yet".
+            if isRegisteredInSettings(eventName: registeredHookEvents.first ?? "") {
+                return .scriptMissing
+            }
+            return .notInstalled
+        }
+
+        // Script exists — check executable bit.
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: scriptPath),
+           let perms = attrs[.posixPermissions] as? NSNumber,
+           (perms.intValue & 0o111) == 0 {
+            return .scriptNotExecutable
+        }
+
+        // Version stamp.
+        if let installedVersion = readInstalledVersion(),
+           installedVersion < currentScriptVersion {
+            return .outdated(installed: installedVersion, current: currentScriptVersion)
+        }
+
+        // Settings registration for every required event.
+        let missing = registeredHookEvents.filter { !isRegisteredInSettings(eventName: $0) }
+        if !missing.isEmpty {
+            return .missingEvents(missing)
+        }
+
+        return nil
+    }
+
+    private static func readInstalledVersion() -> Int? {
+        guard let data = try? String(contentsOf: AppPaths.clydeHookScript, encoding: .utf8) else {
+            return nil
+        }
+        // Match a line like "# clyde-hook-version: 2".
+        for line in data.components(separatedBy: "\n").prefix(10) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("#") else { continue }
+            if let range = trimmed.range(of: "clyde-hook-version:") {
+                let value = trimmed[range.upperBound...].trimmingCharacters(in: .whitespaces)
+                return Int(value)
+            }
+        }
+        return nil
+    }
+
+    private static func isRegisteredInSettings(eventName: String) -> Bool {
+        guard let data = try? Data(contentsOf: AppPaths.claudeSettingsFile),
+              let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let hooks = settings["hooks"] as? [String: Any],
+              let events = hooks[eventName] as? [[String: Any]] else {
+            return false
+        }
+        for entry in events {
+            if let inner = entry["hooks"] as? [[String: Any]] {
+                for h in inner {
+                    if let cmd = h["command"] as? String, cmd.contains("clyde-notify.sh") {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
     }
 
     static func install() throws {

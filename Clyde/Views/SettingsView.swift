@@ -24,7 +24,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     monitoringSection
                     soundSection
-                    SettingsSection(title: "Claude Integration") { ClaudeHooksRow() }
+                    SettingsSection(title: "Claude Integration") { ClaudeHooksRow(appViewModel: appViewModel) }
                     aboutSection
                 }
                 .padding(16)
@@ -193,6 +193,7 @@ struct SettingsView: View {
 }
 
 struct ClaudeHooksRow: View {
+    @ObservedObject var appViewModel: AppViewModel
     @State private var isInstalled: Bool = HookInstaller.isInstalled
     @State private var errorMessage: String?
 
@@ -208,11 +209,27 @@ struct ClaudeHooksRow: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
+                hookEventRow(name: "SessionStart", description: "Discovers a new session")
+                hookEventRow(name: "SessionEnd", description: "Removes a closed session")
                 hookEventRow(name: "UserPromptSubmit", description: "Marks session busy")
                 hookEventRow(name: "Stop", description: "Marks session ready")
                 hookEventRow(name: "PermissionRequest", description: "Triggers attention alert")
             }
             .padding(.vertical, 4)
+
+            if let issue = appViewModel.hookHealthIssue, isInstalled {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.orange)
+                    Text(issue.bannerMessage)
+                        .font(.system(size: 10))
+                        .foregroundColor(.orange)
+                }
+                .padding(8)
+                .background(Color.orange.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
 
             if let errorMessage {
                 Text(errorMessage)
@@ -260,10 +277,13 @@ struct ClaudeHooksRow: View {
         do {
             if isInstalled {
                 try HookInstaller.uninstall()
+                appViewModel.setHookOptOut(true)
             } else {
                 try HookInstaller.install()
+                appViewModel.setHookOptOut(false)
             }
             isInstalled = HookInstaller.isInstalled
+            appViewModel.refreshHookHealth()
         } catch {
             errorMessage = error.localizedDescription
         }
