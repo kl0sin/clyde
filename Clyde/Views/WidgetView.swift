@@ -20,9 +20,11 @@ struct WidgetView: View {
                     .font(.system(size: 9, weight: .medium))
                     .foregroundColor(statusColor)
             }
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(.ultraThinMaterial)
@@ -32,7 +34,6 @@ struct WidgetView: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
         .onTapGesture {
             viewModel.toggleExpanded()
         }
