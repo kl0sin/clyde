@@ -69,66 +69,70 @@ struct WidgetView: View {
     }
 }
 
-private struct StatusDotCount: View {
-    let count: Int
-    let color: Color
-    let activeColor: Color
-    let pulse: Bool
-    let dim: Bool
-
-    var body: some View {
-        HStack(spacing: 3) {
-            Circle()
-                .fill(dim ? Color(white: 0.3) : color)
-                .frame(width: 5, height: 5)
-                .opacity(pulse ? 0.35 : 1.0)
-            Text("\(count)")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundColor(dim ? Color(white: 0.35) : activeColor)
-                .monospacedDigit()
-        }
-    }
-}
-
-/// Compact status display: reserved width for both processing & ready slots
+/// Compact status display: a single dominant-state badge.
+/// Priority: attention > working > ready. The Clyde animation carries the
+/// rest of the context (waving for attention, antenna pulse for busy).
 private struct CompactStatusView: View {
     @ObservedObject var viewModel: AppViewModel
+    @ObservedObject var attentionMonitor: AttentionMonitor
     @State private var isPulsing = false
 
-    var body: some View {
-        let sessions = viewModel.processMonitor.sessions
-        let processing = sessions.filter { $0.status == .busy }.count
-        let ready = sessions.count - processing
+    init(viewModel: AppViewModel) {
+        self.viewModel = viewModel
+        self.attentionMonitor = viewModel.attentionMonitor
+    }
 
+    private struct Badge {
+        let count: Int
+        let label: String
+        let color: Color
+        let pulse: Bool
+    }
+
+    private var badge: Badge? {
+        let sessions = viewModel.processMonitor.sessions
+        let attentionPIDs = attentionMonitor.attentionPIDs
+        let attention = sessions.filter { attentionPIDs.contains($0.pid) }.count
+        let processing = sessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
+        let ready = sessions.count - processing - attention
+
+        if attention > 0 {
+            return Badge(count: attention, label: "needs input", color: .blue, pulse: true)
+        }
+        if processing > 0 {
+            return Badge(count: processing, label: "working", color: .orange, pulse: true)
+        }
+        if ready > 0 {
+            return Badge(count: ready, label: "ready", color: .green, pulse: false)
+        }
+        return nil
+    }
+
+    var body: some View {
         Group {
-            if sessions.isEmpty {
-                HStack {
-                    Spacer(minLength: 0)
-                    Text("idle")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor(Color(white: 0.5))
-                    Spacer(minLength: 0)
+            if let badge {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(badge.color)
+                        .frame(width: 6, height: 6)
+                        .opacity(badge.pulse && isPulsing ? 0.4 : 1.0)
+                    Text("\(badge.count) \(badge.label)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundColor(badge.color)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .fixedSize()
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(badge.color.opacity(0.15))
+                .clipShape(Capsule())
             } else {
-                HStack(spacing: 8) {
-                    StatusDotCount(
-                        count: processing,
-                        color: .orange,
-                        activeColor: .orange,
-                        pulse: isPulsing && processing > 0,
-                        dim: processing == 0
-                    )
-                    StatusDotCount(
-                        count: ready,
-                        color: .green,
-                        activeColor: .green,
-                        pulse: false,
-                        dim: ready == 0
-                    )
-                }
+                Text("idle")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(Color(white: 0.5))
             }
         }
-        .frame(width: 60)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                 isPulsing = true

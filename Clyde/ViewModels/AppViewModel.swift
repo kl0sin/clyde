@@ -13,7 +13,12 @@ final class AppViewModel: ObservableObject {
     let attentionMonitor: AttentionMonitor
 
     var clydeState: ClydeState {
-        processMonitor.clydeState
+        // Attention takes priority over busy — if any session is waiting for
+        // permission, surface that distinct state to the animation layer.
+        if !attentionMonitor.attentionPIDs.isEmpty {
+            return .attention
+        }
+        return processMonitor.clydeState
     }
 
     var statusText: String {

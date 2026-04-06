@@ -62,9 +62,14 @@ struct SettingsView: View {
         SettingsSection(title: "Monitoring") {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Check every")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Fallback poll interval")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white)
+                        Text("Used when the Claude hook isn't installed")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(white: 0.45))
+                    }
                     Spacer()
                     Text("\(Int(pollingInterval))s")
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -194,13 +199,20 @@ struct ClaudeHooksRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Attention notifications")
+                Text("Real-time session tracking")
                     .font(.system(size: 12))
                     .foregroundColor(.white)
-                Text("Detect when Claude needs permission or input")
+                Text("Reports busy/idle and permission requests instantly via Claude Code hooks")
                     .font(.system(size: 10))
                     .foregroundColor(Color(white: 0.45))
             }
+
+            VStack(alignment: .leading, spacing: 4) {
+                hookEventRow(name: "UserPromptSubmit", description: "Marks session busy")
+                hookEventRow(name: "Stop", description: "Marks session ready")
+                hookEventRow(name: "PermissionRequest", description: "Triggers attention alert")
+            }
+            .padding(.vertical, 4)
 
             if let errorMessage {
                 Text(errorMessage)
@@ -222,6 +234,24 @@ struct ClaudeHooksRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private func hookEventRow(name: String, description: String) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(isInstalled ? Color.green : Color(white: 0.3))
+                .frame(width: 5, height: 5)
+            Text(name)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundColor(Color(white: 0.7))
+            Text("·")
+                .font(.system(size: 10))
+                .foregroundColor(Color(white: 0.35))
+            Text(description)
+                .font(.system(size: 10))
+                .foregroundColor(Color(white: 0.5))
+            Spacer()
         }
     }
 

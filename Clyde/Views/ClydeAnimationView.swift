@@ -101,9 +101,13 @@ struct ClydeAnimationView: View {
                     for col in 0..<16 {
                         guard var color = sprite[row][col] else { continue }
 
-                        // Antenna glow (row 0, busy)
-                        if row == 0 && state == .busy && antennaGlow {
-                            color = Color(red: 0.3, green: 1.0, blue: 0.5)
+                        // Antenna glow (row 0)
+                        if row == 0 {
+                            if state == .busy && antennaGlow {
+                                color = Color(red: 0.3, green: 1.0, blue: 0.5) // green pulse
+                            } else if state == .attention && antennaGlow {
+                                color = Color(red: 0.4, green: 0.7, blue: 1.0) // blue pulse
+                            }
                         }
 
                         // Eye animation
@@ -115,7 +119,7 @@ struct ClydeAnimationView: View {
                                 if blinkPhase == 0, let override = ClydeSprite.eyesClosed[row - 5][safe: localCol] {
                                     color = override ?? color
                                 }
-                            case .idle:
+                            case .idle, .attention:
                                 let blinkPhase = (animationTick / 13) % 13
                                 if blinkPhase == 0, let override = ClydeSprite.eyesClosed[row - 5][safe: localCol] {
                                     color = override ?? color
@@ -136,31 +140,50 @@ struct ClydeAnimationView: View {
                                 if let override = ClydeSprite.mouthBusy[mouthPhase][safe: localCol] {
                                     color = override ?? color
                                 }
-                            case .idle:
-                                if let override = ClydeSprite.mouthSmile[safe: localCol] {
-                                    color = override ?? color
-                                }
-                            case .sleeping:
+                            case .idle, .sleeping, .attention:
                                 if let override = ClydeSprite.mouthSmile[safe: localCol] {
                                     color = override ?? color
                                 }
                             }
                         }
 
-                        // Arm trembling (busy)
+                        // Arm motion: trembling for busy, raised wave for attention
                         var xOffset: CGFloat = 0
-                        if state == .busy && (col <= 3 || col >= 11) && row >= 10 && row <= 12 {
-                            xOffset = armOffset
+                        var yOffset: CGFloat = 0
+                        if (col <= 3 || col >= 11) && row >= 10 && row <= 12 {
+                            if state == .busy {
+                                xOffset = armOffset
+                            } else if state == .attention {
+                                // Raised arms — both arms shifted up; right arm waves
+                                yOffset = -pixelSize * 1.5
+                                if col >= 11 {
+                                    yOffset += armOffset // wave on top of the lift
+                                }
+                            }
                         }
 
                         let rect = CGRect(
                             x: CGFloat(col) * pixelSize + xOffset,
-                            y: CGFloat(row) * pixelSize,
+                            y: CGFloat(row) * pixelSize + yOffset,
                             width: pixelSize,
                             height: pixelSize
                         )
                         context.fill(Path(rect), with: .color(color))
                     }
+                }
+
+                // "!" mark above head for attention state
+                if state == .attention {
+                    let exclamFont = Font.system(size: pixelSize * 4, weight: .heavy, design: .rounded)
+                    let text = Text("!").font(exclamFont).foregroundColor(Color(red: 1.0, green: 0.85, blue: 0.2))
+                    let resolved = context.resolve(text)
+                    let point = CGPoint(
+                        x: 13 * pixelSize,
+                        y: 0 * pixelSize - zzzOffset
+                    )
+                    context.opacity = zzzOpacity
+                    context.draw(resolved, at: point, anchor: .leading)
+                    context.opacity = 1
                 }
 
                 // Zzz for sleeping state
@@ -204,6 +227,16 @@ struct ClydeAnimationView: View {
             antennaGlow = false
             zzzOffset = 0
             zzzOpacity = 1
+        case .attention:
+            // Wave the right arm and bob the "!" mark
+            withAnimation(.easeInOut(duration: 0.25)) {
+                armOffset = armOffset == 0 ? pixelSize * 0.6 : (armOffset > 0 ? -pixelSize * 0.6 : 0)
+                antennaGlow.toggle()
+            }
+            withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                zzzOffset = pixelSize * 0.6
+                zzzOpacity = 0.5
+            }
         case .sleeping:
             armOffset = 0
             antennaGlow = false
