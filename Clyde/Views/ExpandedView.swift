@@ -165,8 +165,9 @@ struct SessionListView: View {
         return sessions.map { session in
             let name = session.displayName
             if (counts[name] ?? 0) > 1 {
-                indices[name, default: 0] += 1
-                return (session, "#\(indices[name]!)")
+                let nextIndex = (indices[name] ?? 0) + 1
+                indices[name] = nextIndex
+                return (session, "#\(nextIndex)")
             }
             return (session, nil)
         }

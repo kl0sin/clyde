@@ -55,54 +55,46 @@ enum HookInstaller {
     exit 0
     """
 
-    static var hookScriptPath: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/hooks/clyde-notify.sh")
-    }
-
-    static var settingsPath: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/settings.json")
-    }
-
     static var isInstalled: Bool {
-        FileManager.default.fileExists(atPath: hookScriptPath.path)
+        FileManager.default.fileExists(atPath: AppPaths.clydeHookScript.path)
     }
 
     static func install() throws {
         // 1. Write hook script
-        let scriptDir = hookScriptPath.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: scriptDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: AppPaths.claudeHooksDir,
+            withIntermediateDirectories: true
+        )
+
         do {
-            try hookScript.write(to: hookScriptPath, atomically: true, encoding: .utf8)
+            try hookScript.write(to: AppPaths.clydeHookScript, atomically: true, encoding: .utf8)
         } catch {
+            ClydeLog.hooks.error("Failed to write hook script: \(error.localizedDescription, privacy: .public)")
             throw InstallError.writeFailed(error.localizedDescription)
         }
 
         // Make executable
-        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookScriptPath.path)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: AppPaths.clydeHookScript.path
+        )
 
         // 2. Merge hook config into settings.json
         var settings: [String: Any] = [:]
-        if let data = try? Data(contentsOf: settingsPath),
+        if let data = try? Data(contentsOf: AppPaths.claudeSettingsFile),
            let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             settings = parsed
         }
 
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
 
-        // Add Clyde hook for Notification events
         let hookCommand: [String: Any] = [
             "type": "command",
-            "command": hookScriptPath.path
+            "command": AppPaths.clydeHookScript.path
         ]
-        let hookBlock: [String: Any] = [
-            "hooks": [hookCommand]
-        ]
+        let hookBlock: [String: Any] = ["hooks": [hookCommand]]
 
-        // PermissionRequest: fires only when permission dialog appears
         mergeHookBlock(&hooks, eventName: "PermissionRequest", block: hookBlock)
-
         settings["hooks"] = hooks
 
         do {
@@ -110,25 +102,27 @@ enum HookInstaller {
                 withJSONObject: settings,
                 options: [.prettyPrinted, .sortedKeys]
             )
-            try data.write(to: settingsPath)
+            try data.write(to: AppPaths.claudeSettingsFile)
+            ClydeLog.hooks.info("Hook installed successfully")
         } catch {
+            ClydeLog.hooks.error("Failed to write settings.json: \(error.localizedDescription, privacy: .public)")
             throw InstallError.writeFailed(error.localizedDescription)
         }
     }
 
     static func uninstall() throws {
-        // Remove hook script
-        try? FileManager.default.removeItem(at: hookScriptPath)
+        try? FileManager.default.removeItem(at: AppPaths.clydeHookScript)
 
-        // Remove from settings.json
-        guard let data = try? Data(contentsOf: settingsPath),
+        guard let data = try? Data(contentsOf: AppPaths.claudeSettingsFile),
               var settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            ClydeLog.hooks.info("Hook uninstalled (no settings to clean)")
             return
         }
 
         if var hooks = settings["hooks"] as? [String: Any] {
             removeClydeHook(&hooks, eventName: "Notification")
             removeClydeHook(&hooks, eventName: "PermissionRequest")
+            removeClydeHook(&hooks, eventName: "PreToolUse")
             settings["hooks"] = hooks
         }
 
@@ -136,14 +130,19 @@ enum HookInstaller {
             withJSONObject: settings,
             options: [.prettyPrinted, .sortedKeys]
         ) {
-            try? newData.write(to: settingsPath)
+            do {
+                try newData.write(to: AppPaths.claudeSettingsFile)
+                ClydeLog.hooks.info("Hook uninstalled successfully")
+            } catch {
+                ClydeLog.hooks.error("Failed to write cleaned settings: \(error.localizedDescription, privacy: .public)")
+                throw InstallError.writeFailed(error.localizedDescription)
+            }
         }
     }
 
     private static func mergeHookBlock(_ hooks: inout [String: Any], eventName: String, block: [String: Any]) {
         var existing = hooks[eventName] as? [[String: Any]] ?? []
 
-        // Check if our hook is already there
         let alreadyPresent = existing.contains { entry in
             if let innerHooks = entry["hooks"] as? [[String: Any]] {
                 return innerHooks.contains { h in

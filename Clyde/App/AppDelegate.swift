@@ -40,11 +40,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let collapsedSize = NSSize(width: 186, height: 40)
     private let defaultExpandedSize = NSSize(width: 400, height: 420)
     private var lastExpandedSize: NSSize?
-    private var savedWidgetOrigin: NSPoint?  // Anchor: where widget lives on screen
+    private var savedWidgetOrigin: NSPoint?
     private var isAnimating = false
     private var isProgrammaticMove = false
     private var cancellables = Set<AnyCancellable>()
-    private let snapMargin: CGFloat = 12
+    private let snapMargin = AppConstants.edgeSnapMargin
+    private let snapThreshold = AppConstants.edgeSnapThreshold
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appViewModel = AppViewModel()
@@ -297,15 +298,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let screen = NSScreen.main?.visibleFrame else { return }
         var snapped = frame.origin
 
-        if frame.minX < screen.minX + snapMargin * 3 {
+        if frame.minX < screen.minX + snapThreshold {
             snapped.x = screen.minX + snapMargin
-        } else if frame.maxX > screen.maxX - snapMargin * 3 {
+        } else if frame.maxX > screen.maxX - snapThreshold {
             snapped.x = screen.maxX - frame.width - snapMargin
         }
 
-        if frame.maxY > screen.maxY - snapMargin * 3 {
+        if frame.maxY > screen.maxY - snapThreshold {
             snapped.y = screen.maxY - frame.height - snapMargin
-        } else if frame.minY < screen.minY + snapMargin * 3 {
+        } else if frame.minY < screen.minY + snapThreshold {
             snapped.y = screen.minY + snapMargin
         }
 

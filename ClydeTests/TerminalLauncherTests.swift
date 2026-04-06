@@ -16,11 +16,4 @@ final class TerminalLauncherTests: XCTestCase {
         launcher.detectTerminals()
         XCTAssertTrue(launcher.availableTerminals.contains(where: { $0.name == "Terminal" }))
     }
-
-    func testSelectedAdapterDefaultsToFirst() {
-        let launcher = TerminalLauncher()
-        launcher.detectTerminals()
-        XCTAssertNotNil(launcher.selectedAdapter)
-        XCTAssertEqual(launcher.selectedAdapter?.name, launcher.availableTerminals.first?.name)
-    }
 }

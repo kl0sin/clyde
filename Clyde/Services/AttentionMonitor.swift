@@ -6,19 +6,23 @@ import Combine
 @MainActor
 final class AttentionMonitor: ObservableObject {
     /// Set of PIDs currently needing attention
-    @Published var attentionPIDs: Set<pid_t> = []
+    @Published private(set) var attentionPIDs: Set<pid_t> = []
 
     /// Callback fired when a new PID starts needing attention (for sound/notification)
     var onAttentionNeeded: ((pid_t) -> Void)?
 
     private var pollTimer: Timer?
     private let eventsDir: URL
-    private let attentionTimeout: TimeInterval = 60 // Events older than 60s are ignored
+    private let timeout: TimeInterval
 
-    init() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        eventsDir = home.appendingPathComponent(".clyde/events")
+    init(eventsDir: URL = AppPaths.eventsDir, timeout: TimeInterval = AppConstants.attentionEventTimeout) {
+        self.eventsDir = eventsDir
+        self.timeout = timeout
         try? FileManager.default.createDirectory(at: eventsDir, withIntermediateDirectories: true)
+    }
+
+    deinit {
+        pollTimer?.invalidate()
     }
 
     func start() {
@@ -27,6 +31,7 @@ final class AttentionMonitor: ObservableObject {
             Task { @MainActor in self?.scan() }
         }
         scan()
+        ClydeLog.hooks.info("AttentionMonitor started, watching \(self.eventsDir.path, privacy: .public)")
     }
 
     func stop() {
@@ -38,22 +43,25 @@ final class AttentionMonitor: ObservableObject {
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: eventsDir,
             includingPropertiesForKeys: [.contentModificationDateKey]
-        ) else { return }
+        ) else {
+            return
+        }
 
         let now = Date()
         var activePIDs: Set<pid_t> = []
 
         for file in files where file.pathExtension == "json" {
             let pidString = file.deletingPathExtension().lastPathComponent
-            guard let pid = pid_t(pidString) else { continue }
+            guard let pid = pid_t(pidString) else {
+                ClydeLog.hooks.debug("Ignoring non-PID event file: \(file.lastPathComponent, privacy: .public)")
+                continue
+            }
 
-            // Check modification time
             let attrs = try? file.resourceValues(forKeys: [.contentModificationDateKey])
             if let mtime = attrs?.contentModificationDate,
-               now.timeIntervalSince(mtime) < attentionTimeout {
+               now.timeIntervalSince(mtime) < timeout {
                 activePIDs.insert(pid)
             } else {
-                // Clean up expired event files
                 try? FileManager.default.removeItem(at: file)
             }
         }
@@ -61,6 +69,7 @@ final class AttentionMonitor: ObservableObject {
         // Detect newly needing attention
         let newPIDs = activePIDs.subtracting(attentionPIDs)
         for pid in newPIDs {
+            ClydeLog.hooks.info("Session \(pid) needs attention")
             onAttentionNeeded?(pid)
         }
 
@@ -70,10 +79,13 @@ final class AttentionMonitor: ObservableObject {
     }
 
     /// Mark a PID as handled (clear the attention flag).
-    /// Called when session transitions to busy (Claude started processing again).
+    /// Called when session transitions to busy (Claude started processing again) or
+    /// when user focuses the session terminal.
     func clearAttention(pid: pid_t) {
         let file = eventsDir.appendingPathComponent("\(pid).json")
         try? FileManager.default.removeItem(at: file)
-        attentionPIDs.remove(pid)
+        if attentionPIDs.contains(pid) {
+            attentionPIDs.remove(pid)
+        }
     }
 }

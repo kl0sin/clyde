@@ -5,6 +5,7 @@ import Combine
 final class AppViewModel: ObservableObject {
     @Published var isCollapsed = true
     @Published var showSettings = false
+    @Published var lastError: String?
 
     let processMonitor: ProcessMonitor
     let terminalLauncher: TerminalLauncher
@@ -28,6 +29,7 @@ final class AppViewModel: ObservableObject {
     }
 
     private var cancellables = Set<AnyCancellable>()
+    private var errorClearTask: Task<Void, Never>?
 
     convenience init() {
         self.init(
@@ -63,7 +65,7 @@ final class AppViewModel: ObservableObject {
             notificationService?.playReadySound()
         }
 
-        // Clear attention when session starts processing again
+        // When session becomes busy again, clear its attention flag
         processMonitor.objectWillChange
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -78,13 +80,13 @@ final class AppViewModel: ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
 
-        // Play attention sound when a new session needs user input
         attentionMonitor.onAttentionNeeded = { [weak self] pid in
-            guard let self else { return }
-            if let session = self.processMonitor.sessions.first(where: { $0.pid == pid }) {
-                self.notificationService.playAttentionSound()
-                self.notificationService.sendNotification(for: session)
+            guard let self,
+                  let session = self.processMonitor.sessions.first(where: { $0.pid == pid }) else {
+                return
             }
+            self.notificationService.playAttentionSound()
+            self.notificationService.sendNotification(for: session)
         }
     }
 
@@ -97,10 +99,14 @@ final class AppViewModel: ObservableObject {
     }
 
     func focusSession(_ session: Session) {
-        // Focusing implicitly handles the attention
         attentionMonitor.clearAttention(pid: session.pid)
         Task {
-            try? await terminalLauncher.focusSession(session)
+            do {
+                try await terminalLauncher.focusSession(session)
+            } catch {
+                ClydeLog.terminal.error("Focus session failed: \(error.localizedDescription, privacy: .public)")
+                showError(error.localizedDescription)
+            }
         }
     }
 
@@ -115,5 +121,17 @@ final class AppViewModel: ObservableObject {
 
         processMonitor.startPolling()
         attentionMonitor.start()
+        ClydeLog.general.info("Clyde started")
+    }
+
+    private func showError(_ message: String) {
+        lastError = message
+        errorClearTask?.cancel()
+        errorClearTask = Task {
+            try? await Task.sleep(for: .seconds(4))
+            if !Task.isCancelled {
+                await MainActor.run { self.lastError = nil }
+            }
+        }
     }
 }

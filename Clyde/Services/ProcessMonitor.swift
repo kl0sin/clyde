@@ -20,6 +20,8 @@ struct RealShellExecutor: ShellExecutor {
     }
 }
 
+/// Monitors Claude Code processes and classifies their state based on child process presence.
+/// A Claude process with active children → busy (processing a tool). No children → idle (waiting).
 @MainActor
 final class ProcessMonitor: ObservableObject {
     @Published var sessions: [Session] = []
@@ -28,16 +30,22 @@ final class ProcessMonitor: ObservableObject {
     private let shell: ShellExecutor
     private(set) var pollingInterval: TimeInterval
 
+    /// Fired once per session when it transitions from busy to idle.
     var onSessionBecameIdle: ((Session) -> Void)?
 
-    init(shell: ShellExecutor = RealShellExecutor(), pollingInterval: TimeInterval = 3) {
+    private var pollTask: Task<Void, Never>?
+
+    init(shell: ShellExecutor = RealShellExecutor(), pollingInterval: TimeInterval = AppConstants.defaultPollingInterval) {
         self.shell = shell
         self.pollingInterval = pollingInterval
     }
 
+    deinit {
+        pollTask?.cancel()
+    }
+
     func discoverPIDs() async -> [pid_t] {
-        guard let output = try? await shell.run("pgrep -x claude"),
-              !output.isEmpty else {
+        guard let output = try? await shell.run("pgrep -x claude"), !output.isEmpty else {
             return []
         }
         return output
@@ -45,25 +53,26 @@ final class ProcessMonitor: ObservableObject {
             .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
     }
 
-    /// Classify status by checking if Claude has active child processes.
-    /// When Claude processes a request, it spawns child processes (node, bash, etc.).
-    /// When waiting for user input, it has no children — it's idle.
+    /// Classify by checking if Claude has active child processes.
+    /// Children = running tool → busy. No children = waiting for input → idle.
     func classifyStatus(pid: pid_t) async -> SessionStatus {
-        guard let output = try? await shell.run("pgrep -P \(pid)"),
-              !output.isEmpty else {
-            return .idle // No children = waiting for input
+        guard let output = try? await shell.run("pgrep -P \(pid)"), !output.isEmpty else {
+            return .idle
         }
-        return .busy // Has children = processing
+        return .busy
     }
 
+    /// Detect project dir from claude's open .claude/settings files via lsof.
+    /// Claude sets its cwd to /, so we can't use lsof -d cwd directly.
     func detectCWD(pid: pid_t) async -> String {
-        // Claude Code sets CWD to /, so detect project dir from open files
-        if let output = try? await shell.run("lsof -p \(pid) -Fn 2>/dev/null | grep '/.claude/settings' | head -1"),
-           !output.isEmpty {
-            let path = String(output.dropFirst()) // Remove leading 'n'
-            if let range = path.range(of: "/.claude/") {
-                return String(path[path.startIndex..<range.lowerBound])
-            }
+        guard let output = try? await shell.run(
+            "lsof -p \(pid) -Fn 2>/dev/null | grep -m1 '/.claude/settings'"
+        ), !output.isEmpty else {
+            return ""
+        }
+        let path = String(output.dropFirst()) // strip leading 'n'
+        if let range = path.range(of: "/.claude/") {
+            return String(path[path.startIndex..<range.lowerBound])
         }
         return ""
     }
@@ -78,34 +87,38 @@ final class ProcessMonitor: ObservableObject {
         }
 
         var updatedSessions: [Session] = []
+        updatedSessions.reserveCapacity(pids.count)
 
         for pid in pids {
             let newStatus = await classifyStatus(pid: pid)
-
-            if var existing = sessions.first(where: { $0.pid == pid }) {
-                if existing.workingDirectory.isEmpty {
-                    existing.workingDirectory = await detectCWD(pid: pid)
-                }
-
-                let previousStatus = existing.status
-                if previousStatus != newStatus {
-                    existing.status = newStatus
-                    existing.statusChangedAt = Date()
-                    if newStatus == .idle {
-                        onSessionBecameIdle?(existing)
-                    }
-                }
-
-                updatedSessions.append(existing)
-            } else {
-                let cwd = await detectCWD(pid: pid)
-                let newSession = Session(pid: pid, workingDirectory: cwd, status: newStatus)
-                updatedSessions.append(newSession)
-            }
+            let session = await updatedSession(pid: pid, newStatus: newStatus)
+            updatedSessions.append(session)
         }
 
         sessions = updatedSessions
         clydeState = sessions.contains(where: { $0.status == .busy }) ? .busy : .idle
+    }
+
+    /// Update an existing session or create a new one. Caches CWD detection.
+    private func updatedSession(pid: pid_t, newStatus: SessionStatus) async -> Session {
+        if var existing = sessions.first(where: { $0.pid == pid }) {
+            // CWD detection is expensive — only do it once per session
+            if existing.workingDirectory.isEmpty {
+                existing.workingDirectory = await detectCWD(pid: pid)
+            }
+
+            if existing.status != newStatus {
+                existing.status = newStatus
+                existing.statusChangedAt = Date()
+                if newStatus == .idle {
+                    onSessionBecameIdle?(existing)
+                }
+            }
+            return existing
+        } else {
+            let cwd = await detectCWD(pid: pid)
+            return Session(pid: pid, workingDirectory: cwd, status: newStatus)
+        }
     }
 
     func updatePollingInterval(_ interval: TimeInterval) {
@@ -113,11 +126,18 @@ final class ProcessMonitor: ObservableObject {
     }
 
     func startPolling() {
-        Task {
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                await poll()
-                try? await Task.sleep(for: .seconds(pollingInterval))
+                await self?.poll()
+                let interval = self?.pollingInterval ?? AppConstants.defaultPollingInterval
+                try? await Task.sleep(for: .seconds(interval))
             }
         }
+    }
+
+    func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
     }
 }

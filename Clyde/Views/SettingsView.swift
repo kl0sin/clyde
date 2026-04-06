@@ -1,5 +1,4 @@
 import SwiftUI
-import ServiceManagement
 import AppKit
 
 struct SettingsView: View {
