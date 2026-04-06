@@ -21,10 +21,14 @@ enum HookInstaller {
     # Clyde notification hook — signals Clyde about Claude session state transitions.
     # Installed automatically by Clyde. Safe to remove manually.
     #
+    # Files are keyed by Claude's session_id (UUID from the hook payload), so
+    # PID recycling cannot produce false positives. Each file's content is
+    # JSON with the live PID + cwd, which Clyde reads to do PID-keyed lookups.
+    #
     # Handles three event types:
-    #   PermissionRequest → writes events/<pid>.json (attention flag)
-    #   UserPromptSubmit  → creates state/<pid>-busy marker
-    #   Stop              → removes state/<pid>-busy marker
+    #   PermissionRequest → writes events/<session_id>.json (attention flag)
+    #   UserPromptSubmit  → creates state/<session_id>-busy marker
+    #   Stop              → removes state/<session_id>-busy marker
 
     set -e
     EVENTS_DIR="$HOME/.clyde/events"
@@ -32,7 +36,23 @@ enum HookInstaller {
     mkdir -p "$EVENTS_DIR" "$STATE_DIR"
 
     INPUT=$(cat 2>/dev/null || echo "{}")
-    HOOK_EVENT=$(printf '%s' "$INPUT" | /usr/bin/python3 -c "import json,sys; s=sys.stdin.read(); d=json.loads(s) if s.strip() else {}; print(d.get('hook_event_name', 'unknown'))" 2>/dev/null || echo "unknown")
+
+    # Extract event_name + session_id + cwd in a single python call.
+    # Output is three lines: event\nsession_id\ncwd
+    PAYLOAD=$(printf '%s' "$INPUT" | /usr/bin/python3 -c "
+    import json, sys
+    try:
+        d = json.loads(sys.stdin.read())
+    except Exception:
+        d = {}
+    print(d.get('hook_event_name', 'unknown'))
+    print(d.get('session_id', ''))
+    print(d.get('cwd', ''))
+    " 2>/dev/null || printf 'unknown\n\n\n')
+
+    HOOK_EVENT=$(printf '%s' "$PAYLOAD" | sed -n '1p')
+    SESSION_ID=$(printf '%s' "$PAYLOAD" | sed -n '2p')
+    CWD=$(printf '%s' "$PAYLOAD" | sed -n '3p')
 
     find_claude_pid() {
         local pid=$PPID
@@ -52,19 +72,27 @@ enum HookInstaller {
     CLAUDE_PID=$(find_claude_pid || echo "")
     [ -z "$CLAUDE_PID" ] && exit 0
 
+    # Fall back to PID-based key if Claude didn't supply session_id.
+    KEY="${SESSION_ID:-$CLAUDE_PID}"
     TIMESTAMP=$(date +%s)
+
+    # JSON-escape cwd for safe embedding (just escape backslashes and quotes).
+    ESC_CWD=$(printf '%s' "$CWD" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    ESC_SID=$(printf '%s' "$SESSION_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
     case "$HOOK_EVENT" in
         PermissionRequest)
-            cat > "$EVENTS_DIR/$CLAUDE_PID.json" <<EOF
-    {"pid": $CLAUDE_PID, "event": "$HOOK_EVENT", "timestamp": $TIMESTAMP}
+            cat > "$EVENTS_DIR/$KEY.json" <<EOF
+    {"session_id": "$ESC_SID", "pid": $CLAUDE_PID, "cwd": "$ESC_CWD", "event": "$HOOK_EVENT", "timestamp": $TIMESTAMP}
     EOF
             ;;
         UserPromptSubmit)
-            echo "$TIMESTAMP" > "$STATE_DIR/$CLAUDE_PID-busy"
+            cat > "$STATE_DIR/$KEY-busy" <<EOF
+    {"session_id": "$ESC_SID", "pid": $CLAUDE_PID, "cwd": "$ESC_CWD", "timestamp": $TIMESTAMP}
+    EOF
             ;;
         Stop)
-            rm -f "$STATE_DIR/$CLAUDE_PID-busy"
+            rm -f "$STATE_DIR/$KEY-busy"
             ;;
     esac
 

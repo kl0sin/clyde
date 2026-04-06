@@ -223,13 +223,17 @@ final class ProcessMonitor: ObservableObject {
         }
 
         // PIDs whose marker file is currently present on disk ("really busy").
+        // Filename is keyed by Claude's session_id; the live PID lives in the
+        // file content (JSON), so we read each file to extract it.
         var present: Set<pid_t> = []
         for file in files where file.lastPathComponent.hasSuffix("-busy") {
-            let base = file.lastPathComponent.replacingOccurrences(of: "-busy", with: "")
-            guard let pid = pid_t(base) else { continue }
+            guard let pid = readMarkerPID(file: file) else {
+                // Unparseable marker — drop it.
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
 
             // Discard markers whose PID no longer exists (Claude crashed without Stop).
-            // kill(pid, 0) returns 0 if the process exists, -1/ESRCH otherwise.
             if kill(pid, 0) != 0 && errno == ESRCH {
                 try? FileManager.default.removeItem(at: file)
                 continue
@@ -266,6 +270,20 @@ final class ProcessMonitor: ObservableObject {
     }
 
     private var hookBusyLastSeen: [pid_t: Date] = [:]
+
+    /// Reads `{ "pid": <int>, ... }` from a marker file. Tolerates the legacy
+    /// format where the filename was the PID and the body was a timestamp string.
+    private func readMarkerPID(file: URL) -> pid_t? {
+        guard let data = try? Data(contentsOf: file) else { return nil }
+        // New format: JSON with "pid" field.
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let pidValue = json["pid"] as? Int {
+            return pid_t(pidValue)
+        }
+        // Legacy format fallback: filename is the PID itself.
+        let base = file.lastPathComponent.replacingOccurrences(of: "-busy", with: "")
+        return pid_t(base)
+    }
 
     func startPolling() {
         pollTask?.cancel()

@@ -51,9 +51,10 @@ final class AttentionMonitor: ObservableObject {
         var activePIDs: Set<pid_t> = []
 
         for file in files where file.pathExtension == "json" {
-            let pidString = file.deletingPathExtension().lastPathComponent
-            guard let pid = pid_t(pidString) else {
-                ClydeLog.hooks.debug("Ignoring non-PID event file: \(file.lastPathComponent, privacy: .public)")
+            // The file is keyed by session_id (UUID); the live PID is inside.
+            // Fall back to the legacy <pid>.json filename format if needed.
+            guard let pid = extractPID(from: file) else {
+                try? FileManager.default.removeItem(at: file)
                 continue
             }
 
@@ -82,10 +83,32 @@ final class AttentionMonitor: ObservableObject {
     /// Called when session transitions to busy (Claude started processing again) or
     /// when user focuses the session terminal.
     func clearAttention(pid: pid_t) {
-        let file = eventsDir.appendingPathComponent("\(pid).json")
-        try? FileManager.default.removeItem(at: file)
+        // Find every file (session_id-keyed or legacy pid-keyed) whose payload
+        // points at this PID and remove it.
+        if let files = try? FileManager.default.contentsOfDirectory(
+            at: eventsDir,
+            includingPropertiesForKeys: nil
+        ) {
+            for file in files where file.pathExtension == "json" {
+                if extractPID(from: file) == pid {
+                    try? FileManager.default.removeItem(at: file)
+                }
+            }
+        }
         if attentionPIDs.contains(pid) {
             attentionPIDs.remove(pid)
         }
+    }
+
+    /// Extract the live PID from an event file. Reads `pid` field from the JSON
+    /// body; falls back to parsing the filename for legacy `<pid>.json` files.
+    private func extractPID(from file: URL) -> pid_t? {
+        if let data = try? Data(contentsOf: file),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let pidValue = json["pid"] as? Int {
+            return pid_t(pidValue)
+        }
+        let stem = file.deletingPathExtension().lastPathComponent
+        return pid_t(stem)
     }
 }
