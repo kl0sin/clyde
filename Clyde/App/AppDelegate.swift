@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionViewModel: SessionListViewModel!
     var statusItem: NSStatusItem?
 
-    private let collapsedSize = NSSize(width: 160, height: 44)
+    private let collapsedSize = NSSize(width: 140, height: 38)
     private let defaultExpandedSize = NSSize(width: 400, height: 420)
     private var lastExpandedSize: NSSize?
     private var savedWidgetOrigin: NSPoint?  // Anchor: where widget lives on screen
@@ -248,8 +248,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if progress >= 1.0 {
                 timer.invalidate()
                 self.panel.setFrame(target, display: true)
-                // Keep isProgrammaticMove=true a bit longer to absorb lingering notifications
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                // Keep isProgrammaticMove=true longer to absorb lingering notifications
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     self.isProgrammaticMove = false
                 }
                 completion()
@@ -284,14 +284,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let screen = NSScreen.main?.visibleFrame else { return }
         var snapped = frame.origin
 
-        // Horizontal snap
         if frame.minX < screen.minX + snapMargin * 3 {
             snapped.x = screen.minX + snapMargin
         } else if frame.maxX > screen.maxX - snapMargin * 3 {
             snapped.x = screen.maxX - frame.width - snapMargin
         }
 
-        // Vertical snap
         if frame.maxY > screen.maxY - snapMargin * 3 {
             snapped.y = screen.maxY - frame.height - snapMargin
         } else if frame.minY < screen.minY + snapMargin * 3 {
@@ -299,11 +297,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if snapped != frame.origin {
-            NSAnimationContext.runAnimationGroup { ctx in
+            isProgrammaticMove = true
+            NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 panel.animator().setFrameOrigin(snapped)
-            }
+            }, completionHandler: { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self?.isProgrammaticMove = false
+                    self?.savedWidgetOrigin = self?.panel.frame.origin
+                }
+            })
         }
     }
 }
