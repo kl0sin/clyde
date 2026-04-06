@@ -124,4 +124,73 @@ final class HookInstallerTests: XCTestCase {
         // Should not throw
         XCTAssertNoThrow(try HookInstaller.uninstall())
     }
+
+    // MARK: - healthCheck
+
+    func testHealthCheckPassesAfterInstall() throws {
+        try HookInstaller.install()
+        XCTAssertNil(HookInstaller.healthCheck())
+    }
+
+    func testHealthCheckDetectsNotInstalled() throws {
+        try? HookInstaller.uninstall()
+        try? FileManager.default.removeItem(at: AppPaths.claudeSettingsFile)
+
+        XCTAssertEqual(HookInstaller.healthCheck(), .notInstalled)
+    }
+
+    func testHealthCheckDetectsScriptMissing() throws {
+        try HookInstaller.install()
+        // Yank the script file but leave settings.json registration in place.
+        try FileManager.default.removeItem(at: AppPaths.clydeHookScript)
+
+        XCTAssertEqual(HookInstaller.healthCheck(), .scriptMissing)
+    }
+
+    func testHealthCheckDetectsScriptNotExecutable() throws {
+        try HookInstaller.install()
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o644],
+            ofItemAtPath: AppPaths.clydeHookScript.path
+        )
+
+        XCTAssertEqual(HookInstaller.healthCheck(), .scriptNotExecutable)
+    }
+
+    func testHealthCheckDetectsOutdatedScript() throws {
+        try HookInstaller.install()
+        // Rewrite the script with an older version stamp.
+        let installed = try String(contentsOf: AppPaths.clydeHookScript, encoding: .utf8)
+        let downgraded = installed.replacingOccurrences(
+            of: "clyde-hook-version: \(HookInstaller.currentScriptVersion)",
+            with: "clyde-hook-version: 1"
+        )
+        try downgraded.write(to: AppPaths.clydeHookScript, atomically: true, encoding: .utf8)
+
+        if case .outdated(let installedVersion, let currentVersion) = HookInstaller.healthCheck() {
+            XCTAssertEqual(installedVersion, 1)
+            XCTAssertEqual(currentVersion, HookInstaller.currentScriptVersion)
+        } else {
+            XCTFail("Expected .outdated health issue")
+        }
+    }
+
+    func testHealthCheckDetectsMissingEvent() throws {
+        try HookInstaller.install()
+        // Strip the SessionStart registration from settings.json so the
+        // health check should report it as missing.
+        let data = try Data(contentsOf: AppPaths.claudeSettingsFile)
+        var settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        var hooks = settings["hooks"] as! [String: Any]
+        hooks.removeValue(forKey: "SessionStart")
+        settings["hooks"] = hooks
+        let newData = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
+        try newData.write(to: AppPaths.claudeSettingsFile)
+
+        if case .missingEvents(let names) = HookInstaller.healthCheck() {
+            XCTAssertTrue(names.contains("SessionStart"))
+        } else {
+            XCTFail("Expected .missingEvents health issue")
+        }
+    }
 }

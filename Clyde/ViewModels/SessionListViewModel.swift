@@ -96,7 +96,7 @@ final class SessionListViewModel: ObservableObject {
 
     /// Heuristic: a Claude session_id is a UUID-shape string. Reject anything
     /// that looks like a path or random text.
-    private static func looksLikeSessionId(_ key: String) -> Bool {
+    static func looksLikeSessionId(_ key: String) -> Bool {
         // Reject obvious non-UUID values: paths, empty, anything containing '/'
         if key.contains("/") || key.isEmpty { return false }
         // UUIDs are 36 chars (8-4-4-4-12) with hyphens.
