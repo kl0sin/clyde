@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionViewModel: SessionListViewModel!
     var statusItem: NSStatusItem?
 
-    private let collapsedSize = NSSize(width: 140, height: 38)
+    private let collapsedSize = NSSize(width: 160, height: 46)
     private let defaultExpandedSize = NSSize(width: 400, height: 420)
     private var lastExpandedSize: NSSize?
     private var savedWidgetOrigin: NSPoint?  // Anchor: where widget lives on screen
