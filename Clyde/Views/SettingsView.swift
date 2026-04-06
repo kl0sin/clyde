@@ -79,7 +79,21 @@ struct SettingsView: View {
     }
 
     private var soundSection: some View {
-        SettingsSection(title: "Sound") {
+        SettingsSection(title: "Notifications") {
+            Toggle(isOn: $notificationService.systemNotificationsEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("System notifications")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white)
+                    Text("Show banners in macOS Notification Center")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(white: 0.45))
+                }
+            }
+            .toggleStyle(.switch)
+
+            Divider().background(Color(white: 0.2))
+
             Toggle(isOn: $notificationService.soundEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Play sound on state changes")

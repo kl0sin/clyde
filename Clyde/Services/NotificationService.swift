@@ -11,6 +11,10 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         didSet { UserDefaults.standard.set(soundEnabled, forKey: Keys.soundEnabled) }
     }
 
+    @Published var systemNotificationsEnabled: Bool {
+        didSet { UserDefaults.standard.set(systemNotificationsEnabled, forKey: Keys.systemNotificationsEnabled) }
+    }
+
     @Published var readySound: String {
         didSet { UserDefaults.standard.set(readySound, forKey: Keys.readySound) }
     }
@@ -24,6 +28,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
 
     private enum Keys {
         static let soundEnabled = "soundEnabled"
+        static let systemNotificationsEnabled = "systemNotificationsEnabled"
         static let readySound = "selectedSound" // legacy key, kept for compatibility
         static let attentionSound = "attentionSound"
     }
@@ -31,6 +36,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
     override init() {
         let defaults = UserDefaults.standard
         self.soundEnabled = defaults.object(forKey: Keys.soundEnabled) as? Bool ?? true
+        self.systemNotificationsEnabled = defaults.object(forKey: Keys.systemNotificationsEnabled) as? Bool ?? true
         self.readySound = defaults.string(forKey: Keys.readySound) ?? "Glass"
         self.attentionSound = defaults.string(forKey: Keys.attentionSound) ?? "Hero"
         super.init()
@@ -73,7 +79,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
     }
 
     func sendNotification(for session: Session) {
-        guard isAuthorized else { return }
+        guard systemNotificationsEnabled, isAuthorized else { return }
         let content = buildNotificationContent(for: session)
         let request = UNNotificationRequest(
             identifier: "session-\(session.pid)",

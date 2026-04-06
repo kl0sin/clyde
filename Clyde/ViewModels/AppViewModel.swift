@@ -60,9 +60,15 @@ final class AppViewModel: ObservableObject {
         self.notificationService = notificationService
         self.attentionMonitor = attentionMonitor
 
-        processMonitor.onSessionBecameIdle = { [weak notificationService] session in
-            notificationService?.sendNotification(for: session)
-            notificationService?.playReadySound()
+        processMonitor.onSessionBecameIdle = { [weak self] session in
+            guard let self else { return }
+            // If the attention hook already fired for this PID, the attention path owns
+            // the notification — skip "ready" to avoid duplication.
+            if self.attentionMonitor.attentionPIDs.contains(session.pid) {
+                return
+            }
+            self.notificationService.sendNotification(for: session)
+            self.notificationService.playReadySound()
         }
 
         // When session becomes busy again, clear its attention flag
