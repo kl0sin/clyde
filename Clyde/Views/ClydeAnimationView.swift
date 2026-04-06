@@ -73,35 +73,36 @@ struct ClydeSprite {
         ]
     }()
 
-    // Busy-state face sprite: 16x16 close-up of Clyde's head.
-    // Rows 14-15 are the terminal bar area (rendered dynamically, not from this sprite).
+    // Pip v2: head-only character, fills 16x16, cyan accents.
     static let busyFace: [[Color?]] = {
         let e: Color? = nil
         let w: Color? = .white
-        let h: Color? = Color(white: 0.95)
-        let d: Color? = Color(white: 0.65)
+        let h: Color? = Color(white: 0.91)
         let b: Color? = Color(red: 0.08, green: 0.08, blue: 0.1)
-        let g: Color? = Color(red: 0.3, green: 1.0, blue: 0.5)
-        let r: Color? = Color(red: 1.0, green: 0.6, blue: 0.4) // focus blush
+        let c: Color? = Color(red: 0.36, green: 0.88, blue: 1.0)
+        let C: Color? = Color(red: 0.66, green: 0.94, blue: 1.0)
+        let D: Color? = Color(red: 0.16, green: 0.56, blue: 0.70)
+        let p: Color? = Color(red: 1.0, green: 0.70, blue: 0.78)
+        let y: Color? = Color(red: 1.0, green: 0.87, blue: 0.33)
 
         return [
             //0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
-            [e, e, e, e, e, e, e, g, g, e, e, e, e, e, e, e], // 0  antenna tip
-            [e, e, e, e, e, e, b, d, d, b, e, e, e, e, e, e], // 1  antenna stem
-            [e, e, b, b, b, h, h, h, h, h, h, b, b, b, e, e], // 2  head top
-            [e, b, h, w, w, w, w, w, w, w, w, w, w, h, b, e], // 3  forehead
-            [b, h, w, w, w, w, w, w, w, w, w, w, w, w, h, b], // 4  brow line
-            [b, w, w, w, w, w, w, b, b, w, w, w, w, w, w, b], // 5  eyes (open sockets)
-            [b, w, w, w, w, w, w, b, b, w, w, w, w, w, w, b], // 6  eyes (pupils drawn dynamically)
-            [b, w, w, w, w, w, w, w, w, w, w, w, w, w, w, b], // 7  cheeks
-            [b, w, w, w, w, b, b, b, b, b, b, w, w, w, w, b], // 8  mouth (dynamic)
-            [b, h, w, w, w, r, w, w, w, w, r, w, w, w, h, b], // 9  lower cheeks (focus blush)
-            [b, h, w, w, w, w, w, w, w, w, w, w, w, w, h, b], // 10 chin
-            [e, b, h, w, w, w, w, w, w, w, w, w, w, h, b, e], // 11 jaw
-            [e, e, b, b, h, w, w, w, w, w, w, h, b, b, e, e], // 12 chin bottom
-            [e, e, e, e, b, b, b, b, b, b, b, b, e, e, e, e], // 13 neck outline
-            [e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e], // 14 terminal bar (dynamic)
-            [e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e], // 15 terminal bar (dynamic)
+            [e, e, e, e, e, e, y, b, e, e, e, e, e, e, e, e], // 0  cowlick tip
+            [e, e, e, e, e, e, y, b, e, e, e, e, e, e, e, e], // 1  cowlick base
+            [e, e, e, b, b, b, b, b, b, b, b, b, b, e, e, e], // 2  head top
+            [e, e, b, h, h, h, h, h, h, h, h, h, h, b, e, e], // 3  head top fill
+            [e, b, h, w, w, w, w, w, w, w, w, w, w, h, b, e], // 4  forehead
+            [b, h, w, w, w, w, w, w, w, w, w, w, w, w, h, b], // 5  brow line (overdrawn in busy)
+            [b, h, w, D, D, D, D, h, h, D, D, D, D, w, h, b], // 6  eye frames top
+            [b, h, w, D, c, c, D, h, h, D, c, c, D, w, h, b], // 7  eye whites top
+            [b, h, w, D, c, C, D, h, h, D, c, C, D, w, h, b], // 8  eye highlight
+            [b, h, w, D, c, c, D, h, h, D, c, c, D, w, h, b], // 9  eye whites bot
+            [b, h, w, D, D, D, D, h, h, D, D, D, D, w, h, b], // 10 eye frames bot
+            [b, h, w, p, h, h, h, h, h, h, h, h, p, w, h, b], // 11 blush
+            [b, h, w, w, w, w, w, b, b, w, w, w, w, w, h, b], // 12 mouth (small 'o')
+            [e, b, h, w, w, w, w, w, w, w, w, w, w, h, b, e], // 13 chin
+            [e, e, b, c, c, c, c, c, c, c, c, c, c, b, e, e], // 14 cyan jaw accent
+            [e, e, e, b, b, b, b, b, b, b, b, b, b, e, e, e], // 15 bottom outline
         ]
     }()
 }
@@ -117,7 +118,6 @@ struct ClydeAnimationView: View {
     @State private var bodyOpacity: Double = 1
     @State private var faceOpacity: Double = 0
     @State private var eyeScanOffset: Int = 0 // -1, 0, or +1
-    @State private var terminalBuffer: [Character] = Array(repeating: " ", count: 16)
 
     init(state: ClydeState, pixelSize: CGFloat = 3) {
         self.state = state
@@ -138,13 +138,11 @@ struct ClydeAnimationView: View {
             .frame(width: gridWidth, height: gridHeight)
             .onChange(of: timeline.date) { _ in
                 animationTick += 1
-                advanceTerminalBuffer()
                 advanceEyeScan()
                 updateAnimations()
             }
         }
         .onAppear {
-            seedTerminalBuffer()
             applyStateOpacity(animated: false)
             updateAnimations()
         }
@@ -219,15 +217,65 @@ struct ClydeAnimationView: View {
         Canvas { context, _ in
             var sprite = ClydeSprite.busyFace
 
-            // Antenna tip glow pulse (row 0, cols 7-8)
-            if antennaGlow {
-                let glow = Color(red: 0.5, green: 1.0, blue: 0.6)
-                sprite[0][7] = glow
-                sprite[0][8] = glow
+            // --- Cowlick twitch: shift cowlick column left/right every ~4 ticks ---
+            let cowlickShift = [0, 1, 0, -1][(animationTick / 4) % 4]
+            // Clear original cowlick cols (6,7)
+            sprite[0][6] = nil; sprite[0][7] = nil
+            sprite[1][6] = nil; sprite[1][7] = nil
+            let baseCol = 6 + cowlickShift
+            if baseCol >= 0 && baseCol + 1 < 16 {
+                sprite[0][baseCol] = Color(red: 1.0, green: 0.87, blue: 0.33) // y
+                sprite[0][baseCol + 1] = Color(red: 0.08, green: 0.08, blue: 0.1) // b
+                sprite[1][baseCol] = Color(red: 1.0, green: 0.87, blue: 0.33)
+                sprite[1][baseCol + 1] = Color(red: 0.08, green: 0.08, blue: 0.1)
             }
 
-            // Draw base sprite rows 0..<14; rows 14-15 are terminal bar territory.
-            for row in 0..<14 {
+            // --- Pulsing cyan jaw (row 14): swap between c and C based on antennaGlow ---
+            if antennaGlow {
+                let bright = Color(red: 0.66, green: 0.94, blue: 1.0)
+                for col in 3...12 {
+                    sprite[14][col] = bright
+                }
+            }
+
+            // --- Determined mouth in busy: override row 12 cols 5..10 with dark ---
+            let darkColor = Color(red: 0.08, green: 0.08, blue: 0.1)
+            for col in 5...10 {
+                sprite[12][col] = darkColor
+            }
+
+            // --- Blink every ~3s (every 15 ticks at 0.2s interval): close eyes ---
+            let blinking = (animationTick % 15) == 0
+            if blinking {
+                // Replace eye rows 6-10 interiors (cols 3..6 and 9..12) with a single dark line on row 8
+                // First, repaint eye areas as skin
+                for row in 6...10 {
+                    for col in 3...6 { sprite[row][col] = sprite[row][2] } // use 'w' skin from col 2
+                    for col in 9...12 { sprite[row][col] = sprite[row][2] }
+                }
+                // Draw closed eye line on row 8
+                for col in 3...6 { sprite[8][col] = darkColor }
+                for col in 9...12 { sprite[8][col] = darkColor }
+            } else {
+                // --- Scanning squinted eyes (busy focus look) ---
+                // Repaint eye interiors as light, then draw a horizontal dark squint line + one pupil dot per eye
+                let skin = Color(white: 0.95)
+                for row in 7...9 {
+                    for col in 4...5 { sprite[row][col] = skin }
+                    for col in 10...11 { sprite[row][col] = skin }
+                }
+                // Horizontal dark squint line on row 8
+                for col in 4...5 { sprite[8][col] = darkColor }
+                for col in 10...11 { sprite[8][col] = darkColor }
+                // Pupil dot shifts by eyeScanOffset (-1, 0, +1)
+                let leftPupilCol = 4 + max(0, min(1, eyeScanOffset + 1)) // 4, 5, or 5
+                let rightPupilCol = 10 + max(0, min(1, eyeScanOffset + 1))
+                sprite[8][leftPupilCol] = darkColor
+                sprite[8][rightPupilCol] = darkColor
+            }
+
+            // --- Draw the whole sprite (all 16 rows, including jaw) ---
+            for row in 0..<16 {
                 for col in 0..<16 {
                     guard let color = sprite[row][col] else { continue }
                     let rect = CGRect(
@@ -240,83 +288,37 @@ struct ClydeAnimationView: View {
                 }
             }
 
-            // Pupils: two small dark rectangles that scan within the eye sockets.
-            // Left socket: cols 4..6 (3 wide), right socket: cols 9..11 (3 wide).
-            // Base pupil column = center of each socket (5 and 10), shifted by eyeScanOffset (-1/0/+1).
-            let pupilColor = Color(red: 0.08, green: 0.08, blue: 0.1)
-            let blink = (animationTick % 30) == 0 // blink every ~6s at 0.2s tick
-            if !blink {
-                let leftCol = 5 + eyeScanOffset  // 4, 5, or 6
-                let rightCol = 10 + eyeScanOffset // 9, 10, or 11
-                let y = CGFloat(5) * pixelSize
-                context.fill(
-                    Path(CGRect(x: CGFloat(leftCol) * pixelSize, y: y, width: pixelSize, height: pixelSize * 2)),
-                    with: .color(pupilColor)
-                )
-                context.fill(
-                    Path(CGRect(x: CGFloat(rightCol) * pixelSize, y: y, width: pixelSize, height: pixelSize * 2)),
-                    with: .color(pupilColor)
-                )
-            }
-
-            // Mouth row (row 8, cols 4..11) using mouthBusy frames.
-            let mouthRow = 8
-            let mouthPhase = animationTick % 3
-            for localCol in 0..<8 {
-                if let override = ClydeSprite.mouthBusy[mouthPhase][safe: localCol],
-                   let color = override {
-                    let rect = CGRect(
-                        x: CGFloat(4 + localCol) * pixelSize,
-                        y: CGFloat(mouthRow) * pixelSize,
-                        width: pixelSize,
-                        height: pixelSize
-                    )
-                    context.fill(Path(rect), with: .color(color))
+            // --- Sparks: 1-2 small cyan dots at random positions around the head, refreshed every ~2 ticks ---
+            let sparkColor = Color(red: 0.66, green: 0.94, blue: 1.0).opacity(0.85)
+            let sparkSeed = animationTick / 2
+            var rng = SeededRandom(seed: UInt64(sparkSeed))
+            let sparkCount = Int.random(in: 1...2, using: &rng)
+            for _ in 0..<sparkCount {
+                // Pick a position in the outer ring (rows 0..1 or 14..15 or cols 0..1 or 14..15)
+                let side = Int.random(in: 0..<4, using: &rng)
+                var sparkRow = 0
+                var sparkCol = 0
+                switch side {
+                case 0: // top
+                    sparkRow = Int.random(in: 0...1, using: &rng)
+                    sparkCol = Int.random(in: 0...15, using: &rng)
+                case 1: // bottom
+                    sparkRow = Int.random(in: 14...15, using: &rng)
+                    sparkCol = Int.random(in: 0...15, using: &rng)
+                case 2: // left
+                    sparkRow = Int.random(in: 2...13, using: &rng)
+                    sparkCol = Int.random(in: 0...1, using: &rng)
+                default: // right
+                    sparkRow = Int.random(in: 2...13, using: &rng)
+                    sparkCol = Int.random(in: 14...15, using: &rng)
                 }
-            }
-
-            // Terminal bar (rows 14-15) — implemented in Task 4.
-            drawTerminalBar(context: context)
-        }
-    }
-
-    private func drawTerminalBar(context: GraphicsContext) {
-        let bgColor = Color(red: 0.05, green: 0.125, blue: 0.188) // #0d2030
-        let glyphColor = Color(red: 0.349, green: 1.0, blue: 0.702).opacity(0.4) // #59ffb3 @ 40%
-
-        // Fill the 16x2 background strip (rows 14 and 15).
-        let bgRect = CGRect(
-            x: 0,
-            y: CGFloat(14) * pixelSize,
-            width: CGFloat(16) * pixelSize,
-            height: CGFloat(2) * pixelSize
-        )
-        context.fill(Path(bgRect), with: .color(bgColor))
-
-        // Draw one glyph per cell (row 14 only; row 15 stays as background padding).
-        for col in 0..<16 {
-            let ch = terminalBuffer[col]
-            switch ch {
-            case "•":
-                // A small filled square, vertically centered in the 2-row strip.
                 let rect = CGRect(
-                    x: CGFloat(col) * pixelSize,
-                    y: CGFloat(14) * pixelSize + pixelSize * 0.25,
-                    width: pixelSize,
+                    x: CGFloat(sparkCol) * pixelSize + pixelSize * 0.25,
+                    y: CGFloat(sparkRow) * pixelSize + pixelSize * 0.25,
+                    width: pixelSize * 0.5,
                     height: pixelSize * 0.5
                 )
-                context.fill(Path(rect), with: .color(glyphColor))
-            case "-":
-                // A thin horizontal dash.
-                let rect = CGRect(
-                    x: CGFloat(col) * pixelSize + pixelSize * 0.1,
-                    y: CGFloat(14) * pixelSize + pixelSize * 0.4,
-                    width: pixelSize * 0.8,
-                    height: pixelSize * 0.2
-                )
-                context.fill(Path(rect), with: .color(glyphColor))
-            default:
-                break // empty cell
+                context.fill(Path(rect), with: .color(sparkColor))
             }
         }
     }
@@ -335,27 +337,10 @@ struct ClydeAnimationView: View {
         }
     }
 
-    private func seedTerminalBuffer() {
-        terminalBuffer = (0..<16).map { _ in randomTerminalGlyph() }
-    }
-
-    private func advanceTerminalBuffer() {
-        guard state == .busy else { return }
-        terminalBuffer.removeFirst()
-        terminalBuffer.append(randomTerminalGlyph())
-    }
-
     private func advanceEyeScan() {
         guard state == .busy else { return }
         let cycle = [0, 1, 0, -1]
         eyeScanOffset = cycle[(animationTick / 2) % cycle.count]
-    }
-
-    private func randomTerminalGlyph() -> Character {
-        let roll = Int.random(in: 0..<100)
-        if roll < 35 { return "•" }
-        if roll < 60 { return "-" }
-        return " "
     }
 
     private func updateAnimations() {
@@ -383,5 +368,14 @@ struct ClydeAnimationView: View {
 extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+struct SeededRandom: RandomNumberGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { self.state = seed &+ 0x9E3779B97F4A7C15 }
+    mutating func next() -> UInt64 {
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        return state
     }
 }
