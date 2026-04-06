@@ -115,6 +115,10 @@ struct ClydeAnimationView: View {
     @State private var antennaGlow: Bool = false
     @State private var zzzOffset: CGFloat = 0
     @State private var zzzOpacity: Double = 1
+    @State private var bodyOpacity: Double = 1
+    @State private var faceOpacity: Double = 0
+    @State private var eyeScanOffset: Int = 0 // -1, 0, or +1
+    @State private var terminalBuffer: [Character] = Array(repeating: " ", count: 16)
 
     init(state: ClydeState, pixelSize: CGFloat = 3) {
         self.state = state
@@ -125,110 +129,156 @@ struct ClydeAnimationView: View {
     private var gridHeight: CGFloat { 16 * pixelSize }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.3)) { timeline in
-            Canvas { context, size in
-                let sprite = ClydeSprite.body
-
-                for row in 0..<16 {
-                    for col in 0..<16 {
-                        guard var color = sprite[row][col] else { continue }
-
-                        // Antenna glow (row 0, busy)
-                        if row == 0 && state == .busy && antennaGlow {
-                            color = Color(red: 0.3, green: 1.0, blue: 0.5)
-                        }
-
-                        // Eye animation
-                        if (row == 5 || row == 6) && col >= 4 && col < 12 {
-                            let localCol = col - 4
-                            switch state {
-                            case .busy:
-                                let blinkPhase = (animationTick / 7) % 8
-                                if blinkPhase == 0, let override = ClydeSprite.eyesClosed[row - 5][safe: localCol] {
-                                    color = override ?? color
-                                }
-                            case .idle:
-                                let blinkPhase = (animationTick / 13) % 13
-                                if blinkPhase == 0, let override = ClydeSprite.eyesClosed[row - 5][safe: localCol] {
-                                    color = override ?? color
-                                }
-                            case .sleeping:
-                                if let override = ClydeSprite.eyesSleeping[row - 5][safe: localCol] {
-                                    color = override ?? color
-                                }
-                            }
-                        }
-
-                        // Mouth animation (row 7)
-                        if row == 7 && col >= 4 && col < 12 {
-                            let localCol = col - 4
-                            switch state {
-                            case .busy:
-                                let mouthPhase = animationTick % 3
-                                if let override = ClydeSprite.mouthBusy[mouthPhase][safe: localCol] {
-                                    color = override ?? color
-                                }
-                            case .idle:
-                                if let override = ClydeSprite.mouthSmile[safe: localCol] {
-                                    color = override ?? color
-                                }
-                            case .sleeping:
-                                if let override = ClydeSprite.mouthSmile[safe: localCol] {
-                                    color = override ?? color
-                                }
-                            }
-                        }
-
-                        // Arm trembling (busy)
-                        var xOffset: CGFloat = 0
-                        if state == .busy && (col <= 3 || col >= 11) && row >= 10 && row <= 12 {
-                            xOffset = armOffset
-                        }
-
-                        let rect = CGRect(
-                            x: CGFloat(col) * pixelSize + xOffset,
-                            y: CGFloat(row) * pixelSize,
-                            width: pixelSize,
-                            height: pixelSize
-                        )
-                        context.fill(Path(rect), with: .color(color))
-                    }
-                }
-
-                // Zzz for sleeping state
-                if state == .sleeping {
-                    let zFont = Font.system(size: pixelSize * 3, weight: .bold, design: .monospaced)
-                    let text = Text("zzz").font(zFont).foregroundColor(.gray)
-                    let resolvedText = context.resolve(text)
-                    let textPoint = CGPoint(
-                        x: 13 * pixelSize,
-                        y: 1 * pixelSize - zzzOffset
-                    )
-                    context.opacity = zzzOpacity
-                    context.draw(resolvedText, at: textPoint, anchor: .leading)
-                    context.opacity = 1
-                }
+        TimelineView(.animation(minimumInterval: 0.2)) { timeline in
+            ZStack {
+                bodyCanvas
+                    .opacity(bodyOpacity)
+                faceCanvas
+                    .opacity(faceOpacity)
             }
             .frame(width: gridWidth, height: gridHeight)
             .onChange(of: timeline.date) { _ in
                 animationTick += 1
+                advanceTerminalBuffer()
+                advanceEyeScan()
                 updateAnimations()
             }
         }
-        .onAppear { updateAnimations() }
-        .onChange(of: state) { _ in
-            animationTick = 0
+        .onAppear {
+            seedTerminalBuffer()
+            applyStateOpacity(animated: false)
             updateAnimations()
         }
+        .onChange(of: state) { _ in
+            animationTick = 0
+            applyStateOpacity(animated: true)
+            updateAnimations()
+        }
+    }
+
+    private var bodyCanvas: some View {
+        Canvas { context, _ in
+            let sprite = ClydeSprite.body
+
+            for row in 0..<16 {
+                for col in 0..<16 {
+                    guard var color = sprite[row][col] else { continue }
+
+                    // Eye animation (idle/sleeping only — busy uses faceCanvas)
+                    if (row == 5 || row == 6) && col >= 4 && col < 12 {
+                        let localCol = col - 4
+                        switch state {
+                        case .idle:
+                            let blinkPhase = (animationTick / 13) % 13
+                            if blinkPhase == 0, let override = ClydeSprite.eyesClosed[row - 5][safe: localCol] {
+                                color = override ?? color
+                            }
+                        case .sleeping:
+                            if let override = ClydeSprite.eyesSleeping[row - 5][safe: localCol] {
+                                color = override ?? color
+                            }
+                        case .busy:
+                            break
+                        }
+                    }
+
+                    // Mouth (row 7) — smile for idle/sleeping
+                    if row == 7 && col >= 4 && col < 12 {
+                        let localCol = col - 4
+                        if state != .busy, let override = ClydeSprite.mouthSmile[safe: localCol] {
+                            color = override ?? color
+                        }
+                    }
+
+                    let rect = CGRect(
+                        x: CGFloat(col) * pixelSize,
+                        y: CGFloat(row) * pixelSize,
+                        width: pixelSize,
+                        height: pixelSize
+                    )
+                    context.fill(Path(rect), with: .color(color))
+                }
+            }
+
+            // Zzz for sleeping state
+            if state == .sleeping {
+                let zFont = Font.system(size: pixelSize * 3, weight: .bold, design: .monospaced)
+                let text = Text("zzz").font(zFont).foregroundColor(.gray)
+                let resolvedText = context.resolve(text)
+                let textPoint = CGPoint(
+                    x: 13 * pixelSize,
+                    y: 1 * pixelSize - zzzOffset
+                )
+                context.opacity = zzzOpacity
+                context.draw(resolvedText, at: textPoint, anchor: .leading)
+                context.opacity = 1
+            }
+        }
+    }
+
+    private var faceCanvas: some View {
+        Canvas { context, _ in
+            let sprite = ClydeSprite.busyFace
+
+            for row in 0..<16 {
+                for col in 0..<16 {
+                    guard let color = sprite[row][col] else { continue }
+                    let rect = CGRect(
+                        x: CGFloat(col) * pixelSize,
+                        y: CGFloat(row) * pixelSize,
+                        width: pixelSize,
+                        height: pixelSize
+                    )
+                    context.fill(Path(rect), with: .color(color))
+                }
+            }
+        }
+    }
+
+    private func applyStateOpacity(animated: Bool) {
+        let targetBody: Double = (state == .busy) ? 0 : 1
+        let targetFace: Double = (state == .busy) ? 1 : 0
+        if animated {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                bodyOpacity = targetBody
+                faceOpacity = targetFace
+            }
+        } else {
+            bodyOpacity = targetBody
+            faceOpacity = targetFace
+        }
+    }
+
+    private func seedTerminalBuffer() {
+        terminalBuffer = (0..<16).map { _ in randomTerminalGlyph() }
+    }
+
+    private func advanceTerminalBuffer() {
+        guard state == .busy else { return }
+        terminalBuffer.removeFirst()
+        terminalBuffer.append(randomTerminalGlyph())
+    }
+
+    private func advanceEyeScan() {
+        guard state == .busy else { return }
+        let cycle = [0, 1, 0, -1]
+        eyeScanOffset = cycle[(animationTick / 2) % cycle.count]
+    }
+
+    private func randomTerminalGlyph() -> Character {
+        let roll = Int.random(in: 0..<100)
+        if roll < 35 { return "•" }
+        if roll < 60 { return "-" }
+        return " "
     }
 
     private func updateAnimations() {
         switch state {
         case .busy:
             withAnimation(.easeInOut(duration: 0.15)) {
-                armOffset = armOffset == 0 ? pixelSize * 0.3 : (armOffset > 0 ? -pixelSize * 0.3 : 0)
                 antennaGlow.toggle()
             }
+            armOffset = 0
             zzzOffset = 0
             zzzOpacity = 1
         case .idle:
