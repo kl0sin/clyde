@@ -16,17 +16,23 @@ enum HookInstaller {
         }
     }
 
-    static let hookScript = """
+    static let hookScript = ##"""
     #!/bin/bash
-    # Clyde notification hook — signals Clyde that a Claude session needs attention
+    # Clyde notification hook — signals Clyde about Claude session state transitions.
     # Installed automatically by Clyde. Safe to remove manually.
+    #
+    # Handles three event types:
+    #   PermissionRequest → writes events/<pid>.json (attention flag)
+    #   UserPromptSubmit  → creates state/<pid>-busy marker
+    #   Stop              → removes state/<pid>-busy marker
 
     set -e
     EVENTS_DIR="$HOME/.clyde/events"
-    mkdir -p "$EVENTS_DIR"
+    STATE_DIR="$HOME/.clyde/state"
+    mkdir -p "$EVENTS_DIR" "$STATE_DIR"
 
     INPUT=$(cat 2>/dev/null || echo "{}")
-    HOOK_EVENT=$(echo "$INPUT" | /usr/bin/python3 -c "import json,sys; d=json.load(sys.stdin) if sys.stdin.read() else {}; print(d.get('hook_event_name', 'unknown'))" 2>/dev/null || echo "unknown")
+    HOOK_EVENT=$(printf '%s' "$INPUT" | /usr/bin/python3 -c "import json,sys; s=sys.stdin.read(); d=json.loads(s) if s.strip() else {}; print(d.get('hook_event_name', 'unknown'))" 2>/dev/null || echo "unknown")
 
     find_claude_pid() {
         local pid=$PPID
@@ -44,16 +50,32 @@ enum HookInstaller {
     }
 
     CLAUDE_PID=$(find_claude_pid || echo "")
+    [ -z "$CLAUDE_PID" ] && exit 0
 
-    if [ -n "$CLAUDE_PID" ]; then
-        TIMESTAMP=$(date +%s)
-        cat > "$EVENTS_DIR/$CLAUDE_PID.json" <<EOF
+    TIMESTAMP=$(date +%s)
+
+    case "$HOOK_EVENT" in
+        PermissionRequest)
+            cat > "$EVENTS_DIR/$CLAUDE_PID.json" <<EOF
     {"pid": $CLAUDE_PID, "event": "$HOOK_EVENT", "timestamp": $TIMESTAMP}
     EOF
-    fi
+            ;;
+        UserPromptSubmit)
+            echo "$TIMESTAMP" > "$STATE_DIR/$CLAUDE_PID-busy"
+            ;;
+        Stop)
+            rm -f "$STATE_DIR/$CLAUDE_PID-busy"
+            ;;
+    esac
 
     exit 0
-    """
+    """##
+
+    /// Claude Code hook events that Clyde registers for.
+    /// - `PermissionRequest`: fires when Claude needs user approval (attention)
+    /// - `UserPromptSubmit`: fires when the user sends a new prompt (busy start)
+    /// - `Stop`: fires when Claude finishes responding (busy end)
+    static let registeredHookEvents = ["PermissionRequest", "UserPromptSubmit", "Stop"]
 
     static var isInstalled: Bool {
         FileManager.default.fileExists(atPath: AppPaths.clydeHookScript.path)
@@ -94,7 +116,9 @@ enum HookInstaller {
         ]
         let hookBlock: [String: Any] = ["hooks": [hookCommand]]
 
-        mergeHookBlock(&hooks, eventName: "PermissionRequest", block: hookBlock)
+        for eventName in Self.registeredHookEvents {
+            mergeHookBlock(&hooks, eventName: eventName, block: hookBlock)
+        }
         settings["hooks"] = hooks
 
         do {
@@ -120,9 +144,11 @@ enum HookInstaller {
         }
 
         if var hooks = settings["hooks"] as? [String: Any] {
-            removeClydeHook(&hooks, eventName: "Notification")
-            removeClydeHook(&hooks, eventName: "PermissionRequest")
-            removeClydeHook(&hooks, eventName: "PreToolUse")
+            // Clean up all currently registered events plus any legacy ones we may have used before.
+            let legacyEvents = ["Notification", "PreToolUse"]
+            for eventName in Self.registeredHookEvents + legacyEvents {
+                removeClydeHook(&hooks, eventName: eventName)
+            }
             settings["hooks"] = hooks
         }
 

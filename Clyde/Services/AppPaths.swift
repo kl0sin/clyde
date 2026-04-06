@@ -12,6 +12,16 @@ enum AppPaths {
         clydeDir.appendingPathComponent("events")
     }
 
+    /// Hook-driven session state (busy markers written by UserPromptSubmit,
+    /// cleared by Stop).
+    static var stateDir: URL {
+        clydeDir.appendingPathComponent("state")
+    }
+
+    static func busyMarker(pid: pid_t) -> URL {
+        stateDir.appendingPathComponent("\(pid)-busy")
+    }
+
     static var logsDir: URL {
         clydeDir.appendingPathComponent("logs")
     }
@@ -40,6 +50,14 @@ enum AppConstants {
 
     /// How long a hook-signalled attention event remains valid
     static let attentionEventTimeout: TimeInterval = 60.0
+
+    /// How long a busy marker file remains valid before we fall back to pgrep detection.
+    /// Protects against orphan busy markers if Claude crashes without firing Stop.
+    static let busyMarkerTimeout: TimeInterval = 600.0
+
+    /// After a Stop deletes the busy marker, we keep showing the session as busy
+    /// for this long so short prompt→stop cycles are still visible in the UI.
+    static let busyMarkerLinger: TimeInterval = 1.5
 
     /// Distance from screen edge to trigger widget snap
     static let edgeSnapThreshold: CGFloat = 36.0

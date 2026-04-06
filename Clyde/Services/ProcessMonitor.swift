@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Darwin
 
 protocol ShellExecutor {
     func run(_ command: String) async throws -> String
@@ -34,6 +35,12 @@ final class ProcessMonitor: ObservableObject {
     var onSessionBecameIdle: ((Session) -> Void)?
 
     private var pollTask: Task<Void, Never>?
+    private var stateWatchTask: Task<Void, Never>?
+
+    /// PIDs the hook state watcher currently considers busy.
+    /// This is updated by a fast (~500ms) file-system poll on `~/.clyde/state/`,
+    /// decoupled from the heavier child-process poll.
+    private var hookBusyPIDs: Set<pid_t> = []
 
     init(shell: ShellExecutor = RealShellExecutor(), pollingInterval: TimeInterval = AppConstants.defaultPollingInterval) {
         self.shell = shell
@@ -53,13 +60,88 @@ final class ProcessMonitor: ObservableObject {
             .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
     }
 
-    /// Classify by checking if Claude has active child processes.
-    /// Children = running tool → busy. No children = waiting for input → idle.
+    /// Process names that Claude spawns as background helpers — not real tool work.
+    /// These should NOT make the session count as busy.
+    private static let ignoredChildCommands: Set<String> = ["caffeinate"]
+
+    /// Classify a Claude session's state.
+    ///
+    /// Primary signal: hook-written busy marker at `~/.clyde/state/<pid>-busy`.
+    /// The hook fires synchronously on `UserPromptSubmit` / `Stop`, so this is
+    /// orders of magnitude more accurate than polling child processes.
+    ///
+    /// Fallback: if no fresh marker exists, fall back to child-process detection
+    /// for sessions that predate the hook install or when the hook is missing.
     func classifyStatus(pid: pid_t) async -> SessionStatus {
-        guard let output = try? await shell.run("pgrep -P \(pid)"), !output.isEmpty else {
+        // 1. Hook-based detection via the fast state watcher.
+        if hookBusyPIDs.contains(pid) {
+            return .busy
+        }
+
+        // 2. Fallback: pgrep-based detection (legacy sessions / hook not installed).
+        return await classifyStatusViaChildren(pid: pid)
+    }
+
+    /// Fallback classification: inspects child processes and filters known helpers.
+    private func classifyStatusViaChildren(pid: pid_t) async -> SessionStatus {
+        guard let pgrepOutput = try? await shell.run("pgrep -P \(pid)"),
+              !pgrepOutput.isEmpty else {
             return .idle
         }
-        return .busy
+
+        let childPIDs = pgrepOutput
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        guard !childPIDs.isEmpty else { return .idle }
+
+        // Inspect each child's state and full command line.
+        // `ps -o stat=,args= -p <pid>` outputs e.g. "S+    /usr/bin/npm exec @angular/cli mcp".
+        let psQuery = "ps -o stat=,args= -p \(childPIDs.joined(separator: ","))"
+        guard let psOutput = try? await shell.run(psQuery) else {
+            // If ps fails, fall back to the old behavior.
+            return .busy
+        }
+
+        for line in psOutput.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+
+            // Split into stat (first token) and args (rest of the line).
+            let parts = trimmed.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+            guard parts.count == 2 else { continue }
+            let stat = String(parts[0])
+            let args = String(parts[1]).trimmingCharacters(in: .whitespaces)
+
+            // Zombies don't count as real work.
+            if stat.first == "Z" { continue }
+
+            // Extract the binary name from the first arg for the ignore list.
+            let firstArg = args.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? args
+            let commandName = (firstArg as NSString).lastPathComponent
+            if Self.ignoredChildCommands.contains(commandName) { continue }
+
+            // MCP servers are long-lived helpers, not real tool executions.
+            if Self.isLikelyMCPServer(args: args) { continue }
+
+            // Found a real child doing real work.
+            return .busy
+        }
+
+        return .idle
+    }
+
+    /// Conservative MCP server detection. Only matches well-known patterns so
+    /// we don't accidentally filter out user shell commands that merely mention "mcp".
+    private static func isLikelyMCPServer(args: String) -> Bool {
+        let lower = args.lowercased()
+        if lower.hasSuffix(" mcp") { return true }                 // "npm exec pkg mcp"
+        if lower.contains("mcp-server") { return true }            // "mcp-server-filesystem"
+        if lower.contains("/mcp/") { return true }                 // ".claude/mcp/xyz"
+        if lower.contains("uvx mcp-") { return true }              // "uvx mcp-foo"
+        if lower.contains("@modelcontextprotocol/") { return true } // official NPM scope
+        return false
     }
 
     /// Detect project dir from claude's open .claude/settings files via lsof.
@@ -125,6 +207,66 @@ final class ProcessMonitor: ObservableObject {
         pollingInterval = max(1, min(interval, 10))
     }
 
+    /// Polls the hook state directory every 250 ms, maintaining `hookBusyPIDs`.
+    /// Cheap (just dir listing + mtime reads) so it runs independently of the main poll.
+    /// A busy marker "lingers" for `busyMarkerLinger` seconds after Stop deletes it,
+    /// so short prompt→stop cycles remain visible in the UI.
+    private func pollHookState() {
+        let now = Date()
+        let stateDir = AppPaths.stateDir
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: stateDir,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else {
+            if !hookBusyPIDs.isEmpty { hookBusyPIDs = [] }
+            return
+        }
+
+        // PIDs whose marker file is currently present on disk ("really busy").
+        var present: Set<pid_t> = []
+        for file in files where file.lastPathComponent.hasSuffix("-busy") {
+            let base = file.lastPathComponent.replacingOccurrences(of: "-busy", with: "")
+            guard let pid = pid_t(base) else { continue }
+
+            // Discard markers whose PID no longer exists (Claude crashed without Stop).
+            // kill(pid, 0) returns 0 if the process exists, -1/ESRCH otherwise.
+            if kill(pid, 0) != 0 && errno == ESRCH {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+
+            if let attrs = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
+               let mtime = attrs.contentModificationDate,
+               now.timeIntervalSince(mtime) < AppConstants.busyMarkerTimeout {
+                present.insert(pid)
+            } else {
+                // Stale by mtime — remove so it doesn't keep showing up.
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+
+        // Refresh last-seen ONLY for genuinely-present PIDs. This is what makes
+        // the linger window finite — once the marker disappears, last-seen freezes
+        // and the linger countdown begins.
+        for pid in present { hookBusyLastSeen[pid] = now }
+
+        // Drop expired entries from the last-seen map.
+        let linger = AppConstants.busyMarkerLinger
+        hookBusyLastSeen = hookBusyLastSeen.filter { now.timeIntervalSince($0.value) < linger }
+
+        // Effective busy = currently-present ∪ still-within-linger.
+        var active = present
+        for pid in hookBusyLastSeen.keys { active.insert(pid) }
+
+        if active != hookBusyPIDs {
+            hookBusyPIDs = active
+            // Kick the main poll to re-classify immediately.
+            Task { await self.poll() }
+        }
+    }
+
+    private var hookBusyLastSeen: [pid_t: Date] = [:]
+
     func startPolling() {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
@@ -134,10 +276,20 @@ final class ProcessMonitor: ObservableObject {
                 try? await Task.sleep(for: .seconds(interval))
             }
         }
+
+        stateWatchTask?.cancel()
+        stateWatchTask = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.pollHookState()
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
     }
 
     func stopPolling() {
         pollTask?.cancel()
         pollTask = nil
+        stateWatchTask?.cancel()
+        stateWatchTask = nil
     }
 }
