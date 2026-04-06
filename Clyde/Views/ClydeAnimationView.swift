@@ -91,8 +91,8 @@ struct ClydeSprite {
             [e, e, b, b, b, h, h, h, h, h, h, b, b, b, e, e], // 2  head top
             [e, b, h, w, w, w, w, w, w, w, w, w, w, h, b, e], // 3  forehead
             [b, h, w, w, w, w, w, w, w, w, w, w, w, w, h, b], // 4  brow line
-            [b, w, w, w, b, b, w, w, w, w, b, b, w, w, w, b], // 5  eyes (sockets)
-            [b, w, w, w, b, b, w, w, w, w, b, b, w, w, w, b], // 6  eyes (pupils drawn dynamically)
+            [b, w, w, w, w, w, w, b, b, w, w, w, w, w, w, b], // 5  eyes (open sockets)
+            [b, w, w, w, w, w, w, b, b, w, w, w, w, w, w, b], // 6  eyes (pupils drawn dynamically)
             [b, w, w, w, w, w, w, w, w, w, w, w, w, w, w, b], // 7  cheeks
             [b, w, w, w, w, b, b, b, b, b, b, w, w, w, w, b], // 8  mouth (dynamic)
             [b, h, w, w, w, r, w, w, w, w, r, w, w, w, h, b], // 9  lower cheeks (focus blush)
@@ -111,7 +111,6 @@ struct ClydeAnimationView: View {
     let pixelSize: CGFloat
 
     @State private var animationTick: Int = 0
-    @State private var armOffset: CGFloat = 0
     @State private var antennaGlow: Bool = false
     @State private var zzzOffset: CGFloat = 0
     @State private var zzzOpacity: Double = 1
@@ -241,22 +240,21 @@ struct ClydeAnimationView: View {
                 }
             }
 
-            // Pupils: two small dark rectangles that shift horizontally by eyeScanOffset.
-            // Sockets span rows 5-6; we draw a 1px-wide, 2px-tall pupil in each eye socket.
+            // Pupils: two small dark rectangles that scan within the eye sockets.
+            // Left socket: cols 4..6 (3 wide), right socket: cols 9..11 (3 wide).
+            // Base pupil column = center of each socket (5 and 10), shifted by eyeScanOffset (-1/0/+1).
             let pupilColor = Color(red: 0.08, green: 0.08, blue: 0.1)
             let blink = (animationTick % 30) == 0 // blink every ~6s at 0.2s tick
             if !blink {
-                // Clamp scan offset so pupils stay inside the 2-wide socket (cols 4-5, 10-11)
-                let clampedOffset = max(0, min(1, eyeScanOffset + 0)) // 0 or 1
-                let leftX = CGFloat(4 + clampedOffset) * pixelSize
-                let rightX = CGFloat(10 + clampedOffset) * pixelSize
+                let leftCol = 5 + eyeScanOffset  // 4, 5, or 6
+                let rightCol = 10 + eyeScanOffset // 9, 10, or 11
                 let y = CGFloat(5) * pixelSize
                 context.fill(
-                    Path(CGRect(x: leftX, y: y, width: pixelSize, height: pixelSize * 2)),
+                    Path(CGRect(x: CGFloat(leftCol) * pixelSize, y: y, width: pixelSize, height: pixelSize * 2)),
                     with: .color(pupilColor)
                 )
                 context.fill(
-                    Path(CGRect(x: rightX, y: y, width: pixelSize, height: pixelSize * 2)),
+                    Path(CGRect(x: CGFloat(rightCol) * pixelSize, y: y, width: pixelSize, height: pixelSize * 2)),
                     with: .color(pupilColor)
                 )
             }
@@ -366,16 +364,13 @@ struct ClydeAnimationView: View {
             withAnimation(.easeInOut(duration: 0.15)) {
                 antennaGlow.toggle()
             }
-            armOffset = 0
             zzzOffset = 0
             zzzOpacity = 1
         case .idle:
-            armOffset = 0
             antennaGlow = false
             zzzOffset = 0
             zzzOpacity = 1
         case .sleeping:
-            armOffset = 0
             antennaGlow = false
             withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
                 zzzOffset = pixelSize * 3
