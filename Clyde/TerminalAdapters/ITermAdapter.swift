@@ -21,23 +21,25 @@ struct ITermAdapter: TerminalAdapter {
 
     func focusSession(parentPID: pid_t) async throws {
         guard isInstalled else { throw TerminalError.terminalNotInstalled }
+        // Walk iTerm2's windows/tabs/sessions, matching session.pid to shell PID.
+        // When found: select the session, tab, window + activate iTerm2.
         try runAppleScript("""
             tell application "iTerm2"
                 activate
                 repeat with w in windows
-                    tell w
-                        repeat with t in tabs
-                            tell t
-                                repeat with s in sessions
-                                    tell s
-                                        if (variable named "session.pid") is \(parentPID) then
-                                            select
-                                        end if
-                                    end tell
-                                end repeat
-                            end tell
+                    repeat with t in tabs of w
+                        repeat with s in sessions of t
+                            try
+                                set sessPID to (variable named "session.pid") of s as integer
+                                if sessPID is \(parentPID) then
+                                    select s
+                                    tell t to select
+                                    tell w to select
+                                    return
+                                end if
+                            end try
                         end repeat
-                    end tell
+                    end repeat
                 end repeat
             end tell
         """)
