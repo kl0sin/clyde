@@ -62,9 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         panel = FloatingPanel(contentRect: NSRect(origin: initialOrigin, size: collapsedSize))
+        panel.minSize = collapsedSize
+        panel.maxSize = collapsedSize
         savedWidgetOrigin = initialOrigin
 
         let hostingView = NSHostingView(rootView: contentView)
+        hostingView.frame = NSRect(origin: .zero, size: collapsedSize)
         panel.contentView = hostingView
 
         panel.orderFront(nil)
@@ -217,9 +220,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let targetFrame = NSRect(origin: newOrigin, size: targetSize)
 
-        // Simultaneous: resize window + SwiftUI handles content transition via its own animation
+        // Relax size constraints so animation can change the frame
+        panel.minSize = NSSize(width: 1, height: 1)
+        panel.maxSize = NSSize(width: 10000, height: 10000)
+
         animateFrame(to: targetFrame, duration: 0.35) { [weak self] in
-            self?.isAnimating = false
+            guard let self else { return }
+            // Re-lock to target size
+            self.panel.minSize = targetSize
+            self.panel.maxSize = targetSize
+            self.isAnimating = false
         }
     }
 
