@@ -37,11 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionViewModel: SessionListViewModel!
     var statusItem: NSStatusItem?
 
-    private let collapsedSize = NSSize(width: 150, height: 52)
+    private let collapsedSize = NSSize(width: 160, height: 44)
     private let defaultExpandedSize = NSSize(width: 400, height: 420)
     private var lastExpandedSize: NSSize?
     private var savedWidgetOrigin: NSPoint?  // Anchor: where widget lives on screen
     private var isAnimating = false
+    private var isProgrammaticMove = false
     private var cancellables = Set<AnyCancellable>()
     private let snapMargin: CGFloat = 12
 
@@ -225,7 +226,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func animateFrame(to target: NSRect, duration: TimeInterval, completion: @escaping () -> Void) {
         let start = panel.frame
         let startTime = CACurrentMediaTime()
-        let interval = 1.0 / 120.0 // 120fps for ultra smooth
+        let interval = 1.0 / 120.0
+
+        isProgrammaticMove = true
 
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
@@ -233,7 +236,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let elapsed = CACurrentMediaTime() - startTime
             let progress = min(elapsed / duration, 1.0)
 
-            // Quartic ease-out: fast start, gentle settle
             let t = 1 - pow(1 - progress, 4)
 
             let x = start.origin.x + (target.origin.x - start.origin.x) * t
@@ -246,6 +248,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if progress >= 1.0 {
                 timer.invalidate()
                 self.panel.setFrame(target, display: true)
+                // Keep isProgrammaticMove=true a bit longer to absorb lingering notifications
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    self.isProgrammaticMove = false
+                }
                 completion()
             }
         }
@@ -256,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Edge Snapping
 
     @MainActor @objc private func windowDidMove(_ notification: Notification) {
-        guard !isAnimating else { return }
+        guard !isAnimating, !isProgrammaticMove else { return }
         // Only track drags when in collapsed widget mode
         guard appViewModel.isCollapsed else { return }
         // Debounce — snap after user stops dragging (no move for 0.15s)
