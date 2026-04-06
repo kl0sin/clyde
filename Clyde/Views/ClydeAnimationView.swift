@@ -218,9 +218,17 @@ struct ClydeAnimationView: View {
 
     private var faceCanvas: some View {
         Canvas { context, _ in
-            let sprite = ClydeSprite.busyFace
+            var sprite = ClydeSprite.busyFace
 
-            for row in 0..<16 {
+            // Antenna tip glow pulse (row 0, cols 7-8)
+            if antennaGlow {
+                let glow = Color(red: 0.5, green: 1.0, blue: 0.6)
+                sprite[0][7] = glow
+                sprite[0][8] = glow
+            }
+
+            // Draw base sprite rows 0..<14; rows 14-15 are terminal bar territory.
+            for row in 0..<14 {
                 for col in 0..<16 {
                     guard let color = sprite[row][col] else { continue }
                     let rect = CGRect(
@@ -232,7 +240,51 @@ struct ClydeAnimationView: View {
                     context.fill(Path(rect), with: .color(color))
                 }
             }
+
+            // Pupils: two small dark rectangles that shift horizontally by eyeScanOffset.
+            // Sockets span rows 5-6; we draw a 1px-wide, 2px-tall pupil in each eye socket.
+            let pupilColor = Color(red: 0.08, green: 0.08, blue: 0.1)
+            let blink = (animationTick % 30) == 0 // blink every ~6s at 0.2s tick
+            if !blink {
+                // Clamp scan offset so pupils stay inside the 2-wide socket (cols 4-5, 10-11)
+                let clampedOffset = max(0, min(1, eyeScanOffset + 0)) // 0 or 1
+                let leftX = CGFloat(4 + clampedOffset) * pixelSize
+                let rightX = CGFloat(10 + clampedOffset) * pixelSize
+                let y = CGFloat(5) * pixelSize
+                context.fill(
+                    Path(CGRect(x: leftX, y: y, width: pixelSize, height: pixelSize * 2)),
+                    with: .color(pupilColor)
+                )
+                context.fill(
+                    Path(CGRect(x: rightX, y: y, width: pixelSize, height: pixelSize * 2)),
+                    with: .color(pupilColor)
+                )
+            }
+
+            // Mouth row (row 8, cols 4..11) using mouthBusy frames.
+            let mouthRow = 8
+            let mouthPhase = animationTick % 3
+            for localCol in 0..<8 {
+                if let override = ClydeSprite.mouthBusy[mouthPhase][safe: localCol],
+                   let color = override {
+                    let rect = CGRect(
+                        x: CGFloat(4 + localCol) * pixelSize,
+                        y: CGFloat(mouthRow) * pixelSize,
+                        width: pixelSize,
+                        height: pixelSize
+                    )
+                    context.fill(Path(rect), with: .color(color))
+                }
+            }
+
+            // Terminal bar (rows 14-15) — implemented in Task 4.
+            drawTerminalBar(context: context)
         }
+    }
+
+    // Placeholder; real implementation in Task 4.
+    private func drawTerminalBar(context: GraphicsContext) {
+        // intentionally empty for Task 3
     }
 
     private func applyStateOpacity(animated: Bool) {
