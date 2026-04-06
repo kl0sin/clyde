@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var appViewModel: AppViewModel
     @ObservedObject var notificationService: NotificationService
     @AppStorage("pollingInterval") private var pollingInterval: Double = AppConstants.defaultPollingInterval
+    @State private var copiedDiagnostics = false
 
     init(appViewModel: AppViewModel) {
         self.appViewModel = appViewModel
@@ -171,6 +172,30 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Divider().background(Color(white: 0.2))
+
+            Button(action: {
+                appViewModel.copyDiagnosticInfoToPasteboard()
+                copiedDiagnostics = true
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    copiedDiagnostics = false
+                }
+            }) {
+                HStack {
+                    Image(systemName: copiedDiagnostics ? "checkmark" : "doc.on.clipboard")
+                        .font(.system(size: 11))
+                    Text(copiedDiagnostics ? "Copied to clipboard" : "Copy diagnostic info")
+                        .font(.system(size: 12))
+                }
+                .foregroundColor(copiedDiagnostics ? .green : Color(white: 0.7))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color(white: 0.16))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
 
             Divider().background(Color(white: 0.2))
 

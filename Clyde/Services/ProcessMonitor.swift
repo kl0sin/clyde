@@ -250,7 +250,9 @@ final class ProcessMonitor: ObservableObject {
             updatedSessions.append(session)
         }
 
-        sessions = updatedSessions
+        // Sort: most-recently-changed first. Stable for sessions with the same
+        // change time (preserves PID order via the sorted discoverPIDs result).
+        sessions = updatedSessions.sorted { $0.statusChangedAt > $1.statusChangedAt }
         clydeState = sessions.contains(where: { $0.status == .busy }) ? .busy : .idle
     }
 
@@ -281,9 +283,12 @@ final class ProcessMonitor: ObservableObject {
             return existing
         } else {
             let cwd = info?.cwd.isEmpty == false ? info!.cwd : await detectCWD(pid: pid)
-            var session = Session(pid: pid, workingDirectory: cwd, status: newStatus)
-            session.sessionId = info?.sessionId
-            return session
+            return Session(
+                pid: pid,
+                workingDirectory: cwd,
+                status: newStatus,
+                sessionId: info?.sessionId
+            )
         }
     }
 

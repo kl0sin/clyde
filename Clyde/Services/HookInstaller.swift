@@ -19,11 +19,11 @@ enum HookInstaller {
     /// Bumped whenever the embedded hook script changes. The version line is
     /// embedded in the script itself; Clyde reads it from the installed copy
     /// at startup and prompts a reinstall if it's older.
-    static let currentScriptVersion = 2
+    static let currentScriptVersion = 3
 
     static let hookScript = ##"""
     #!/bin/bash
-    # clyde-hook-version: 2
+    # clyde-hook-version: 3
     # Clyde notification hook — signals Clyde about Claude session state transitions.
     # Installed automatically by Clyde. Safe to remove manually.
     #
@@ -47,22 +47,42 @@ enum HookInstaller {
 
     INPUT=$(cat 2>/dev/null || echo "{}")
 
-    # Extract event_name + session_id + cwd in a single python call.
-    # Output is three lines: event\nsession_id\ncwd
-    PAYLOAD=$(printf '%s' "$INPUT" | /usr/bin/python3 -c "
+    # Extract a top-level string field from the Claude hook payload.
+    # Tries python3 first; falls back to a grep-based parser if python3 is
+    # missing (Apple keeps threatening to remove the system Python).
+    extract_field() {
+        local key=$1
+        local value=""
+
+        if command -v python3 >/dev/null 2>&1; then
+            value=$(printf '%s' "$INPUT" | python3 -c "
     import json, sys
     try:
         d = json.loads(sys.stdin.read())
     except Exception:
         d = {}
-    print(d.get('hook_event_name', 'unknown'))
-    print(d.get('session_id', ''))
-    print(d.get('cwd', ''))
-    " 2>/dev/null || printf 'unknown\n\n\n')
+    print(d.get('$key', ''))
+    " 2>/dev/null) || value=""
+        fi
 
-    HOOK_EVENT=$(printf '%s' "$PAYLOAD" | sed -n '1p')
-    SESSION_ID=$(printf '%s' "$PAYLOAD" | sed -n '2p')
-    CWD=$(printf '%s' "$PAYLOAD" | sed -n '3p')
+        if [ -z "$value" ]; then
+            # Pure-shell fallback: grep the JSON for "key": "value".
+            # Handles the common case of unescaped string values (Claude's
+            # hook payloads have well-formed UUIDs and absolute paths).
+            value=$(printf '%s' "$INPUT" \
+                | tr -d '\n' \
+                | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+                | head -n1 \
+                | sed -E 's/.*"([^"]*)"$/\1/')
+        fi
+
+        printf '%s' "$value"
+    }
+
+    HOOK_EVENT=$(extract_field hook_event_name)
+    SESSION_ID=$(extract_field session_id)
+    CWD=$(extract_field cwd)
+    [ -z "$HOOK_EVENT" ] && HOOK_EVENT="unknown"
 
     find_claude_pid() {
         local pid=$PPID
@@ -149,6 +169,7 @@ enum HookInstaller {
         case scriptNotExecutable
         case outdated(installed: Int, current: Int)
         case missingEvents([String])            // events that are missing from settings.json
+        case autoRepairFailed(reason: String)   // we tried to fix it and write threw
 
         var bannerMessage: String {
             switch self {
@@ -162,6 +183,8 @@ enum HookInstaller {
                 return "Hook script is outdated (v\(installed) → v\(current)). Reinstall to upgrade."
             case .missingEvents(let names):
                 return "Hook isn't registered for: \(names.joined(separator: ", ")). Reinstall to fix."
+            case .autoRepairFailed(let reason):
+                return "Auto-repair failed: \(reason). Open Settings and reinstall manually."
             }
         }
     }

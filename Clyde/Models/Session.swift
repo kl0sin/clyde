@@ -27,9 +27,16 @@ struct Session: Identifiable, Equatable {
         return (workingDirectory as NSString).lastPathComponent
     }
 
-    init(pid: pid_t, workingDirectory: String = "", status: SessionStatus = .busy) {
-        self.id = UUID()
+    init(pid: pid_t, workingDirectory: String = "", status: SessionStatus = .busy, sessionId: String? = nil) {
+        // Prefer to derive the SwiftUI identity from Claude's session_id when
+        // it's available so list rows have stable identity across pollings.
+        if let sessionId, let derived = UUID(uuidString: sessionId) {
+            self.id = derived
+        } else {
+            self.id = UUID()
+        }
         self.pid = pid
+        self.sessionId = sessionId
         self.status = status
         self.workingDirectory = workingDirectory
         self.customName = nil

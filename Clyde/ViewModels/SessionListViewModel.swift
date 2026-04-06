@@ -83,7 +83,24 @@ final class SessionListViewModel: ObservableObject {
               let dict = try? JSONDecoder().decode([String: String].self, from: data) else {
             return
         }
-        namesBySessionId = dict
+        // Drop entries that aren't session_id-shaped (UUID). The first iteration of
+        // this file used cwd paths as keys; those would never match a real
+        // session_id and would silently inflate the dict forever.
+        let cleaned = dict.filter { Self.looksLikeSessionId($0.key) }
+        namesBySessionId = cleaned
+        if cleaned.count != dict.count {
+            ClydeLog.general.info("Dropped \(dict.count - cleaned.count, privacy: .public) legacy session-name entries")
+            persistNames()
+        }
+    }
+
+    /// Heuristic: a Claude session_id is a UUID-shape string. Reject anything
+    /// that looks like a path or random text.
+    private static func looksLikeSessionId(_ key: String) -> Bool {
+        // Reject obvious non-UUID values: paths, empty, anything containing '/'
+        if key.contains("/") || key.isEmpty { return false }
+        // UUIDs are 36 chars (8-4-4-4-12) with hyphens.
+        return UUID(uuidString: key) != nil
     }
 
     private func persistNames() {

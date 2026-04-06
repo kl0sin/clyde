@@ -12,6 +12,8 @@ final class AttentionMonitor: ObservableObject {
     var onAttentionNeeded: ((pid_t) -> Void)?
 
     private var pollTimer: Timer?
+    private var dirSource: DispatchSourceFileSystemObject?
+    private var dirFD: Int32 = -1
     private let eventsDir: URL
     private let timeout: TimeInterval
 
@@ -27,7 +29,10 @@ final class AttentionMonitor: ObservableObject {
 
     func start() {
         stop()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // FSEvents-style watcher: react instantly when the hook writes a file.
+        startDirectoryWatcher()
+        // Backup periodic scan handles file expiry (no FS event for stale mtime).
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.scan() }
         }
         scan()
@@ -37,6 +42,32 @@ final class AttentionMonitor: ObservableObject {
     func stop() {
         pollTimer?.invalidate()
         pollTimer = nil
+        dirSource?.cancel()
+        dirSource = nil
+    }
+
+    private func startDirectoryWatcher() {
+        try? FileManager.default.createDirectory(at: eventsDir, withIntermediateDirectories: true)
+        let fd = open(eventsDir.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        dirFD = fd
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .delete, .rename, .extend, .attrib],
+            queue: DispatchQueue.main
+        )
+        source.setEventHandler { [weak self] in
+            self?.scan()
+        }
+        source.setCancelHandler { [weak self] in
+            if let fd = self?.dirFD, fd >= 0 {
+                close(fd)
+                self?.dirFD = -1
+            }
+        }
+        source.resume()
+        dirSource = source
     }
 
     private func scan() {

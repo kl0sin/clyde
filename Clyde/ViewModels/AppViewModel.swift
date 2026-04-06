@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AppKit
 
 @MainActor
 final class AppViewModel: ObservableObject {
@@ -141,38 +142,44 @@ final class AppViewModel: ObservableObject {
 
     /// Auto-install or auto-repair the hook on startup.
     ///
+    /// Runs off the main actor — file IO + JSON parsing shouldn't block the
+    /// app launch. Result is delivered back to the main actor for UI binding.
+    ///
     /// We never silently overwrite a working install. We only act when:
     ///  - the hook is missing AND the user hasn't explicitly opted out, or
     ///  - the install is corrupt / outdated / missing events (always repair).
     private func ensureHookHealthy() {
-        let issue = HookInstaller.healthCheck()
-        guard let issue else {
-            hookHealthIssue = nil
-            return
-        }
-
         let optedOut = UserDefaults.standard.bool(forKey: Self.hookOptOutKey)
-        let shouldAutoInstall: Bool
-        switch issue {
-        case .notInstalled:
-            shouldAutoInstall = !optedOut
-        case .scriptMissing, .scriptNotExecutable, .outdated, .missingEvents:
-            // Repair broken / stale installs unconditionally — these are not
-            // user opt-out states, they're inconsistent state.
-            shouldAutoInstall = true
-        }
-
-        if shouldAutoInstall {
-            do {
-                try HookInstaller.install()
-                ClydeLog.hooks.info("Auto-installed/repaired Claude hook (\(issue.bannerMessage, privacy: .public))")
-                hookHealthIssue = HookInstaller.healthCheck()
-            } catch {
-                ClydeLog.hooks.error("Auto-install failed: \(error.localizedDescription, privacy: .public)")
-                hookHealthIssue = issue
+        Task.detached(priority: .utility) {
+            let issue = HookInstaller.healthCheck()
+            guard let issue else {
+                await MainActor.run { self.hookHealthIssue = nil }
+                return
             }
-        } else {
-            hookHealthIssue = issue
+
+            let shouldAutoInstall: Bool
+            switch issue {
+            case .notInstalled:
+                shouldAutoInstall = !optedOut
+            case .scriptMissing, .scriptNotExecutable, .outdated, .missingEvents:
+                shouldAutoInstall = true
+            case .autoRepairFailed:
+                shouldAutoInstall = false
+            }
+
+            var resolvedIssue: HookInstaller.HealthIssue? = issue
+            if shouldAutoInstall {
+                do {
+                    try HookInstaller.install()
+                    ClydeLog.hooks.info("Auto-installed/repaired Claude hook (was: \(issue.bannerMessage, privacy: .public))")
+                    resolvedIssue = HookInstaller.healthCheck()
+                } catch {
+                    ClydeLog.hooks.error("Auto-install failed: \(error.localizedDescription, privacy: .public)")
+                    resolvedIssue = .autoRepairFailed(reason: error.localizedDescription)
+                }
+            }
+
+            await MainActor.run { self.hookHealthIssue = resolvedIssue }
         }
     }
 
@@ -189,6 +196,67 @@ final class AppViewModel: ObservableObject {
     /// on the next launch.
     func setHookOptOut(_ optedOut: Bool) {
         UserDefaults.standard.set(optedOut, forKey: Self.hookOptOutKey)
+    }
+
+    /// Build a multi-line diagnostic dump and copy it to the pasteboard.
+    /// Used by the "Copy diagnostic info" button in Settings.
+    func copyDiagnosticInfoToPasteboard() {
+        var lines: [String] = []
+        lines.append("=== Clyde diagnostic info ===")
+        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+            lines.append("Clyde version: \(version)")
+        }
+        lines.append("Generated: \(ISO8601DateFormatter().string(from: Date()))")
+
+        lines.append("")
+        lines.append("--- Hook ---")
+        lines.append("Installed: \(HookInstaller.isInstalled)")
+        lines.append("Current script version: \(HookInstaller.currentScriptVersion)")
+        if let issue = hookHealthIssue {
+            lines.append("Health issue: \(issue.bannerMessage)")
+        } else {
+            lines.append("Health: OK")
+        }
+        lines.append("Opted out: \(UserDefaults.standard.bool(forKey: Self.hookOptOutKey))")
+
+        lines.append("")
+        lines.append("--- State directory ---")
+        if let files = try? FileManager.default.contentsOfDirectory(atPath: AppPaths.stateDir.path) {
+            lines.append("Files: \(files.count)")
+            for f in files.sorted() { lines.append("  \(f)") }
+        } else {
+            lines.append("(unreadable)")
+        }
+
+        lines.append("")
+        lines.append("--- Events directory ---")
+        if let files = try? FileManager.default.contentsOfDirectory(atPath: AppPaths.eventsDir.path) {
+            lines.append("Files: \(files.count)")
+            for f in files.sorted() { lines.append("  \(f)") }
+        } else {
+            lines.append("(unreadable)")
+        }
+
+        lines.append("")
+        lines.append("--- Sessions ---")
+        let sessions = processMonitor.sessions
+        let attentionPIDs = attentionMonitor.attentionPIDs
+        lines.append("Total: \(sessions.count)")
+        for s in sessions {
+            let attn = attentionPIDs.contains(s.pid) ? " [attention]" : ""
+            let sid = s.sessionId.map { " sid=\($0)" } ?? ""
+            lines.append("  pid=\(s.pid) status=\(s.status) cwd=\(s.workingDirectory)\(sid)\(attn)")
+        }
+
+        lines.append("")
+        lines.append("--- Polling ---")
+        lines.append("Fallback interval: \(processMonitor.pollingInterval)s")
+
+        let dump = lines.joined(separator: "\n")
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(dump, forType: .string)
+        ClydeLog.general.info("Diagnostic info copied to pasteboard")
     }
 
     private func showError(_ message: String) {
