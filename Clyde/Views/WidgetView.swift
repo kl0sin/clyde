@@ -17,21 +17,13 @@ struct WidgetView: View {
                 .frame(width: 20, height: 20)
             }
 
-            // Label + status
-            VStack(alignment: .leading, spacing: 1) {
+            // Label + compact status counts
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Clyde")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundColor(.white)
 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 5, height: 5)
-                    Text(viewModel.statusText)
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundColor(statusColor)
-                        .lineLimit(1)
-                }
+                CompactStatusView(viewModel: viewModel)
             }
 
             Spacer(minLength: 0)
@@ -84,6 +76,55 @@ struct WidgetView: View {
         case .busy: return .orange
         case .idle: return .green
         case .sleeping: return Color(white: 0.5)
+        }
+    }
+}
+
+/// Compact status display: colored dot + count, only shown for non-zero states
+private struct CompactStatusView: View {
+    @ObservedObject var viewModel: AppViewModel
+    @State private var isPulsing = false
+
+    var body: some View {
+        let sessions = viewModel.processMonitor.sessions
+        let processing = sessions.filter { $0.status == .busy }.count
+        let ready = sessions.count - processing
+
+        if sessions.isEmpty {
+            Text("idle")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundColor(Color(white: 0.5))
+        } else {
+            HStack(spacing: 6) {
+                if processing > 0 {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 5, height: 5)
+                            .opacity(isPulsing ? 0.4 : 1.0)
+                        Text("\(processing)")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundColor(.orange)
+                            .monospacedDigit()
+                    }
+                }
+                if ready > 0 {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 5, height: 5)
+                        Text("\(ready)")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundColor(.green)
+                            .monospacedDigit()
+                    }
+                }
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            }
         }
     }
 }
