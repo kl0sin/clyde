@@ -4,25 +4,27 @@ struct WidgetView: View {
     @ObservedObject var viewModel: AppViewModel
 
     var body: some View {
-        HStack(spacing: 10) {
-            ClydeAnimationView(
-                state: viewModel.clydeState,
-                pixelSize: 1.4
-            )
-            .frame(width: 22, height: 22)
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            HStack(spacing: 10) {
+                ClydeAnimationView(
+                    state: viewModel.clydeState,
+                    pixelSize: 1.4
+                )
+                .frame(width: 22, height: 22)
 
-            Text("Clyde")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundColor(.white)
-                .fixedSize()
+                Text("Clyde")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+                    .fixedSize()
 
-            // Divider
-            RoundedRectangle(cornerRadius: 0.5)
-                .fill(Color.white.opacity(0.12))
-                .frame(width: 1, height: 14)
+                RoundedRectangle(cornerRadius: 0.5)
+                    .fill(Color.white.opacity(0.12))
+                    .frame(width: 1, height: 14)
 
-            // Status counts
-            CompactStatusView(viewModel: viewModel)
+                CompactStatusView(viewModel: viewModel)
+            }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
