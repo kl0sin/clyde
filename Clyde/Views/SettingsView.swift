@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage("pollingInterval") private var pollingInterval: Double = 3.0
     @AppStorage("soundEnabled") private var soundEnabled: Bool = true
     @AppStorage("selectedSound") private var selectedSound: String = "Glass"
+    @AppStorage("attentionSound") private var attentionSound: String = "Hero"
 
     private let availableSounds = ["Glass", "Blow", "Bottle", "Frog", "Funk", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"]
 
@@ -77,25 +78,48 @@ struct SettingsView: View {
                         if soundEnabled {
                             Divider().background(Color(white: 0.2))
 
-                            HStack {
-                                Text("Sound")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white)
-                                Spacer()
-                                Picker("", selection: $selectedSound) {
-                                    ForEach(availableSounds, id: \.self) { sound in
-                                        Text(sound).tag(sound)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("When session becomes ready")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(Color(white: 0.5))
+                                HStack {
+                                    Spacer()
+                                    Picker("", selection: $selectedSound) {
+                                        ForEach(availableSounds, id: \.self) { sound in
+                                            Text(sound).tag(sound)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                    .frame(width: 130)
+                                    .onChange(of: selectedSound) { newSound in
+                                        appViewModel.notificationService.selectedSound = newSound
+                                        NSSound(named: NSSound.Name(newSound))?.play()
                                     }
                                 }
-                                .labelsHidden()
-                                .pickerStyle(.menu)
-                                .frame(width: 130)
-                                .onChange(of: selectedSound) { newSound in
-                                    appViewModel.notificationService.selectedSound = newSound
-                                    // Preview the sound
-                                    NSSound(named: NSSound.Name(newSound))?.play()
-                                }
+                            }
 
+                            Divider().background(Color(white: 0.2))
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("When permission is required")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(Color(white: 0.5))
+                                HStack {
+                                    Spacer()
+                                    Picker("", selection: $attentionSound) {
+                                        ForEach(availableSounds, id: \.self) { sound in
+                                            Text(sound).tag(sound)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                    .frame(width: 130)
+                                    .onChange(of: attentionSound) { newSound in
+                                        appViewModel.notificationService.attentionSound = newSound
+                                        NSSound(named: NSSound.Name(newSound))?.play()
+                                    }
+                                }
                             }
                         }
                     }
@@ -149,6 +173,7 @@ struct SettingsView: View {
         .onAppear {
             soundEnabled = appViewModel.notificationService.soundEnabled
             selectedSound = appViewModel.notificationService.selectedSound
+            attentionSound = appViewModel.notificationService.attentionSound
         }
     }
 }

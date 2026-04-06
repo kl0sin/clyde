@@ -14,6 +14,10 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         didSet { UserDefaults.standard.set(selectedSound, forKey: "selectedSound") }
     }
 
+    var attentionSound: String = UserDefaults.standard.string(forKey: "attentionSound") ?? "Hero" {
+        didSet { UserDefaults.standard.set(attentionSound, forKey: "attentionSound") }
+    }
+
     func requestPermission() {
         guard Bundle.main.bundleIdentifier != nil else { return }
         UNUserNotificationCenter.current().delegate = self
@@ -30,6 +34,11 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     func playReadySound() {
         guard soundEnabled else { return }
         NSSound(named: NSSound.Name(selectedSound))?.play()
+    }
+
+    func playAttentionSound() {
+        guard soundEnabled else { return }
+        NSSound(named: NSSound.Name(attentionSound))?.play()
     }
 
     func buildNotificationContent(for session: Session) -> UNMutableNotificationContent {

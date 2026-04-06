@@ -78,11 +78,11 @@ final class AppViewModel: ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
 
-        // Play sound + notify when a new session needs attention
+        // Play attention sound when a new session needs user input
         attentionMonitor.onAttentionNeeded = { [weak self] pid in
             guard let self else { return }
             if let session = self.processMonitor.sessions.first(where: { $0.pid == pid }) {
-                self.notificationService.playReadySound()
+                self.notificationService.playAttentionSound()
                 self.notificationService.sendNotification(for: session)
             }
         }
