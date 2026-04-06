@@ -282,9 +282,45 @@ struct ClydeAnimationView: View {
         }
     }
 
-    // Placeholder; real implementation in Task 4.
     private func drawTerminalBar(context: GraphicsContext) {
-        // intentionally empty for Task 3
+        let bgColor = Color(red: 0.05, green: 0.125, blue: 0.188) // #0d2030
+        let glyphColor = Color(red: 0.349, green: 1.0, blue: 0.702).opacity(0.4) // #59ffb3 @ 40%
+
+        // Fill the 16x2 background strip (rows 14 and 15).
+        let bgRect = CGRect(
+            x: 0,
+            y: CGFloat(14) * pixelSize,
+            width: CGFloat(16) * pixelSize,
+            height: CGFloat(2) * pixelSize
+        )
+        context.fill(Path(bgRect), with: .color(bgColor))
+
+        // Draw one glyph per cell (row 14 only; row 15 stays as background padding).
+        for col in 0..<16 {
+            let ch = terminalBuffer[col]
+            switch ch {
+            case "•":
+                // A small filled square, vertically centered in the 2-row strip.
+                let rect = CGRect(
+                    x: CGFloat(col) * pixelSize,
+                    y: CGFloat(14) * pixelSize + pixelSize * 0.25,
+                    width: pixelSize,
+                    height: pixelSize * 0.5
+                )
+                context.fill(Path(rect), with: .color(glyphColor))
+            case "-":
+                // A thin horizontal dash.
+                let rect = CGRect(
+                    x: CGFloat(col) * pixelSize + pixelSize * 0.1,
+                    y: CGFloat(14) * pixelSize + pixelSize * 0.4,
+                    width: pixelSize * 0.8,
+                    height: pixelSize * 0.2
+                )
+                context.fill(Path(rect), with: .color(glyphColor))
+            default:
+                break // empty cell
+            }
+        }
     }
 
     private func applyStateOpacity(animated: Bool) {
