@@ -29,6 +29,7 @@ struct WidgetView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.001)) // Capture hit tests in corners
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
@@ -49,7 +50,7 @@ struct WidgetView: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .contentShape(Rectangle())
         .onTapGesture {
             viewModel.toggleExpanded()
         }

@@ -100,9 +100,7 @@ enum HookInstaller {
             "hooks": [hookCommand]
         ]
 
-        // Notification: fires when Claude is waiting for user (idle prompt)
-        mergeHookBlock(&hooks, eventName: "Notification", block: hookBlock)
-        // PermissionRequest: fires when permission dialog appears
+        // PermissionRequest: fires only when permission dialog appears
         mergeHookBlock(&hooks, eventName: "PermissionRequest", block: hookBlock)
 
         settings["hooks"] = hooks
