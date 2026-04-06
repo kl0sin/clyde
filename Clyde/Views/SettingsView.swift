@@ -100,6 +100,11 @@ struct SettingsView: View {
                         }
                     }
 
+                    // Claude integration section
+                    SettingsSection(title: "Claude Integration") {
+                        ClaudeHooksRow()
+                    }
+
                     // About section
                     SettingsSection(title: "About") {
                         HStack {
@@ -145,6 +150,63 @@ struct SettingsView: View {
             soundEnabled = appViewModel.notificationService.soundEnabled
             selectedSound = appViewModel.notificationService.selectedSound
         }
+    }
+}
+
+struct ClaudeHooksRow: View {
+    @State private var isInstalled: Bool = HookInstaller.isInstalled
+    @State private var errorMessage: String?
+    @State private var isWorking = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Attention notifications")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+                Text("Detect when Claude needs permission or input")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(white: 0.45))
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 10))
+                    .foregroundColor(.red)
+            }
+
+            Button(action: toggle) {
+                HStack {
+                    Image(systemName: isInstalled ? "checkmark.circle.fill" : "arrow.down.circle")
+                        .font(.system(size: 11))
+                    Text(isInstalled ? "Installed — click to remove" : "Install Claude hook")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundColor(isInstalled ? .green : .blue)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background((isInstalled ? Color.green : Color.blue).opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .disabled(isWorking)
+        }
+    }
+
+    private func toggle() {
+        isWorking = true
+        errorMessage = nil
+        do {
+            if isInstalled {
+                try HookInstaller.uninstall()
+            } else {
+                try HookInstaller.install()
+            }
+            isInstalled = HookInstaller.isInstalled
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isWorking = false
     }
 }
 

@@ -12,6 +12,7 @@ struct Session: Identifiable, Equatable {
     var workingDirectory: String
     var customName: String?
     var statusChangedAt: Date
+    var needsAttention: Bool = false
 
     var displayName: String {
         if let customName, !customName.isEmpty {

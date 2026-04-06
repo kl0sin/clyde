@@ -48,7 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appViewModel = AppViewModel()
-        sessionViewModel = SessionListViewModel(processMonitor: appViewModel.processMonitor)
+        sessionViewModel = SessionListViewModel(
+            processMonitor: appViewModel.processMonitor,
+            attentionMonitor: appViewModel.attentionMonitor
+        )
 
         let contentView = ContentView(
             appViewModel: appViewModel,

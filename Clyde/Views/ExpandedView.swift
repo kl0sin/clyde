@@ -268,13 +268,27 @@ struct SessionRow: View {
 
             if !isEditing {
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text(SessionTheme.label(for: session.status))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(SessionTheme.color(for: session.status))
+                    if session.needsAttention {
+                        HStack(spacing: 4) {
+                            Image(systemName: "hand.tap.fill")
+                                .font(.system(size: 8))
+                            Text("Needs input")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundColor(.blue)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(SessionTheme.color(for: session.status).opacity(0.1))
+                        .background(Color.blue.opacity(0.15))
                         .clipShape(Capsule())
+                    } else {
+                        Text(SessionTheme.label(for: session.status))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(SessionTheme.color(for: session.status))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(SessionTheme.color(for: session.status).opacity(0.1))
+                            .clipShape(Capsule())
+                    }
 
                     Text(timeAgo(session.statusChangedAt))
                         .font(.system(size: 9))

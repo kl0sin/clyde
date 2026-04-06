@@ -9,6 +9,7 @@ final class AppViewModel: ObservableObject {
     let processMonitor: ProcessMonitor
     let terminalLauncher: TerminalLauncher
     let notificationService: NotificationService
+    let attentionMonitor: AttentionMonitor
 
     var clydeState: ClydeState {
         processMonitor.clydeState
@@ -32,7 +33,8 @@ final class AppViewModel: ObservableObject {
         self.init(
             processMonitor: ProcessMonitor(),
             terminalLauncher: TerminalLauncher(),
-            notificationService: NotificationService()
+            notificationService: NotificationService(),
+            attentionMonitor: AttentionMonitor()
         )
     }
 
@@ -40,27 +42,50 @@ final class AppViewModel: ObservableObject {
         self.init(
             processMonitor: processMonitor,
             terminalLauncher: TerminalLauncher(),
-            notificationService: NotificationService()
+            notificationService: NotificationService(),
+            attentionMonitor: AttentionMonitor()
         )
     }
 
     init(
         processMonitor: ProcessMonitor,
         terminalLauncher: TerminalLauncher,
-        notificationService: NotificationService
+        notificationService: NotificationService,
+        attentionMonitor: AttentionMonitor
     ) {
         self.processMonitor = processMonitor
         self.terminalLauncher = terminalLauncher
         self.notificationService = notificationService
+        self.attentionMonitor = attentionMonitor
 
         processMonitor.onSessionBecameIdle = { [weak notificationService] session in
             notificationService?.sendNotification(for: session)
             notificationService?.playReadySound()
         }
 
+        // Clear attention when session starts processing again
         processMonitor.objectWillChange
+            .sink { [weak self] _ in
+                guard let self else { return }
+                for session in self.processMonitor.sessions where session.status == .busy {
+                    self.attentionMonitor.clearAttention(pid: session.pid)
+                }
+                self.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        attentionMonitor.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+
+        // Play sound + notify when a new session needs attention
+        attentionMonitor.onAttentionNeeded = { [weak self] pid in
+            guard let self else { return }
+            if let session = self.processMonitor.sessions.first(where: { $0.pid == pid }) {
+                self.notificationService.playReadySound()
+                self.notificationService.sendNotification(for: session)
+            }
+        }
     }
 
     func toggleExpanded() {
@@ -72,6 +97,8 @@ final class AppViewModel: ObservableObject {
     }
 
     func focusSession(_ session: Session) {
+        // Focusing implicitly handles the attention
+        attentionMonitor.clearAttention(pid: session.pid)
         Task {
             try? await terminalLauncher.focusSession(session)
         }
@@ -81,12 +108,12 @@ final class AppViewModel: ObservableObject {
         notificationService.requestPermission()
         terminalLauncher.detectTerminals()
 
-        // Apply saved polling interval
         let saved = UserDefaults.standard.double(forKey: "pollingInterval")
         if saved > 0 {
             processMonitor.updatePollingInterval(saved)
         }
 
         processMonitor.startPolling()
+        attentionMonitor.start()
     }
 }
