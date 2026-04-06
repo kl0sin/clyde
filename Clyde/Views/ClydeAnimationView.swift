@@ -4,31 +4,34 @@ struct ClydeSprite {
     // 16x16 grid, each row is an array of optional colors
     // nil = transparent, values = Color
     static let body: [[Color?]] = {
-        let e: Color? = nil        // empty
-        let w: Color? = .white     // white body
-        let g: Color? = .green     // green (antenna tip)
-        let d: Color? = Color(white: 0.85) // light gray
-        let b: Color? = Color(red: 0.1, green: 0.1, blue: 0.1) // dark (eyes/mouth)
-        let a: Color? = Color(white: 0.65) // medium gray (legs)
+        let e: Color? = nil                                       // empty
+        let w: Color? = .white                                    // main body white
+        let g: Color? = Color(red: 0.3, green: 1.0, blue: 0.5)    // antenna tip (glow green)
+        let h: Color? = Color(white: 0.95)                        // highlight edge
+        let d: Color? = Color(white: 0.65)                        // shadow / detail
+        let b: Color? = Color(red: 0.08, green: 0.08, blue: 0.1)  // dark (outline/eyes)
+        let c: Color? = Color(red: 0.35, green: 0.7, blue: 1.0)   // cyan chest panel
+        let y: Color? = Color(red: 1.0, green: 0.85, blue: 0.2)   // yellow bolt
+        let f: Color? = Color(white: 0.45)                        // feet (darker)
 
         return [
             //0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
             [e, e, e, e, e, e, e, g, g, e, e, e, e, e, e, e], // 0  antenna tip
             [e, e, e, e, e, e, e, d, d, e, e, e, e, e, e, e], // 1  antenna stem
-            [e, e, e, e, e, e, e, d, d, e, e, e, e, e, e, e], // 2  antenna stem
-            [e, e, e, e, d, d, d, d, d, d, d, d, e, e, e, e], // 3  head top
-            [e, e, e, e, w, w, w, w, w, w, w, w, e, e, e, e], // 4  head
-            [e, e, e, e, w, b, b, w, w, b, b, w, e, e, e, e], // 5  eyes
-            [e, e, e, e, w, b, b, w, w, b, b, w, e, e, e, e], // 6  eyes
-            [e, e, e, e, w, w, w, w, w, w, w, w, e, e, e, e], // 7  mouth area
-            [e, e, e, e, w, w, w, w, w, w, w, w, e, e, e, e], // 8  head bottom
-            [e, e, e, e, e, d, d, d, d, d, d, e, e, e, e, e], // 9  neck/body top
-            [e, e, e, w, w, d, d, d, d, d, d, w, w, e, e, e], // 10 body + arms
-            [e, e, e, w, w, d, d, d, d, d, d, w, w, e, e, e], // 11 body + arms
-            [e, e, e, w, w, d, d, d, d, d, d, w, w, e, e, e], // 12 body + arms
-            [e, e, e, e, e, e, a, a, a, a, e, e, e, e, e, e], // 13 legs top
-            [e, e, e, e, e, e, a, a, a, a, e, e, e, e, e, e], // 14 legs bottom
-            [e, e, e, e, e, e, a, a, a, a, e, e, e, e, e, e], // 15 feet
+            [e, e, e, e, e, e, b, d, d, b, e, e, e, e, e, e], // 2  antenna base
+            [e, e, e, e, b, b, h, h, h, h, b, b, e, e, e, e], // 3  head top + outline
+            [e, e, e, b, h, w, w, w, w, w, w, h, b, e, e, e], // 4  head
+            [e, e, e, b, w, b, b, w, w, b, b, w, b, e, e, e], // 5  eyes (outer)
+            [e, e, e, b, w, b, b, w, w, b, b, w, b, e, e, e], // 6  eyes (inner)
+            [e, e, e, b, w, w, w, w, w, w, w, w, b, e, e, e], // 7  cheeks
+            [e, e, e, b, h, w, w, w, w, w, w, h, b, e, e, e], // 8  head bottom
+            [e, e, e, e, b, b, b, b, b, b, b, b, e, e, e, e], // 9  neck outline
+            [e, e, b, h, w, c, c, c, c, c, c, w, h, b, e, e], // 10 shoulders + chest
+            [e, e, b, w, y, c, c, c, c, c, c, y, w, b, e, e], // 11 bolts + chest
+            [e, e, b, h, w, c, c, c, c, c, c, w, h, b, e, e], // 12 body
+            [e, e, e, b, b, d, d, d, d, d, d, b, b, e, e, e], // 13 waist
+            [e, e, e, e, b, f, f, b, b, f, f, b, e, e, e, e], // 14 feet top
+            [e, e, e, e, b, b, b, e, e, b, b, b, e, e, e, e], // 15 feet bottom
         ]
     }()
 
@@ -45,7 +48,7 @@ struct ClydeSprite {
     // Smile mouth (idle): row 7
     static let mouthSmile: [Color?] = {
         let w: Color? = .white
-        let g: Color? = .green
+        let g: Color? = Color(red: 0.3, green: 1.0, blue: 0.5)
         return [w, w, g, w, w, g, w, w] // green corners = smile
     }()
 
