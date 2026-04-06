@@ -36,6 +36,8 @@ final class ProcessMonitor: ObservableObject {
 
     private var pollTask: Task<Void, Never>?
     private var stateWatchTask: Task<Void, Never>?
+    private var stateDirSource: DispatchSourceFileSystemObject?
+    private var stateDirFD: Int32 = -1
 
     /// PIDs the hook state watcher currently considers busy.
     /// This is updated by a fast (~500ms) file-system poll on `~/.clyde/state/`,
@@ -51,29 +53,46 @@ final class ProcessMonitor: ObservableObject {
         pollTask?.cancel()
     }
 
+    /// Hook-derived metadata for discovered sessions, keyed by PID.
+    /// Populated by `discoverPIDs()` from -info files and consumed by
+    /// `updatedSession` when building Session structs.
+    private(set) var hookInfoByPID: [pid_t: HookInfo] = [:]
+
+    struct HookInfo: Equatable {
+        let sessionId: String
+        let cwd: String
+    }
+
     func discoverPIDs() async -> [pid_t] {
         // Primary: read PIDs from hook-written -info files. Sessions started
         // after the hook was installed are tracked here, with no polling.
         var hookPIDs: Set<pid_t> = []
+        var hookInfo: [pid_t: HookInfo] = [:]
         if let infoFiles = try? FileManager.default.contentsOfDirectory(
             at: AppPaths.stateDir,
             includingPropertiesForKeys: nil
         ) {
             for file in infoFiles where file.lastPathComponent.hasSuffix("-info") {
-                guard let pid = readMarkerPID(file: file) else {
+                guard let info = readInfoFile(file: file) else {
                     try? FileManager.default.removeItem(at: file)
                     continue
                 }
                 // Drop info files for dead Claude processes (crash without SessionEnd).
-                if kill(pid, 0) != 0 && errno == ESRCH {
+                if kill(info.pid, 0) != 0 && errno == ESRCH {
                     try? FileManager.default.removeItem(at: file)
                     continue
                 }
-                hookPIDs.insert(pid)
+                hookPIDs.insert(info.pid)
+                if !info.sessionId.isEmpty {
+                    hookInfo[info.pid] = HookInfo(sessionId: info.sessionId, cwd: info.cwd)
+                }
             }
         }
+        hookInfoByPID = hookInfo
 
         // Fallback: pgrep for sessions that started before the hook was installed.
+        // Match common variants: bare `claude`, `claude-code`, and node processes
+        // that look like a Claude Code CLI invocation.
         var pgrepPIDs: Set<pid_t> = []
         if let output = try? await shell.run("pgrep -x claude"), !output.isEmpty {
             for line in output.components(separatedBy: "\n") {
@@ -82,8 +101,36 @@ final class ProcessMonitor: ObservableObject {
                 }
             }
         }
+        if let output = try? await shell.run("pgrep -fl '@anthropic-ai/claude-code' 2>/dev/null"),
+           !output.isEmpty {
+            for line in output.components(separatedBy: "\n") {
+                let parts = line.split(separator: " ", maxSplits: 1)
+                if let first = parts.first, let pid = Int32(first.trimmingCharacters(in: .whitespaces)) {
+                    pgrepPIDs.insert(pid)
+                }
+            }
+        }
 
-        return Array(hookPIDs.union(pgrepPIDs))
+        // Stable order: sort numerically by PID. The session list is rendered
+        // in this order, so without sorting it would jump on every poll.
+        return hookPIDs.union(pgrepPIDs).sorted()
+    }
+
+    private struct ParsedInfo {
+        let pid: pid_t
+        let sessionId: String
+        let cwd: String
+    }
+
+    private func readInfoFile(file: URL) -> ParsedInfo? {
+        guard let data = try? Data(contentsOf: file),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let pidValue = json["pid"] as? Int else {
+            return nil
+        }
+        let sessionId = (json["session_id"] as? String) ?? ""
+        let cwd = (json["cwd"] as? String) ?? ""
+        return ParsedInfo(pid: pid_t(pidValue), sessionId: sessionId, cwd: cwd)
     }
 
     /// Process names that Claude spawns as background helpers — not real tool work.
@@ -209,10 +256,19 @@ final class ProcessMonitor: ObservableObject {
 
     /// Update an existing session or create a new one. Caches CWD detection.
     private func updatedSession(pid: pid_t, newStatus: SessionStatus) async -> Session {
+        let info = hookInfoByPID[pid]
+
         if var existing = sessions.first(where: { $0.pid == pid }) {
-            // CWD detection is expensive — only do it once per session
+            // Backfill metadata from the hook info if it became available.
+            if existing.sessionId == nil, let info {
+                existing.sessionId = info.sessionId
+            }
             if existing.workingDirectory.isEmpty {
-                existing.workingDirectory = await detectCWD(pid: pid)
+                if let info, !info.cwd.isEmpty {
+                    existing.workingDirectory = info.cwd
+                } else {
+                    existing.workingDirectory = await detectCWD(pid: pid)
+                }
             }
 
             if existing.status != newStatus {
@@ -224,8 +280,10 @@ final class ProcessMonitor: ObservableObject {
             }
             return existing
         } else {
-            let cwd = await detectCWD(pid: pid)
-            return Session(pid: pid, workingDirectory: cwd, status: newStatus)
+            let cwd = info?.cwd.isEmpty == false ? info!.cwd : await detectCWD(pid: pid)
+            var session = Session(pid: pid, workingDirectory: cwd, status: newStatus)
+            session.sessionId = info?.sessionId
+            return session
         }
     }
 
@@ -334,11 +392,16 @@ final class ProcessMonitor: ObservableObject {
             }
         }
 
+        // Event-driven: react to state-dir changes immediately via FSEvents.
+        startStateDirWatcher()
+
+        // Backup periodic tick (1 s): handles linger expiry that has no
+        // FSEvents trigger (no file change happens when linger times out).
         stateWatchTask?.cancel()
         stateWatchTask = Task { [weak self] in
             while !Task.isCancelled {
                 self?.pollHookState()
-                try? await Task.sleep(for: .milliseconds(250))
+                try? await Task.sleep(for: .seconds(1))
             }
         }
     }
@@ -348,5 +411,46 @@ final class ProcessMonitor: ObservableObject {
         pollTask = nil
         stateWatchTask?.cancel()
         stateWatchTask = nil
+        stopStateDirWatcher()
+    }
+
+    /// Watches `~/.clyde/state/` for any directory entry change (file added,
+    /// removed, renamed) via DispatchSource. Fires `pollHookState` immediately
+    /// so a hook write is reflected in the UI within ~1 ms.
+    private func startStateDirWatcher() {
+        stopStateDirWatcher()
+
+        // Make sure the directory exists before opening — otherwise open() fails.
+        try? FileManager.default.createDirectory(at: AppPaths.stateDir, withIntermediateDirectories: true)
+
+        let fd = open(AppPaths.stateDir.path, O_EVTONLY)
+        guard fd >= 0 else {
+            ClydeLog.process.error("Failed to open state dir for FSEvents watching")
+            return
+        }
+        stateDirFD = fd
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .delete, .rename, .extend, .attrib],
+            queue: DispatchQueue.main
+        )
+        source.setEventHandler { [weak self] in
+            self?.pollHookState()
+        }
+        source.setCancelHandler { [weak self] in
+            if let fd = self?.stateDirFD, fd >= 0 {
+                close(fd)
+                self?.stateDirFD = -1
+            }
+        }
+        source.resume()
+        stateDirSource = source
+        ClydeLog.process.info("Started FSEvents watcher on \(AppPaths.stateDir.path, privacy: .public)")
+    }
+
+    private func stopStateDirWatcher() {
+        stateDirSource?.cancel()
+        stateDirSource = nil
     }
 }

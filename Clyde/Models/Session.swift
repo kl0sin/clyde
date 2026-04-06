@@ -8,6 +8,9 @@ enum SessionStatus: Equatable {
 struct Session: Identifiable, Equatable {
     let id: UUID
     let pid: pid_t
+    /// Stable identity from Claude Code's hook payload (UUID). Available for
+    /// sessions discovered via SessionStart hook; nil for legacy / pgrep-only.
+    var sessionId: String?
     var status: SessionStatus
     var workingDirectory: String
     var customName: String?
