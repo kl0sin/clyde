@@ -37,6 +37,7 @@ final class ProcessMonitorTests: XCTestCase {
     func testClassifiesBusyWhenChildrenExist() async {
         let shell = MockShellExecutor()
         shell.responses["pgrep -P"] = "9999\n9998"
+        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool\nS+ /bin/bash other-tool"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
         let status = await monitor.classifyStatus(pid: 1234)
@@ -64,6 +65,7 @@ final class ProcessMonitorTests: XCTestCase {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234"
         shell.responses["pgrep -P"] = "9999"
+        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
         shell.responses["lsof"] = "n/Users/me/Projects/shipyard/.claude/settings.local.json"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
@@ -77,6 +79,7 @@ final class ProcessMonitorTests: XCTestCase {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234"
         shell.responses["pgrep -P"] = "9999"
+        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
         shell.responses["lsof"] = "n/Users/me/test/.claude/settings.local.json"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
@@ -92,6 +95,7 @@ final class ProcessMonitorTests: XCTestCase {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234"
         shell.responses["pgrep -P"] = "9999"
+        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
         shell.responses["lsof"] = "n/Users/me/test/.claude/settings.local.json"
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 

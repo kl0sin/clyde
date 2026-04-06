@@ -7,6 +7,7 @@ final class IntegrationTests: XCTestCase {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1111\n2222"
         shell.responses["pgrep -P"] = "9999" // children = busy
+        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
         shell.responses["lsof"] = "n/Users/me/project-a/.claude/settings.local.json"
 
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
@@ -33,6 +34,7 @@ final class IntegrationTests: XCTestCase {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234"
         shell.responses["pgrep -P"] = "9999" // busy
+        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
         shell.responses["lsof"] = "n/Users/me/shipyard/.claude/settings.local.json"
 
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
@@ -49,6 +51,7 @@ final class IntegrationTests: XCTestCase {
 
         // Children gone = idle, notification fires immediately
         shell.responses.removeValue(forKey: "pgrep -P")
+        shell.responses.removeValue(forKey: "ps -o stat=,args= -p")
         await monitor.poll()
 
         XCTAssertNotNil(notifiedSession)

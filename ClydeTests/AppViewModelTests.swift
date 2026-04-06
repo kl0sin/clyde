@@ -20,6 +20,7 @@ final class AppViewModelTests: XCTestCase {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234"
         shell.responses["pgrep -P"] = "9999"
+        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
         shell.responses["lsof"] = "n/Users/me/test/.claude/settings.local.json"
 
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)

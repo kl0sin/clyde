@@ -7,6 +7,7 @@ final class SessionListViewModelTests: XCTestCase {
         let shell = MockShellExecutor()
         shell.responses["pgrep -x claude"] = "1234\n5678"
         shell.responses["pgrep -P"] = "9999" // children = busy
+        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
         shell.responses["lsof"] = "n/Users/me/test/.claude/settings.local.json"
 
         let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)

@@ -17,9 +17,8 @@ final class AttentionMonitorTests: XCTestCase {
 
     private func writeEventFile(pid: pid_t, modified: Date = Date()) throws {
         let file = tempDir.appendingPathComponent("\(pid).json")
-        try #"{"pid":1234,"event":"Notification","timestamp":0}"#.write(
-            to: file, atomically: true, encoding: .utf8
-        )
+        let body = #"{"pid":\#(pid),"event":"PermissionRequest","timestamp":0}"#
+        try body.write(to: file, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: file.path)
     }
 
