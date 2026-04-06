@@ -55,26 +55,6 @@ struct SettingsView: View {
                                     appViewModel.updatePollingInterval(pollingInterval)
                                 }
                         }
-
-                        Divider().background(Color(white: 0.2))
-
-                        HStack {
-                            Text("Terminal")
-                                .font(.system(size: 12))
-                                .foregroundColor(.white)
-                            Spacer()
-                            Picker("", selection: .init(
-                                get: { appViewModel.terminalLauncher.selectedTerminalName },
-                                set: { appViewModel.terminalLauncher.selectedTerminalName = $0 }
-                            )) {
-                                ForEach(appViewModel.terminalLauncher.availableTerminals, id: \.name) { terminal in
-                                    Text(terminal.name).tag(terminal.name)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(width: 130)
-                        }
                     }
 
                     // Sound section
