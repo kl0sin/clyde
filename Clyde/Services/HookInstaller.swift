@@ -100,10 +100,10 @@ enum HookInstaller {
             "hooks": [hookCommand]
         ]
 
-        // Merge into Notification event
+        // Notification: fires when Claude is waiting for user (idle prompt)
         mergeHookBlock(&hooks, eventName: "Notification", block: hookBlock)
-        // Also hook PreToolUse with matcher for permission prompts
-        mergeHookBlock(&hooks, eventName: "PreToolUse", block: hookBlock)
+        // PermissionRequest: fires when permission dialog appears
+        mergeHookBlock(&hooks, eventName: "PermissionRequest", block: hookBlock)
 
         settings["hooks"] = hooks
 
@@ -130,7 +130,7 @@ enum HookInstaller {
 
         if var hooks = settings["hooks"] as? [String: Any] {
             removeClydeHook(&hooks, eventName: "Notification")
-            removeClydeHook(&hooks, eventName: "PreToolUse")
+            removeClydeHook(&hooks, eventName: "PermissionRequest")
             settings["hooks"] = hooks
         }
 
