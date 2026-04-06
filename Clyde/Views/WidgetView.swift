@@ -66,7 +66,28 @@ struct WidgetView: View {
     }
 }
 
-/// Compact status display: colored dot + count, only shown for non-zero states
+private struct StatusDotCount: View {
+    let count: Int
+    let color: Color
+    let pulse: Bool
+    let visible: Bool
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(color)
+                .frame(width: 5, height: 5)
+                .opacity(pulse ? 0.35 : 1.0)
+            Text("\(count)")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundColor(color)
+                .monospacedDigit()
+        }
+        .opacity(visible ? 1 : 0)
+    }
+}
+
+/// Compact status display: reserved width for both processing & ready slots
 private struct CompactStatusView: View {
     @ObservedObject var viewModel: AppViewModel
     @State private var isPulsing = false
@@ -76,38 +97,33 @@ private struct CompactStatusView: View {
         let processing = sessions.filter { $0.status == .busy }.count
         let ready = sessions.count - processing
 
-        HStack(spacing: 6) {
+        Group {
             if sessions.isEmpty {
                 Text("idle")
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundColor(Color(white: 0.5))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                if processing > 0 {
-                    HStack(spacing: 3) {
-                        Circle()
-                            .fill(Color.orange)
-                            .frame(width: 5, height: 5)
-                            .opacity(isPulsing ? 0.35 : 1.0)
-                        Text("\(processing)")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundColor(.orange)
-                            .monospacedDigit()
-                    }
+                HStack(spacing: 6) {
+                    // Always reserve slot for processing
+                    StatusDotCount(
+                        count: processing,
+                        color: .orange,
+                        pulse: isPulsing,
+                        visible: processing > 0
+                    )
+                    // Always reserve slot for ready
+                    StatusDotCount(
+                        count: ready,
+                        color: .green,
+                        pulse: false,
+                        visible: ready > 0
+                    )
                 }
-                if ready > 0 {
-                    HStack(spacing: 3) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 5, height: 5)
-                        Text("\(ready)")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundColor(.green)
-                            .monospacedDigit()
-                    }
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .fixedSize()
+        .frame(width: 56, alignment: .leading)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                 isPulsing = true
