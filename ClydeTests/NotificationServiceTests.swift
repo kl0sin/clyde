@@ -1,6 +1,7 @@
 import XCTest
 @testable import Clyde
 
+@MainActor
 final class NotificationServiceTests: XCTestCase {
     func testNotificationContentForSession() {
         let service = NotificationService()

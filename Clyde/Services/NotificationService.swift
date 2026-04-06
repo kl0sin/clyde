@@ -1,39 +1,61 @@
 import Foundation
 import UserNotifications
 import AppKit
+import Combine
 
-final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
+/// Plays sounds and sends system notifications when Claude sessions change state.
+/// State is backed by UserDefaults; views observe via @Published.
+@MainActor
+final class NotificationService: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
+    @Published var soundEnabled: Bool {
+        didSet { UserDefaults.standard.set(soundEnabled, forKey: Keys.soundEnabled) }
+    }
+
+    @Published var readySound: String {
+        didSet { UserDefaults.standard.set(readySound, forKey: Keys.readySound) }
+    }
+
+    @Published var attentionSound: String {
+        didSet { UserDefaults.standard.set(attentionSound, forKey: Keys.attentionSound) }
+    }
+
     private var isAuthorized = false
     var onNotificationClicked: ((pid_t) -> Void)?
 
-    var soundEnabled: Bool = UserDefaults.standard.object(forKey: "soundEnabled") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(soundEnabled, forKey: "soundEnabled") }
+    private enum Keys {
+        static let soundEnabled = "soundEnabled"
+        static let readySound = "selectedSound" // legacy key, kept for compatibility
+        static let attentionSound = "attentionSound"
     }
 
-    var selectedSound: String = UserDefaults.standard.string(forKey: "selectedSound") ?? "Glass" {
-        didSet { UserDefaults.standard.set(selectedSound, forKey: "selectedSound") }
-    }
-
-    var attentionSound: String = UserDefaults.standard.string(forKey: "attentionSound") ?? "Hero" {
-        didSet { UserDefaults.standard.set(attentionSound, forKey: "attentionSound") }
+    override init() {
+        let defaults = UserDefaults.standard
+        self.soundEnabled = defaults.object(forKey: Keys.soundEnabled) as? Bool ?? true
+        self.readySound = defaults.string(forKey: Keys.readySound) ?? "Glass"
+        self.attentionSound = defaults.string(forKey: Keys.attentionSound) ?? "Hero"
+        super.init()
     }
 
     func requestPermission() {
-        guard Bundle.main.bundleIdentifier != nil else { return }
+        guard Bundle.main.bundleIdentifier != nil else {
+            ClydeLog.general.info("Skipping notification permission (no bundle id)")
+            return
+        }
         UNUserNotificationCenter.current().delegate = self
         Task {
             do {
-                let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
-                await MainActor.run {
-                    self.isAuthorized = granted
-                }
-            } catch {}
+                let granted = try await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .sound])
+                await MainActor.run { self.isAuthorized = granted }
+            } catch {
+                ClydeLog.general.error("Notification permission error: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
     func playReadySound() {
         guard soundEnabled else { return }
-        NSSound(named: NSSound.Name(selectedSound))?.play()
+        NSSound(named: NSSound.Name(readySound))?.play()
     }
 
     func playAttentionSound() {
@@ -61,18 +83,20 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         UNUserNotificationCenter.current().add(request)
     }
 
-    func userNotificationCenter(
+    // MARK: - Delegate
+
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         if let pid = response.notification.request.content.userInfo["pid"] as? pid_t {
-            onNotificationClicked?(pid)
+            Task { @MainActor in self.onNotificationClicked?(pid) }
         }
         completionHandler()
     }
 
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void

@@ -7,7 +7,16 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Clyde",
-            path: "Clyde"
+            path: "Clyde",
+            exclude: ["Info.plist"],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "Clyde/Info.plist"
+                ])
+            ]
         ),
         .testTarget(
             name: "ClydeTests",
