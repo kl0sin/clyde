@@ -72,6 +72,38 @@ struct ClydeSprite {
             [w, w, w, w, w, w, w, w], // row 6 - closed
         ]
     }()
+
+    // Busy-state face sprite: 16x16 close-up of Clyde's head.
+    // Rows 14-15 are the terminal bar area (rendered dynamically, not from this sprite).
+    static let busyFace: [[Color?]] = {
+        let e: Color? = nil
+        let w: Color? = .white
+        let h: Color? = Color(white: 0.95)
+        let d: Color? = Color(white: 0.65)
+        let b: Color? = Color(red: 0.08, green: 0.08, blue: 0.1)
+        let g: Color? = Color(red: 0.3, green: 1.0, blue: 0.5)
+        let r: Color? = Color(red: 1.0, green: 0.6, blue: 0.4) // focus blush
+
+        return [
+            //0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+            [e, e, e, e, e, e, e, g, g, e, e, e, e, e, e, e], // 0  antenna tip
+            [e, e, e, e, e, e, b, d, d, b, e, e, e, e, e, e], // 1  antenna stem
+            [e, e, b, b, b, h, h, h, h, h, h, b, b, b, e, e], // 2  head top
+            [e, b, h, w, w, w, w, w, w, w, w, w, w, h, b, e], // 3  forehead
+            [b, h, w, w, w, w, w, w, w, w, w, w, w, w, h, b], // 4  brow line
+            [b, w, w, w, b, b, w, w, w, w, b, b, w, w, w, b], // 5  eyes (sockets)
+            [b, w, w, w, b, b, w, w, w, w, b, b, w, w, w, b], // 6  eyes (pupils drawn dynamically)
+            [b, w, w, w, w, w, w, w, w, w, w, w, w, w, w, b], // 7  cheeks
+            [b, w, w, w, w, b, b, b, b, b, b, w, w, w, w, b], // 8  mouth (dynamic)
+            [b, h, w, w, w, r, w, w, w, w, r, w, w, w, h, b], // 9  lower cheeks (focus blush)
+            [b, h, w, w, w, w, w, w, w, w, w, w, w, w, h, b], // 10 chin
+            [e, b, h, w, w, w, w, w, w, w, w, w, w, h, b, e], // 11 jaw
+            [e, e, b, b, h, w, w, w, w, w, w, h, b, b, e, e], // 12 chin bottom
+            [e, e, e, e, b, b, b, b, b, b, b, b, e, e, e, e], // 13 neck outline
+            [e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e], // 14 terminal bar (dynamic)
+            [e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e], // 15 terminal bar (dynamic)
+        ]
+    }()
 }
 
 struct ClydeAnimationView: View {
