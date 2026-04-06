@@ -69,21 +69,21 @@ struct WidgetView: View {
 private struct StatusDotCount: View {
     let count: Int
     let color: Color
+    let activeColor: Color
     let pulse: Bool
-    let visible: Bool
+    let dim: Bool
 
     var body: some View {
         HStack(spacing: 3) {
             Circle()
-                .fill(color)
+                .fill(dim ? Color(white: 0.3) : color)
                 .frame(width: 5, height: 5)
                 .opacity(pulse ? 0.35 : 1.0)
             Text("\(count)")
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundColor(color)
+                .foregroundColor(dim ? Color(white: 0.35) : activeColor)
                 .monospacedDigit()
         }
-        .opacity(visible ? 1 : 0)
     }
 }
 
@@ -99,31 +99,33 @@ private struct CompactStatusView: View {
 
         Group {
             if sessions.isEmpty {
-                Text("idle")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundColor(Color(white: 0.5))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack {
+                    Spacer(minLength: 0)
+                    Text("idle")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundColor(Color(white: 0.5))
+                    Spacer(minLength: 0)
+                }
             } else {
-                HStack(spacing: 6) {
-                    // Always reserve slot for processing
+                HStack(spacing: 8) {
                     StatusDotCount(
                         count: processing,
                         color: .orange,
-                        pulse: isPulsing,
-                        visible: processing > 0
+                        activeColor: .orange,
+                        pulse: isPulsing && processing > 0,
+                        dim: processing == 0
                     )
-                    // Always reserve slot for ready
                     StatusDotCount(
                         count: ready,
                         color: .green,
+                        activeColor: .green,
                         pulse: false,
-                        visible: ready > 0
+                        dim: ready == 0
                     )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(width: 56, alignment: .leading)
+        .frame(width: 60)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                 isPulsing = true
