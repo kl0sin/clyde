@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let collapsedSize = NSSize(width: 150, height: 52)
     private let defaultExpandedSize = NSSize(width: 400, height: 420)
     private var lastExpandedSize: NSSize?
+    private var savedWidgetOrigin: NSPoint?  // Anchor: where widget lives on screen
     private var isAnimating = false
     private var cancellables = Set<AnyCancellable>()
     private let snapMargin: CGFloat = 12
@@ -60,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         panel = FloatingPanel(contentRect: NSRect(origin: initialOrigin, size: collapsedSize))
+        savedWidgetOrigin = initialOrigin
 
         let hostingView = NSHostingView(rootView: contentView)
         panel.contentView = hostingView
@@ -169,33 +171,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let currentFrame = panel.frame
         let screenFrame = NSScreen.main?.visibleFrame ?? .zero
 
+        // On first expand or if widget moved, capture its origin as the anchor
+        if !collapsed && savedWidgetOrigin == nil {
+            savedWidgetOrigin = currentFrame.origin
+        }
         if collapsed {
+            // Save expanded size for next open
             lastExpandedSize = currentFrame.size
         }
 
         let targetSize = collapsed ? collapsedSize : (lastExpandedSize ?? defaultExpandedSize)
 
-        // Widget has 10pt horizontal padding — visual edge is inset from panel frame
-        let widgetPadding: CGFloat = collapsed ? 0 : 10
-
-        // Anchor based on which half of screen the widget is on
-        let anchorRight = currentFrame.midX > screenFrame.midX
+        // The widget anchor is the single source of truth
+        let widgetOrigin = savedWidgetOrigin ?? currentFrame.origin
+        let widgetTopY = widgetOrigin.y + collapsedSize.height  // top edge in macOS coords
 
         var newOrigin: NSPoint
-        if anchorRight {
-            // Align visual right edges: expanded right = widget visual right
-            let visualRight = currentFrame.maxX - widgetPadding
-            newOrigin = NSPoint(
-                x: visualRight - targetSize.width,
-                y: currentFrame.maxY - targetSize.height
-            )
+        if collapsed {
+            // Returning to widget — use saved origin directly
+            newOrigin = widgetOrigin
         } else {
-            // Align visual left edges: expanded left = widget visual left
-            let visualLeft = currentFrame.minX + widgetPadding
-            newOrigin = NSPoint(
-                x: visualLeft,
-                y: currentFrame.maxY - targetSize.height
-            )
+            // Expanding — anchor to widget's visual edge based on screen half
+            let widgetCenterX = widgetOrigin.x + collapsedSize.width / 2
+            let anchorRight = widgetCenterX > screenFrame.midX
+
+            if anchorRight {
+                // Align right edges
+                newOrigin = NSPoint(
+                    x: widgetOrigin.x + collapsedSize.width - targetSize.width,
+                    y: widgetTopY - targetSize.height
+                )
+            } else {
+                // Align left edges
+                newOrigin = NSPoint(
+                    x: widgetOrigin.x,
+                    y: widgetTopY - targetSize.height
+                )
+            }
         }
 
         // Clamp to screen bounds
@@ -245,10 +257,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor @objc private func windowDidMove(_ notification: Notification) {
         guard !isAnimating else { return }
+        // Only track drags when in collapsed widget mode
+        guard appViewModel.isCollapsed else { return }
         // Debounce — snap after user stops dragging (no move for 0.15s)
         snapDebounceWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            self?.snapToNearestEdge()
+            guard let self else { return }
+            self.snapToNearestEdge()
+            // Save the new widget position as anchor
+            self.savedWidgetOrigin = self.panel.frame.origin
         }
         snapDebounceWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
