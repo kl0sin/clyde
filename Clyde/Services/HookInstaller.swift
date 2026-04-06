@@ -81,6 +81,14 @@ enum HookInstaller {
     ESC_SID=$(printf '%s' "$SESSION_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
     case "$HOOK_EVENT" in
+        SessionStart)
+            cat > "$STATE_DIR/$KEY-info" <<EOF
+    {"session_id": "$ESC_SID", "pid": $CLAUDE_PID, "cwd": "$ESC_CWD", "started_at": $TIMESTAMP}
+    EOF
+            ;;
+        SessionEnd)
+            rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$EVENTS_DIR/$KEY.json"
+            ;;
         PermissionRequest)
             cat > "$EVENTS_DIR/$KEY.json" <<EOF
     {"session_id": "$ESC_SID", "pid": $CLAUDE_PID, "cwd": "$ESC_CWD", "event": "$HOOK_EVENT", "timestamp": $TIMESTAMP}
@@ -100,10 +108,18 @@ enum HookInstaller {
     """##
 
     /// Claude Code hook events that Clyde registers for.
-    /// - `PermissionRequest`: fires when Claude needs user approval (attention)
-    /// - `UserPromptSubmit`: fires when the user sends a new prompt (busy start)
-    /// - `Stop`: fires when Claude finishes responding (busy end)
-    static let registeredHookEvents = ["PermissionRequest", "UserPromptSubmit", "Stop"]
+    /// - `SessionStart`: a Claude session is born → write info file
+    /// - `SessionEnd`:   a Claude session exits → drop info + busy markers
+    /// - `UserPromptSubmit`: user sent a new prompt → busy start
+    /// - `Stop`: Claude finished responding → busy end
+    /// - `PermissionRequest`: Claude needs user approval → attention
+    static let registeredHookEvents = [
+        "SessionStart",
+        "SessionEnd",
+        "UserPromptSubmit",
+        "Stop",
+        "PermissionRequest",
+    ]
 
     static var isInstalled: Bool {
         FileManager.default.fileExists(atPath: AppPaths.clydeHookScript.path)

@@ -52,12 +52,38 @@ final class ProcessMonitor: ObservableObject {
     }
 
     func discoverPIDs() async -> [pid_t] {
-        guard let output = try? await shell.run("pgrep -x claude"), !output.isEmpty else {
-            return []
+        // Primary: read PIDs from hook-written -info files. Sessions started
+        // after the hook was installed are tracked here, with no polling.
+        var hookPIDs: Set<pid_t> = []
+        if let infoFiles = try? FileManager.default.contentsOfDirectory(
+            at: AppPaths.stateDir,
+            includingPropertiesForKeys: nil
+        ) {
+            for file in infoFiles where file.lastPathComponent.hasSuffix("-info") {
+                guard let pid = readMarkerPID(file: file) else {
+                    try? FileManager.default.removeItem(at: file)
+                    continue
+                }
+                // Drop info files for dead Claude processes (crash without SessionEnd).
+                if kill(pid, 0) != 0 && errno == ESRCH {
+                    try? FileManager.default.removeItem(at: file)
+                    continue
+                }
+                hookPIDs.insert(pid)
+            }
         }
-        return output
-            .components(separatedBy: "\n")
-            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
+
+        // Fallback: pgrep for sessions that started before the hook was installed.
+        var pgrepPIDs: Set<pid_t> = []
+        if let output = try? await shell.run("pgrep -x claude"), !output.isEmpty {
+            for line in output.components(separatedBy: "\n") {
+                if let pid = Int32(line.trimmingCharacters(in: .whitespaces)) {
+                    pgrepPIDs.insert(pid)
+                }
+            }
+        }
+
+        return Array(hookPIDs.union(pgrepPIDs))
     }
 
     /// Process names that Claude spawns as background helpers — not real tool work.
@@ -207,6 +233,10 @@ final class ProcessMonitor: ObservableObject {
         pollingInterval = max(1, min(interval, 10))
     }
 
+    /// Snapshot of -info filenames seen on the previous tick. Used to detect
+    /// session arrivals/departures so we can kick the main poll immediately.
+    private var lastInfoFilenames: Set<String> = []
+
     /// Polls the hook state directory every 250 ms, maintaining `hookBusyPIDs`.
     /// Cheap (just dir listing + mtime reads) so it runs independently of the main poll.
     /// A busy marker "lingers" for `busyMarkerLinger` seconds after Stop deletes it,
@@ -262,7 +292,16 @@ final class ProcessMonitor: ObservableObject {
         var active = present
         for pid in hookBusyLastSeen.keys { active.insert(pid) }
 
-        if active != hookBusyPIDs {
+        // Detect session arrivals/departures via -info file presence so a new
+        // session is reflected in the UI within ~250 ms instead of waiting for
+        // the next main poll tick.
+        let infoFilenames = Set(files.lazy
+            .map(\.lastPathComponent)
+            .filter { $0.hasSuffix("-info") })
+        let infoChanged = infoFilenames != lastInfoFilenames
+        lastInfoFilenames = infoFilenames
+
+        if active != hookBusyPIDs || infoChanged {
             hookBusyPIDs = active
             // Kick the main poll to re-classify immediately.
             Task { await self.poll() }
