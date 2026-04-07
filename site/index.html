@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0a10">
   <title>Clyde — A friendly Claude Code session monitor for macOS</title>
   <meta name="description" content="Clyde lives in your menu bar and shows you what every Claude Code session is doing in real time. Free, open source, native macOS.">
 
@@ -10,20 +11,30 @@
   <meta property="og:title" content="Clyde — Claude Code session monitor">
   <meta property="og:description" content="Know what Claude is doing — without alt-tabbing.">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="img/og-preview.png">
+  <meta property="og:url" content="https://kl0sin.github.io/clyde/">
+  <meta property="og:image" content="https://kl0sin.github.io/clyde/img/og-preview.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Clyde — Claude Code session monitor">
+  <meta name="twitter:description" content="Know what Claude is doing — without alt-tabbing.">
+  <meta name="twitter:image" content="https://kl0sin.github.io/clyde/img/og-preview.png">
 
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" type="image/png" href="img/favicon.png">
+  <link rel="apple-touch-icon" href="img/favicon.png">
 </head>
 <body>
 
-  <header class="nav">
+  <header class="nav" role="banner">
     <div class="nav-inner">
-      <a class="brand" href="#top">
-        <span class="brand-mark"></span>
+      <a class="brand" href="#top" aria-label="Clyde — back to top">
+        <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-name">Clyde</span>
       </a>
-      <nav>
+      <nav aria-label="Primary">
         <a href="#features">Features</a>
         <a href="#how">How it works</a>
         <a href="#install">Install</a>
@@ -38,10 +49,10 @@
     <section class="hero" id="top">
       <div class="hero-bg"></div>
       <div class="hero-content">
-        <div class="hero-mascot">
+        <div class="hero-mascot" aria-hidden="true">
           <div class="sprite-wrapper">
             <div class="sprite-glow"></div>
-            <div class="sprite-clyde"></div>
+            <div class="sprite-clyde" role="img" aria-label="Clyde mascot"></div>
           </div>
         </div>
 
@@ -124,7 +135,7 @@
         <div class="how-grid">
           <div class="how-step">
             <div class="how-capsule capsule-ready">
-              <div class="capsule-sprite"></div>
+              <div class="capsule-sprite" aria-hidden="true"></div>
               <span>3</span>
             </div>
             <h3>Ready</h3>
@@ -133,7 +144,7 @@
 
           <div class="how-step">
             <div class="how-capsule capsule-working">
-              <div class="capsule-sprite"></div>
+              <div class="capsule-sprite" aria-hidden="true"></div>
               <span>2</span>
             </div>
             <h3>Working</h3>
@@ -142,7 +153,7 @@
 
           <div class="how-step">
             <div class="how-capsule capsule-attention">
-              <div class="capsule-sprite"></div>
+              <div class="capsule-sprite" aria-hidden="true"></div>
               <span>1</span>
             </div>
             <h3>Needs you</h3>
@@ -175,7 +186,6 @@
 
           <p class="install-meta">
             Requires macOS 13 Ventura or later. Universal binary (Apple Silicon &amp; Intel).
-            Code-signed and notarized by Apple.
           </p>
         </div>
       </div>
@@ -183,13 +193,13 @@
 
   </main>
 
-  <footer>
+  <footer role="contentinfo">
     <div class="container footer-inner">
       <div class="footer-brand">
-        <span class="brand-mark"></span>
+        <span class="brand-mark" aria-hidden="true"></span>
         <span>Clyde</span>
       </div>
-      <nav class="footer-nav">
+      <nav class="footer-nav" aria-label="Footer">
         <a href="https://github.com/kl0sin/clyde">GitHub</a>
         <a href="https://github.com/kl0sin/clyde/releases">Releases</a>
         <a href="https://github.com/kl0sin/clyde/issues">Issues</a>

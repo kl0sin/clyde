@@ -560,6 +560,26 @@ footer {
    RESPONSIVE
    ============================================================ */
 
+/* ============================================================
+   REDUCED MOTION
+   Respect users who've turned animations off at the OS level.
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  /* Disable every animation + transform-y. Keep colour transitions on
+     hover for affordance. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @media (max-width: 760px) {
   .nav nav { gap: 16px; font-size: 13px; }
   .nav nav a:not(.ghost):not([href*="github"]) { display: none; }

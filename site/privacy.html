@@ -3,17 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0a10">
+  <meta name="description" content="Clyde collects nothing. No telemetry, no analytics, no network calls — everything stays on your Mac.">
   <title>Privacy — Clyde</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" href="img/favicon.png">
+  <link rel="apple-touch-icon" href="img/favicon.png">
 </head>
 <body>
-  <header class="nav">
+  <header class="nav" role="banner">
     <div class="nav-inner">
-      <a class="brand" href="index.html">
-        <span class="brand-mark"></span>
+      <a class="brand" href="index.html" aria-label="Clyde — back to home">
+        <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-name">Clyde</span>
       </a>
-      <nav>
+      <nav aria-label="Primary">
         <a href="index.html">Home</a>
         <a href="https://github.com/kl0sin/clyde" class="ghost">GitHub</a>
       </nav>
