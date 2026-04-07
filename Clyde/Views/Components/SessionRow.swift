@@ -26,7 +26,7 @@ struct SessionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            SessionStatusIndicator(status: session.status)
+            SessionStatusIndicator(session: session)
 
             VStack(alignment: .leading, spacing: 3) {
                 if isEditing {
@@ -287,31 +287,82 @@ struct SessionRow: View {
 // MARK: - Session Status Indicator (animated mini Clyde)
 
 struct SessionStatusIndicator: View {
-    let status: SessionStatus
+    let session: Session
 
     @State private var bounce = false
+    @State private var orbitAngle: Double = 0
+    @State private var attentionPulse = false
+
+    private var halo: Color {
+        if session.needsAttention { return SessionTheme.attentionColor }
+        return SessionTheme.color(for: session.status)
+    }
 
     var body: some View {
         ZStack {
-            // Background glow
+            // Halo background — coloured per dominant state, subtle tint.
             Circle()
-                .fill(SessionTheme.color(for: status).opacity(0.1))
+                .fill(halo.opacity(0.14))
+                .frame(width: 36, height: 36)
+            Circle()
+                .strokeBorder(halo.opacity(session.needsAttention && attentionPulse ? 0.55 : 0.22), lineWidth: 1)
                 .frame(width: 36, height: 36)
 
-            if status == .busy {
-                // Animated mini Clyde for processing
-                ClydeAnimationView(state: .busy, pixelSize: 1.2)
-                    .frame(width: 20, height: 20)
-                    .offset(y: bounce ? -1 : 1)
-                    .onAppear {
-                        withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                            bounce = true
-                        }
-                    }
-            } else {
-                // Static checkmark-style idle indicator
-                ClydeAnimationView(state: .idle, pixelSize: 1.2)
-                    .frame(width: 20, height: 20)
+            // Mini Clyde — ClydeAnimationView uses the wider ClydeState
+            // enum so we map from the per-session SessionStatus here.
+            let mascotState: ClydeState = {
+                if session.needsAttention { return .attention }
+                return session.status == .busy ? .busy : .idle
+            }()
+            ClydeAnimationView(state: mascotState, pixelSize: 1.2)
+                .frame(width: 20, height: 20)
+                .offset(y: (session.status == .busy && bounce) ? -1 : 1)
+
+            // Busy accent: small orbiting purple dot around the mascot.
+            if session.status == .busy && !session.needsAttention {
+                Circle()
+                    .fill(SessionTheme.processingColor)
+                    .frame(width: 4, height: 4)
+                    .shadow(color: SessionTheme.processingColor, radius: 3)
+                    .offset(x: cos(orbitAngle) * 15, y: sin(orbitAngle) * 15)
+            }
+
+            // Attention accent: yellow "!" badge in top-right corner.
+            if session.needsAttention {
+                Circle()
+                    .fill(SessionTheme.attentionColor)
+                    .frame(width: 12, height: 12)
+                    .overlay(
+                        Text("!")
+                            .font(.system(size: 9, weight: .heavy, design: .rounded))
+                            .foregroundColor(.white)
+                    )
+                    .offset(x: 13, y: -13)
+                    .scaleEffect(attentionPulse ? 1.1 : 0.92)
+            }
+        }
+        .onAppear {
+            if session.status == .busy {
+                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                    bounce = true
+                }
+            }
+            if session.needsAttention {
+                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                    attentionPulse = true
+                }
+            }
+        }
+        .task(id: session.status == .busy && !session.needsAttention) {
+            // Continuous orbit while busy — driven by a dedicated loop so
+            // it survives view re-renders and restarts cleanly on status
+            // transitions.
+            guard session.status == .busy, !session.needsAttention else { return }
+            let start = Date()
+            while !Task.isCancelled {
+                let elapsed = Date().timeIntervalSince(start)
+                orbitAngle = (elapsed / 2.0) * .pi * 2  // 2s per full orbit
+                try? await Task.sleep(for: .milliseconds(16))
             }
         }
     }

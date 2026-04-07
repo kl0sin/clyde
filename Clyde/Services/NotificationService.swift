@@ -29,6 +29,20 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
     @Published private(set) var perSessionReadySound: [String: String] = [:]
     @Published private(set) var perSessionAttentionSound: [String: String] = [:]
 
+    /// When set, suppresses all sounds and system notifications until the
+    /// given date. Expires automatically via a scheduled timer that clears
+    /// the value and re-publishes. Persisted to UserDefaults so a restart
+    /// doesn't lose the active snooze.
+    @Published private(set) var snoozeUntil: Date?
+
+    /// True while the app is inside an active snooze window.
+    var isSnoozed: Bool {
+        guard let snoozeUntil else { return false }
+        return snoozeUntil > Date()
+    }
+
+    private var snoozeWakeTimer: Timer?
+
     private var isAuthorized = false
     var onNotificationClicked: ((pid_t) -> Void)?
 
@@ -39,6 +53,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         static let attentionSound = "attentionSound"
         static let perSessionReadySound = "perSessionReadySound"
         static let perSessionAttentionSound = "perSessionAttentionSound"
+        static let snoozeUntil = "snoozeUntil"
     }
 
     override init() {
@@ -49,7 +64,49 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         self.attentionSound = defaults.string(forKey: Keys.attentionSound) ?? "Hero"
         self.perSessionReadySound = (defaults.dictionary(forKey: Keys.perSessionReadySound) as? [String: String]) ?? [:]
         self.perSessionAttentionSound = (defaults.dictionary(forKey: Keys.perSessionAttentionSound) as? [String: String]) ?? [:]
+        // Load an already-active snooze if the app was restarted mid-nap.
+        if let saved = defaults.object(forKey: Keys.snoozeUntil) as? Date, saved > Date() {
+            self.snoozeUntil = saved
+        }
         super.init()
+        // Kick the expiry timer if we restored an active snooze.
+        if snoozeUntil != nil { scheduleWakeTimer() }
+    }
+
+    // MARK: - Snooze API
+
+    /// Begin a snooze window of the given duration (in minutes).
+    func snooze(minutes: Int) {
+        let deadline = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        snoozeUntil = deadline
+        UserDefaults.standard.set(deadline, forKey: Keys.snoozeUntil)
+        scheduleWakeTimer()
+        ClydeLog.general.info("Snoozed for \(minutes) minutes")
+    }
+
+    /// End an active snooze immediately.
+    func clearSnooze() {
+        snoozeUntil = nil
+        snoozeWakeTimer?.invalidate()
+        snoozeWakeTimer = nil
+        UserDefaults.standard.removeObject(forKey: Keys.snoozeUntil)
+        ClydeLog.general.info("Snooze cleared")
+    }
+
+    /// Number of whole minutes left in the current snooze, or 0 if not snoozed.
+    var minutesRemaining: Int {
+        guard let snoozeUntil else { return 0 }
+        let seconds = snoozeUntil.timeIntervalSinceNow
+        return seconds > 0 ? Int(ceil(seconds / 60.0)) : 0
+    }
+
+    private func scheduleWakeTimer() {
+        snoozeWakeTimer?.invalidate()
+        guard let deadline = snoozeUntil else { return }
+        let interval = max(0.1, deadline.timeIntervalSinceNow)
+        snoozeWakeTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.clearSnooze() }
+        }
     }
 
     /// Set or clear a per-session ready sound. Pass nil to remove.
@@ -90,7 +147,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
     }
 
     func playReadySound(for session: Session? = nil) {
-        guard soundEnabled else { return }
+        guard soundEnabled, !isSnoozed else { return }
         let name: String
         if let sid = session?.sessionId, let override = perSessionReadySound[sid] {
             name = override
@@ -101,7 +158,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
     }
 
     func playAttentionSound(for session: Session? = nil) {
-        guard soundEnabled else { return }
+        guard soundEnabled, !isSnoozed else { return }
         let name: String
         if let sid = session?.sessionId, let override = perSessionAttentionSound[sid] {
             name = override
@@ -121,7 +178,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
     }
 
     func sendNotification(for session: Session) {
-        guard systemNotificationsEnabled, isAuthorized else { return }
+        guard systemNotificationsEnabled, isAuthorized, !isSnoozed else { return }
         let content = buildNotificationContent(for: session)
         let request = UNNotificationRequest(
             identifier: "session-\(session.pid)",

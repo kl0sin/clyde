@@ -135,6 +135,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateMenuBarMenu() }
             .store(in: &cancellables)
+        // Snooze changes — refresh icon + menu so the label switches between
+        // "1 working" and "zzz 14m" immediately when the user toggles it.
+        appViewModel.notificationService.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshMenuBarItem()
+                self?.updateMenuBarMenu()
+            }
+            .store(in: &cancellables)
     }
 
     /// Render the menu bar button: Clyde silhouette (template) + a count
@@ -153,6 +162,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Always the Clyde mascot as template — same silhouette regardless
         // of state, auto-tinted by macOS to match the menu bar appearance.
         button.image = ClydeMenuBarIcon.templateImage()
+
+        // Snooze takes priority: show "zzz Xm" regardless of live counts so
+        // the user clearly sees the app is muted.
+        if appViewModel.notificationService.isSnoozed {
+            let remaining = appViewModel.notificationService.minutesRemaining
+            let title = NSAttributedString(
+                string: " 💤 \(remaining)m",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                ]
+            )
+            button.attributedTitle = title
+            return
+        }
 
         // State is conveyed by a small coloured dot prefix; the count
         // itself stays in the system label colour so it's always readable
@@ -251,6 +275,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        // Snooze controls: if currently snoozed, show a "wake now" entry;
+        // otherwise offer the standard preset durations as a submenu.
+        let notifications = appViewModel.notificationService
+        if notifications.isSnoozed {
+            let remaining = notifications.minutesRemaining
+            let resume = NSMenuItem(
+                title: "Resume notifications (zzz \(remaining)m)",
+                action: #selector(resumeNotifications),
+                keyEquivalent: ""
+            )
+            resume.target = self
+            menu.addItem(resume)
+        } else {
+            let snoozeMenu = NSMenu()
+            for minutes in [15, 30, 60, 120] {
+                let label = minutes < 60 ? "\(minutes) minutes" : "\(minutes / 60) hour\(minutes == 60 ? "" : "s")"
+                let item = NSMenuItem(title: label, action: #selector(snoozeClicked(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = minutes
+                snoozeMenu.addItem(item)
+            }
+            let snoozeParent = NSMenuItem(title: "Snooze notifications", action: nil, keyEquivalent: "")
+            snoozeParent.submenu = snoozeMenu
+            menu.addItem(snoozeParent)
+        }
+
+        menu.addItem(.separator())
+
         let showItem = NSMenuItem(title: "Show Clyde", action: #selector(menuBarClicked), keyEquivalent: "")
         showItem.target = self
         menu.addItem(showItem)
@@ -265,6 +317,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem?.menu = menu
+    }
+
+    @MainActor @objc private func snoozeClicked(_ sender: NSMenuItem) {
+        guard let minutes = sender.representedObject as? Int else { return }
+        appViewModel.notificationService.snooze(minutes: minutes)
+    }
+
+    @MainActor @objc private func resumeNotifications() {
+        appViewModel.notificationService.clearSnooze()
     }
 
     @MainActor @objc private func menuSessionClicked(_ sender: NSMenuItem) {
