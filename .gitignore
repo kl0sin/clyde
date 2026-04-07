@@ -4,3 +4,8 @@ DerivedData/
 *.xcodeproj/xcuserdata/
 .superpowers/
 .DS_Store
+
+# Stray Swift incremental build artifacts that escape .build/
+*.d
+*.o
+*.swiftdeps

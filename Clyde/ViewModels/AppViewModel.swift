@@ -24,7 +24,7 @@ final class AppViewModel: ObservableObject {
     }
 
     var statusText: String {
-        let sessions = processMonitor.sessions
+        let sessions = processMonitor.sessions.filter { !$0.isGhost }
         if sessions.isEmpty { return "no sessions" }
         let processingCount = sessions.filter { $0.status == .busy }.count
         let readyCount = sessions.count - processingCount
@@ -69,13 +69,15 @@ final class AppViewModel: ObservableObject {
 
         processMonitor.onSessionBecameIdle = { [weak self] session in
             guard let self else { return }
+            // Don't ring for ghosts (sessions that are visually lingering after exit).
+            if session.isGhost { return }
             // If the attention hook already fired for this PID, the attention path owns
             // the notification — skip "ready" to avoid duplication.
             if self.attentionMonitor.attentionPIDs.contains(session.pid) {
                 return
             }
             self.notificationService.sendNotification(for: session)
-            self.notificationService.playReadySound()
+            self.notificationService.playReadySound(for: session)
         }
 
         // Forward ProcessMonitor updates to our own observers.
@@ -100,7 +102,7 @@ final class AppViewModel: ObservableObject {
                   let session = self.processMonitor.sessions.first(where: { $0.pid == pid }) else {
                 return
             }
-            self.notificationService.playAttentionSound()
+            self.notificationService.playAttentionSound(for: session)
             self.notificationService.sendNotification(for: session)
         }
     }

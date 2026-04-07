@@ -9,6 +9,12 @@ struct SessionRow: View {
     let onRename: (String) -> Void
     let onFocus: () -> Void
     let onReset: (() -> Void)?
+    let notificationService: NotificationService?
+
+    static let availableSounds = [
+        "Glass", "Blow", "Bottle", "Frog", "Funk", "Hero",
+        "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"
+    ]
 
     @State private var isEditing = false
     @State private var editName = ""
@@ -97,7 +103,19 @@ struct SessionRow: View {
 
             if !isEditing {
                 VStack(alignment: .trailing, spacing: 3) {
-                    if session.needsAttention {
+                    if session.isGhost {
+                        HStack(spacing: 4) {
+                            Image(systemName: "moon.zzz.fill")
+                                .font(.system(size: 8))
+                            Text("Ended")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundColor(Color(white: 0.5))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color(white: 0.18))
+                        .clipShape(Capsule())
+                    } else if session.needsAttention {
                         HStack(spacing: 4) {
                             Image(systemName: "hand.tap.fill")
                                 .font(.system(size: 8))
@@ -119,12 +137,13 @@ struct SessionRow: View {
                             .clipShape(Capsule())
                     }
 
-                    Text(timeAgo(session.statusChangedAt))
+                    Text(timeAgo(session.endedAt ?? session.statusChangedAt))
                         .font(.system(size: 9))
                         .foregroundColor(Color(white: 0.35))
                 }
             }
         }
+        .opacity(session.isGhost ? 0.55 : 1.0)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
@@ -146,6 +165,27 @@ struct SessionRow: View {
             }) {
                 Label("Rename", systemImage: "pencil")
             }
+
+            if let notificationService, let sid = session.sessionId {
+                Divider()
+                Menu("Ready sound") {
+                    soundMenuItems(
+                        current: notificationService.perSessionReadySound[sid],
+                        defaultSound: notificationService.readySound
+                    ) { choice in
+                        notificationService.setReadySound(choice, forSessionId: sid)
+                    }
+                }
+                Menu("Attention sound") {
+                    soundMenuItems(
+                        current: notificationService.perSessionAttentionSound[sid],
+                        defaultSound: notificationService.attentionSound
+                    ) { choice in
+                        notificationService.setAttentionSound(choice, forSessionId: sid)
+                    }
+                }
+            }
+
             if let onReset {
                 Divider()
                 Button(role: .destructive, action: onReset) {
@@ -172,6 +212,32 @@ struct SessionRow: View {
 
     private func abbreviatePath(_ path: String) -> String {
         path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+    }
+
+    @ViewBuilder
+    private func soundMenuItems(
+        current: String?,
+        defaultSound: String,
+        select: @escaping (String?) -> Void
+    ) -> some View {
+        Button(action: { select(nil) }) {
+            HStack {
+                if current == nil { Image(systemName: "checkmark") }
+                Text("Use default (\(defaultSound))")
+            }
+        }
+        Divider()
+        ForEach(Self.availableSounds, id: \.self) { sound in
+            Button(action: {
+                select(sound)
+                NSSound(named: NSSound.Name(sound))?.play()
+            }) {
+                HStack {
+                    if current == sound { Image(systemName: "checkmark") }
+                    Text(sound)
+                }
+            }
+        }
     }
 
     private func timeAgo(_ date: Date) -> String {

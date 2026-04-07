@@ -117,7 +117,7 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.sessions.first?.workingDirectory, "/Users/me/Projects/shipyard")
     }
 
-    func testPollRemovesEndedSessions() async {
+    func testPollLeavesGhostRowAfterSessionEnds() async {
         let dir = tempStateDir()
         let sid = UUID().uuidString
         _ = writeInfoFile(in: dir, sessionId: sid)
@@ -125,11 +125,18 @@ final class ProcessMonitorTests: XCTestCase {
         let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
         await monitor.poll()
         XCTAssertEqual(monitor.sessions.count, 1)
+        XCTAssertFalse(monitor.sessions.first?.isGhost ?? true)
 
-        // SessionEnd hook would remove both files.
+        // SessionEnd hook removes both files.
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-info"))
         await monitor.poll()
-        XCTAssertEqual(monitor.sessions.count, 0)
+
+        // Row stays in the raw list as a ghost so the user can still see it.
+        XCTAssertEqual(monitor.sessions.count, 1)
+        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false)
+        XCTAssertNotNil(monitor.sessions.first?.endedAt)
+        // Live counters drop to zero, so clydeState goes to sleeping.
+        XCTAssertEqual(monitor.clydeState, .sleeping)
     }
 
     func testClydeStateIsBusyWhenAnySessionBusy() async {

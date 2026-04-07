@@ -35,7 +35,8 @@ struct ExpandedView: View {
                     },
                     onReset: { session in
                         appViewModel.resetSession(session)
-                    }
+                    },
+                    notificationService: appViewModel.notificationService
                 )
             }
 

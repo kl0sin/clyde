@@ -90,7 +90,9 @@ private struct CompactStatusView: View {
     }
 
     private var badge: Badge? {
-        let sessions = viewModel.processMonitor.sessions
+        // Ghost rows (sessions still visually lingering after exit) don't
+        // count toward the dominant-state badge.
+        let sessions = viewModel.processMonitor.sessions.filter { !$0.isGhost }
         let attentionPIDs = attentionMonitor.attentionPIDs
         let attention = sessions.filter { attentionPIDs.contains($0.pid) }.count
         let processing = sessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count

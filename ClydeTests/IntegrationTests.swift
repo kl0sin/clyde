@@ -52,9 +52,13 @@ final class IntegrationTests: XCTestCase {
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-busy"))
         await monitor.poll()
 
+        // The row is now a ghost — visible to the UI for ~5 min, but
+        // counters and clydeState exclude it because the live process is gone.
         XCTAssertEqual(appVM.clydeState, .sleeping)
         XCTAssertEqual(appVM.statusText, "no sessions")
         XCTAssertEqual(sessionVM.sessionCount, 0)
+        XCTAssertEqual(monitor.sessions.count, 1, "ghost row should remain in the raw list")
+        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false)
     }
 
     func testNotificationFiringOnIdleTransition() async {

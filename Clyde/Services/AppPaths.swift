@@ -55,6 +55,9 @@ enum AppConstants {
     /// Protects against orphan busy markers if Claude crashes without firing Stop.
     static let busyMarkerTimeout: TimeInterval = 600.0
 
+    /// After a Claude session ends, keep the row visible as a ghost for this long.
+    static let endedSessionLinger: TimeInterval = 300.0  // 5 minutes
+
     /// Distance from screen edge to trigger widget snap
     static let edgeSnapThreshold: CGFloat = 36.0
 

@@ -7,6 +7,7 @@ struct SessionListView: View {
     let onRename: (UUID, String) -> Void
     let onFocus: (Session) -> Void
     let onReset: (Session) -> Void
+    let notificationService: NotificationService?
 
     var body: some View {
         ScrollView {
@@ -17,7 +18,8 @@ struct SessionListView: View {
                         disambiguator: item.suffix,
                         onRename: { name in onRename(item.session.id, name) },
                         onFocus: { onFocus(item.session) },
-                        onReset: { onReset(item.session) }
+                        onReset: { onReset(item.session) },
+                        notificationService: notificationService
                     )
                     if item.session.pid != sessions.last?.pid {
                         Divider()

@@ -170,12 +170,11 @@ final class ProcessMonitor: ObservableObject {
         refreshHookBusyPIDs()
 
         let pids = await discoverPIDs()
+        let now = Date()
 
-        if pids.isEmpty {
-            sessions = []
-            clydeState = .sleeping
-            return
-        }
+        // Capture the previous live PIDs so we can promote disappearances
+        // to ghost rows that linger briefly in the UI.
+        let previousLivePIDs = Set(sessions.lazy.filter { !$0.isGhost }.map(\.pid))
 
         var updatedSessions: [Session] = []
         updatedSessions.reserveCapacity(pids.count)
@@ -186,10 +185,41 @@ final class ProcessMonitor: ObservableObject {
             updatedSessions.append(session)
         }
 
-        // Sort: most-recently-changed first. Stable for sessions with the same
-        // change time (preserves PID order via the sorted discoverPIDs result).
-        sessions = updatedSessions.sorted { $0.statusChangedAt > $1.statusChangedAt }
-        clydeState = sessions.contains(where: { $0.status == .busy }) ? .busy : .idle
+        // Promote sessions that vanished this cycle into ghosts. They keep
+        // their last metadata so the row stays meaningful, just labelled
+        // "ended Xm ago" until the linger window expires.
+        let livePIDs = Set(updatedSessions.map(\.pid))
+        for vanished in previousLivePIDs.subtracting(livePIDs) {
+            if let last = sessions.first(where: { $0.pid == vanished && !$0.isGhost }) {
+                var ghost = last
+                ghost.status = .idle
+                ghost.endedAt = now
+                ghost.statusChangedAt = now
+                updatedSessions.append(ghost)
+            }
+        }
+
+        // Carry forward existing ghosts that are still within the linger window.
+        for existingGhost in sessions where existingGhost.isGhost {
+            if let endedAt = existingGhost.endedAt,
+               now.timeIntervalSince(endedAt) < AppConstants.endedSessionLinger,
+               !livePIDs.contains(existingGhost.pid) {
+                updatedSessions.append(existingGhost)
+            }
+        }
+
+        // Sort: live sessions by recency (newest first), then ghosts at the bottom.
+        sessions = updatedSessions.sorted { lhs, rhs in
+            if lhs.isGhost != rhs.isGhost { return !lhs.isGhost }
+            return lhs.statusChangedAt > rhs.statusChangedAt
+        }
+
+        let liveSessions = sessions.filter { !$0.isGhost }
+        if liveSessions.isEmpty {
+            clydeState = .sleeping
+        } else {
+            clydeState = liveSessions.contains(where: { $0.status == .busy }) ? .busy : .idle
+        }
     }
 
     /// Update an existing session or create a new one. Caches CWD detection.

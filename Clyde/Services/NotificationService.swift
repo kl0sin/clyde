@@ -23,6 +23,12 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         didSet { UserDefaults.standard.set(attentionSound, forKey: Keys.attentionSound) }
     }
 
+    /// Per-session sound overrides keyed by Claude `session_id`. When a key
+    /// is present, the corresponding sound is played for that session
+    /// instead of the global default.
+    @Published private(set) var perSessionReadySound: [String: String] = [:]
+    @Published private(set) var perSessionAttentionSound: [String: String] = [:]
+
     private var isAuthorized = false
     var onNotificationClicked: ((pid_t) -> Void)?
 
@@ -31,6 +37,8 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         static let systemNotificationsEnabled = "systemNotificationsEnabled"
         static let readySound = "selectedSound" // legacy key, kept for compatibility
         static let attentionSound = "attentionSound"
+        static let perSessionReadySound = "perSessionReadySound"
+        static let perSessionAttentionSound = "perSessionAttentionSound"
     }
 
     override init() {
@@ -39,7 +47,29 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         self.systemNotificationsEnabled = defaults.object(forKey: Keys.systemNotificationsEnabled) as? Bool ?? true
         self.readySound = defaults.string(forKey: Keys.readySound) ?? "Glass"
         self.attentionSound = defaults.string(forKey: Keys.attentionSound) ?? "Hero"
+        self.perSessionReadySound = (defaults.dictionary(forKey: Keys.perSessionReadySound) as? [String: String]) ?? [:]
+        self.perSessionAttentionSound = (defaults.dictionary(forKey: Keys.perSessionAttentionSound) as? [String: String]) ?? [:]
         super.init()
+    }
+
+    /// Set or clear a per-session ready sound. Pass nil to remove.
+    func setReadySound(_ sound: String?, forSessionId sessionId: String) {
+        if let sound, !sound.isEmpty {
+            perSessionReadySound[sessionId] = sound
+        } else {
+            perSessionReadySound.removeValue(forKey: sessionId)
+        }
+        UserDefaults.standard.set(perSessionReadySound, forKey: Keys.perSessionReadySound)
+    }
+
+    /// Set or clear a per-session attention sound. Pass nil to remove.
+    func setAttentionSound(_ sound: String?, forSessionId sessionId: String) {
+        if let sound, !sound.isEmpty {
+            perSessionAttentionSound[sessionId] = sound
+        } else {
+            perSessionAttentionSound.removeValue(forKey: sessionId)
+        }
+        UserDefaults.standard.set(perSessionAttentionSound, forKey: Keys.perSessionAttentionSound)
     }
 
     func requestPermission() {
@@ -59,14 +89,26 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         }
     }
 
-    func playReadySound() {
+    func playReadySound(for session: Session? = nil) {
         guard soundEnabled else { return }
-        NSSound(named: NSSound.Name(readySound))?.play()
+        let name: String
+        if let sid = session?.sessionId, let override = perSessionReadySound[sid] {
+            name = override
+        } else {
+            name = readySound
+        }
+        NSSound(named: NSSound.Name(name))?.play()
     }
 
-    func playAttentionSound() {
+    func playAttentionSound(for session: Session? = nil) {
         guard soundEnabled else { return }
-        NSSound(named: NSSound.Name(attentionSound))?.play()
+        let name: String
+        if let sid = session?.sessionId, let override = perSessionAttentionSound[sid] {
+            name = override
+        } else {
+            name = attentionSound
+        }
+        NSSound(named: NSSound.Name(name))?.play()
     }
 
     func buildNotificationContent(for session: Session) -> UNMutableNotificationContent {

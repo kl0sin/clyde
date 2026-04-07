@@ -30,9 +30,11 @@ final class SessionListViewModel: ObservableObject {
         }
     }
 
-    var sessionCount: Int { processMonitor.sessions.count }
-    var busyCount: Int { processMonitor.sessions.filter { $0.status == .busy }.count }
-    var idleCount: Int { processMonitor.sessions.filter { $0.status == .idle }.count }
+    /// Counters reflect *live* sessions only — ghost rows (sessions that
+    /// have ended but are still visible for ~5 min) don't contribute.
+    var sessionCount: Int { processMonitor.sessions.filter { !$0.isGhost }.count }
+    var busyCount: Int { processMonitor.sessions.filter { !$0.isGhost && $0.status == .busy }.count }
+    var idleCount: Int { processMonitor.sessions.filter { !$0.isGhost && $0.status == .idle }.count }
     var attentionCount: Int {
         guard let ids = attentionMonitor?.attentionPIDs else { return 0 }
         return ids.count

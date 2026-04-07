@@ -16,6 +16,11 @@ struct Session: Identifiable, Equatable {
     var customName: String?
     var statusChangedAt: Date
     var needsAttention: Bool = false
+    /// Set when the underlying Claude process has exited but we're keeping
+    /// the row visible briefly. Nil for live sessions.
+    var endedAt: Date? = nil
+
+    var isGhost: Bool { endedAt != nil }
 
     var displayName: String {
         if let customName, !customName.isEmpty {
