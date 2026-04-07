@@ -15,9 +15,25 @@ final class SessionListViewModel: ObservableObject {
     /// keyed by current in-memory Session.id, lost on restart.
     @Published private var namesById: [UUID: String] = [:]
 
+    /// User-chosen sort order. Each entry is an `orderKey(for:)` value:
+    /// the Claude `session_id` when available, otherwise a `pid:<n>`
+    /// fallback so legacy / pgrep-only sessions can still be reordered.
+    /// Persisted to disk; pid-based entries naturally drop out on the
+    /// next launch because the pid is gone.
+    @Published private(set) var orderedSessionIds: [String] = []
+
+    /// The key under which a given session is recorded in
+    /// `orderedSessionIds`. Stable for the lifetime of a session and the
+    /// same value used by both the writer (`moveSession`) and the reader
+    /// (the `sessions` computed property), so the two never disagree.
+    private static func orderKey(for session: Session) -> String {
+        if let sid = session.sessionId, !sid.isEmpty { return sid }
+        return "pid:\(session.pid)"
+    }
+
     var sessions: [Session] {
         let attentionPIDs = attentionMonitor?.attentionPIDs ?? []
-        return processMonitor.sessions.map { session in
+        let enriched: [Session] = processMonitor.sessions.map { session in
             var s = session
             if let sid = session.sessionId,
                let name = namesBySessionId[sid], !name.isEmpty {
@@ -28,6 +44,30 @@ final class SessionListViewModel: ObservableObject {
             s.needsAttention = attentionPIDs.contains(session.pid)
             return s
         }
+
+        // Split into live + ghosts so ghosts always end up at the tail.
+        let live = enriched.filter { !$0.isGhost }
+        let ghosts = enriched.filter { $0.isGhost }
+
+        // Live sessions in user-chosen order come first, in the exact
+        // sequence they appear in `orderedSessionIds`.
+        let orderMap: [String: Int] = Dictionary(
+            uniqueKeysWithValues: orderedSessionIds.enumerated().map { ($0.element, $0.offset) }
+        )
+        let ordered = live
+            .compactMap { session -> (Int, Session)? in
+                guard let index = orderMap[Self.orderKey(for: session)] else { return nil }
+                return (index, session)
+            }
+            .sorted { $0.0 < $1.0 }
+            .map { $0.1 }
+
+        // Anything else — brand-new sessions that haven't been ordered
+        // yet — appears after the ordered block in the monitor's order.
+        let orderedSet = Set(ordered.map(\.id))
+        let tail = live.filter { !orderedSet.contains($0.id) }
+
+        return ordered + tail + ghosts
     }
 
     /// Counters reflect *live* sessions only — ghost rows (sessions that
@@ -44,12 +84,27 @@ final class SessionListViewModel: ObservableObject {
         self.processMonitor = processMonitor
         self.attentionMonitor = attentionMonitor
         loadPersistedNames()
+        loadPersistedOrder()
         processMonitor.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
         attentionMonitor?.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+    }
+
+    /// Move a subset of session rows to a new position, mirroring the
+    /// standard SwiftUI `List.onMove` signature. Persists the resulting
+    /// order so drag-to-reorder survives across app restarts.
+    func moveSession(from source: IndexSet, to destination: Int) {
+        var current = sessions.filter { !$0.isGhost }
+        current.move(fromOffsets: source, toOffset: destination)
+        // Use a stable key per session (session_id or pid:<n>) so even
+        // legacy / pgrep-only rows can be reordered without being
+        // silently dropped.
+        orderedSessionIds = current.map { Self.orderKey(for: $0) }
+        persistOrder()
+        objectWillChange.send()
     }
 
     func renameSession(id: UUID, to name: String) {
@@ -112,6 +167,32 @@ final class SessionListViewModel: ObservableObject {
             try data.write(to: persistenceURL, options: .atomic)
         } catch {
             ClydeLog.general.error("Failed to persist session names: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private var orderPersistenceURL: URL {
+        AppPaths.clydeDir.appendingPathComponent("session-order.json")
+    }
+
+    private func loadPersistedOrder() {
+        guard let data = try? Data(contentsOf: orderPersistenceURL),
+              let list = try? JSONDecoder().decode([String].self, from: data) else {
+            return
+        }
+        // Accept either a UUID-shaped session_id or a "pid:<n>" fallback key.
+        // Drop anything that looks like garbage from older iterations.
+        orderedSessionIds = list.filter { key in
+            Self.looksLikeSessionId(key) || key.hasPrefix("pid:")
+        }
+    }
+
+    private func persistOrder() {
+        do {
+            try FileManager.default.createDirectory(at: AppPaths.clydeDir, withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(orderedSessionIds)
+            try data.write(to: orderPersistenceURL, options: .atomic)
+        } catch {
+            ClydeLog.general.error("Failed to persist session order: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

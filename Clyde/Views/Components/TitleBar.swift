@@ -40,6 +40,10 @@ struct TitleBar: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        // Drag handle — moves the expanded panel by its header. The panel
+        // has isMovableByWindowBackground disabled so the session list
+        // below doesn't hijack row drag gestures as window drags.
+        .background(WindowDragArea())
         .background(
             ZStack {
                 // Subtle horizontal gradient — slightly darker at the edges,

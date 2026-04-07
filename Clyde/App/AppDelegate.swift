@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import Foundation
 
 final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
@@ -16,13 +17,28 @@ final class FloatingPanel: NSPanel {
 
         level = .floating
         isFloatingPanel = true
-        isMovableByWindowBackground = true
+        // Explicit drag regions only — SessionListView uses onDrag/onDrop
+        // for reordering, so we can't let the whole background move the
+        // window or every row drag becomes a window drag.
+        isMovableByWindowBackground = false
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
         animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     }
+}
+
+/// Invisible NSView whose only job is to report
+/// `mouseDownCanMoveWindow = true`. Dropped behind draggable regions
+/// (the collapsed widget chrome and the expanded title bar) so users
+/// can still move the panel around the screen.
+struct WindowDragArea: NSViewRepresentable {
+    final class MovableView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+    }
+    func makeNSView(context: Context) -> NSView { MovableView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 // MARK: - Edge Snapping

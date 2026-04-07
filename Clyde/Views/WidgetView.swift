@@ -29,6 +29,10 @@ struct WidgetView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Explicit drag handle — the panel has isMovableByWindowBackground
+        // disabled so clicks in the session list don't move the window,
+        // but the collapsed widget should still be freely draggable.
+        .background(WindowDragArea())
         .background(Color.black.opacity(0.001)) // Capture hit tests in corners
         .background(
             ZStack {

@@ -36,6 +36,9 @@ struct ExpandedView: View {
                     onReset: { session in
                         appViewModel.resetSession(session)
                     },
+                    onMove: { source, destination in
+                        sessionViewModel.moveSession(from: source, to: destination)
+                    },
                     notificationService: appViewModel.notificationService
                 )
             }
