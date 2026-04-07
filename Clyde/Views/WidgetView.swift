@@ -82,63 +82,135 @@ private struct CompactStatusView: View {
         self.attentionMonitor = viewModel.attentionMonitor
     }
 
-    private struct Badge {
-        let count: Int
-        let label: String
-        let color: Color
-        let pulse: Bool
+    /// Visual identity of one of the three tracked states. Holds its
+    /// own colour so the view doesn't have to switch on the case.
+    private enum StatusKind {
+        case attention
+        case working
+        case ready
+
+        var color: Color {
+            switch self {
+            case .attention: return .blue
+            case .working:   return .orange
+            case .ready:     return .green
+            }
+        }
+
+        /// Whether this state should pulse when shown as the dominant block.
+        var pulses: Bool {
+            switch self {
+            case .attention, .working: return true
+            case .ready:               return false
+            }
+        }
     }
 
-    private var badge: Badge? {
+    /// Pre-computed status snapshot. Builds the dominant state (highest
+    /// priority with count > 0) and the two non-dominant ticks in stable
+    /// priority order. Pure logic — no SwiftUI dependencies.
+    private struct StatusModel {
+        let attention: Int
+        let working: Int
+        let ready: Int
+
+        /// Total live sessions across all states. Zero means "no work
+        /// at all" and the view renders the empty/dim style.
+        var total: Int { attention + working + ready }
+
+        /// The dominant state to render in the big block. Priority:
+        /// attention > working > ready. Returns `.ready` with count 0
+        /// when there are no sessions at all (caller treats as empty).
+        var dominant: (kind: StatusKind, count: Int) {
+            if attention > 0 { return (.attention, attention) }
+            if working > 0   { return (.working, working) }
+            if ready > 0     { return (.ready, ready) }
+            return (.ready, 0)
+        }
+
+        /// The two states that are NOT the dominant one, in priority
+        /// order (attention before working before ready). Each entry
+        /// carries its own count, which may be zero (renders dim).
+        var ticks: [(kind: StatusKind, count: Int)] {
+            let dominantKind = dominant.kind
+            let all: [(StatusKind, Int)] = [
+                (.attention, attention),
+                (.working, working),
+                (.ready, ready),
+            ]
+            return all.filter { $0.0 != dominantKind }
+        }
+    }
+
+    private var model: StatusModel {
         // Ghost rows (sessions still visually lingering after exit) don't
-        // count toward the dominant-state badge.
+        // count toward any of the three states.
         let sessions = viewModel.processMonitor.sessions.filter { !$0.isGhost }
         let attentionPIDs = attentionMonitor.attentionPIDs
         let attention = sessions.filter { attentionPIDs.contains($0.pid) }.count
-        let processing = sessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
-        let ready = sessions.count - processing - attention
-
-        if attention > 0 {
-            return Badge(count: attention, label: "needs input", color: .blue, pulse: true)
-        }
-        if processing > 0 {
-            return Badge(count: processing, label: "working", color: .orange, pulse: true)
-        }
-        if ready > 0 {
-            return Badge(count: ready, label: "ready", color: .green, pulse: false)
-        }
-        return nil
+        let working = sessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
+        let ready = sessions.count - working - attention
+        return StatusModel(attention: attention, working: working, ready: ready)
     }
 
     var body: some View {
-        Group {
-            if let badge {
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(badge.color)
-                        .frame(width: 6, height: 6)
-                        .opacity(badge.pulse && isPulsing ? 0.4 : 1.0)
-                    Text("\(badge.count) \(badge.label)")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundColor(badge.color)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .fixedSize()
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(badge.color.opacity(0.15))
-                .clipShape(Capsule())
-            } else {
-                Text("idle")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundColor(Color(white: 0.5))
-            }
+        let snapshot = model
+        let dom = snapshot.dominant
+        let isEmpty = snapshot.total == 0
+
+        HStack(spacing: 4) {
+            dominantBlock(kind: dom.kind, count: dom.count, isEmpty: isEmpty)
+            tickColumn(snapshot: snapshot, isEmpty: isEmpty)
         }
+        .frame(width: 66, alignment: .leading)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
+        }
+    }
+
+    /// Big number block on the left. 30 × 30 with the state's tinted
+    /// background. Pulses softly when the state is attention or working.
+    private func dominantBlock(kind: StatusKind, count: Int, isEmpty: Bool) -> some View {
+        let bg: Color = isEmpty ? Color(white: 0.16) : kind.color.opacity(0.20)
+        let fg: Color = isEmpty ? Color(white: 0.30) : kind.color
+        let shouldPulse = !isEmpty && kind.pulses
+        return Text("\(count)")
+            .font(.system(size: 14, weight: .heavy, design: .rounded))
+            .monospacedDigit()
+            .foregroundColor(fg)
+            .frame(width: 30, height: 30)
+            .background(bg)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .opacity(shouldPulse && isPulsing ? 0.4 : 1.0)
+    }
+
+    /// Two stacked tick rows on the right showing the non-dominant counts
+    /// in stable priority order (attention, working, ready, minus dominant).
+    private func tickColumn(snapshot: StatusModel, isEmpty: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(Array(snapshot.ticks.enumerated()), id: \.offset) { _, tick in
+                tickRow(kind: tick.kind, count: tick.count, isEmpty: isEmpty)
+            }
+        }
+        .frame(width: 32, alignment: .leading)
+    }
+
+    /// Single tick row: a 14 × 2 coloured bar followed by a digit.
+    /// Renders dim grey when count is 0 or the whole widget is empty.
+    private func tickRow(kind: StatusKind, count: Int, isEmpty: Bool) -> some View {
+        let active = !isEmpty && count > 0
+        let barColor: Color = active ? kind.color : Color(white: 0.16)
+        let textColor: Color = active ? kind.color : Color(white: 0.30)
+        return HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(barColor)
+                .frame(width: 14, height: 2)
+            Text("\(count)")
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundColor(textColor)
         }
     }
 }
