@@ -16,98 +16,135 @@ final class MockShellExecutor: ShellExecutor {
 
 @MainActor
 final class ProcessMonitorTests: XCTestCase {
-    func testDiscoversPIDs() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = "1234\n5678"
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
 
-        let pids = await monitor.discoverPIDs()
-        XCTAssertEqual(pids, [1234, 5678])
+    /// Mock shell that always returns empty so pgrep doesn't pick up
+    /// real claude processes running on the host machine.
+    private func emptyShell() -> MockShellExecutor {
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        return shell
     }
 
-    func testDiscoversPIDsReturnsEmptyForNoProcesses() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = ""
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+    /// Fresh empty state dir per test so we don't pick up the host
+    /// machine's real `~/.clyde/state/` content or other tests' files.
+    private func tempStateDir() -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-tests-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
 
+    /// Writes an -info file the way SessionStart hook would. Uses the
+    /// current process PID so kill(pid, 0) succeeds and the entry isn't
+    /// pruned as dead.
+    private func writeInfoFile(in dir: URL, sessionId: String = UUID().uuidString, cwd: String = "/tmp") -> pid_t {
+        let pid = getpid()
+        let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","started_at":0}"#
+        let url = dir.appendingPathComponent("\(sessionId)-info")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
+        return pid
+    }
+
+    /// Writes a -busy marker. Same PID semantics as `writeInfoFile`.
+    private func writeBusyFile(in dir: URL, sessionId: String, pid: pid_t = getpid(), cwd: String = "/tmp") {
+        let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","timestamp":\#(Int(Date().timeIntervalSince1970))}"#
+        let url = dir.appendingPathComponent("\(sessionId)-busy")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func testDiscoverPIDsReadsInfoFiles() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        let pids = await monitor.discoverPIDs()
+        XCTAssertEqual(pids, [pid])
+    }
+
+    func testDiscoverPIDsReturnsEmptyWhenNoInfoFiles() async {
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: tempStateDir())
         let pids = await monitor.discoverPIDs()
         XCTAssertEqual(pids, [])
     }
 
-    func testClassifiesBusyWhenChildrenExist() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -P"] = "9999\n9998"
-        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool\nS+ /bin/bash other-tool"
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+    func testDiscoverPIDsDropsDeadPIDs() async {
+        let dir = tempStateDir()
+        // Use a PID that almost certainly doesn't exist.
+        let deadPID: pid_t = 999_999
+        let body = #"{"session_id":"dead","pid":\#(deadPID),"cwd":"/tmp","started_at":0}"#
+        try? body.write(to: dir.appendingPathComponent("dead-info"), atomically: true, encoding: .utf8)
 
-        let status = await monitor.classifyStatus(pid: 1234)
-        XCTAssertEqual(status, .busy)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        _ = await monitor.discoverPIDs()
+        // Dead -info file should have been removed.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("dead-info").path))
     }
 
-    func testClassifiesIdleWhenNoChildren() async {
-        let shell = MockShellExecutor()
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+    func testClassifyStatusIsBusyWhenBusyMarkerPresent() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        writeBusyFile(in: dir, sessionId: sid, pid: pid)
 
-        let status = await monitor.classifyStatus(pid: 1234)
-        XCTAssertEqual(status, .idle)
-    }
-
-    func testDetectsWorkingDirectory() async {
-        let shell = MockShellExecutor()
-        shell.responses["lsof"] = "n/Users/me/Projects/shipyard/.claude/settings.local.json"
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
-
-        let cwd = await monitor.detectCWD(pid: 1234)
-        XCTAssertEqual(cwd, "/Users/me/Projects/shipyard")
-    }
-
-    func testPollBuildsSessionList() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["pgrep -P"] = "9999"
-        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
-        shell.responses["lsof"] = "n/Users/me/Projects/shipyard/.claude/settings.local.json"
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
-
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
         await monitor.poll()
-        XCTAssertEqual(monitor.sessions.count, 1)
-        XCTAssertEqual(monitor.sessions.first?.pid, 1234)
         XCTAssertEqual(monitor.sessions.first?.status, .busy)
     }
 
-    func testPollRemovesEndedSessions() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["pgrep -P"] = "9999"
-        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
-        shell.responses["lsof"] = "n/Users/me/test/.claude/settings.local.json"
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+    func testClassifyStatusIsIdleWhenNoBusyMarker() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
 
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.first?.status, .idle)
+    }
+
+    func testPollBuildsSessionListFromInfoFiles() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid, cwd: "/Users/me/Projects/shipyard")
+        writeBusyFile(in: dir, sessionId: sid, pid: pid, cwd: "/Users/me/Projects/shipyard")
+
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.count, 1)
+        XCTAssertEqual(monitor.sessions.first?.pid, pid)
+        XCTAssertEqual(monitor.sessions.first?.status, .busy)
+        XCTAssertEqual(monitor.sessions.first?.workingDirectory, "/Users/me/Projects/shipyard")
+    }
+
+    func testPollRemovesEndedSessions() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
         await monitor.poll()
         XCTAssertEqual(monitor.sessions.count, 1)
 
-        shell.responses["pgrep -x claude"] = ""
+        // SessionEnd hook would remove both files.
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-info"))
         await monitor.poll()
         XCTAssertEqual(monitor.sessions.count, 0)
     }
 
     func testClydeStateIsBusyWhenAnySessionBusy() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["pgrep -P"] = "9999"
-        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
-        shell.responses["lsof"] = "n/Users/me/test/.claude/settings.local.json"
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        writeBusyFile(in: dir, sessionId: sid, pid: pid)
 
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
         await monitor.poll()
         XCTAssertEqual(monitor.clydeState, .busy)
     }
 
     func testClydeStateIsSleepingWhenNoSessions() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = ""
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
-
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: tempStateDir())
         await monitor.poll()
         XCTAssertEqual(monitor.clydeState, .sleeping)
     }

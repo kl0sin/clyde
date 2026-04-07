@@ -55,10 +55,6 @@ enum AppConstants {
     /// Protects against orphan busy markers if Claude crashes without firing Stop.
     static let busyMarkerTimeout: TimeInterval = 600.0
 
-    /// After a Stop deletes the busy marker, we keep showing the session as busy
-    /// for this long so short prompt→stop cycles are still visible in the UI.
-    static let busyMarkerLinger: TimeInterval = 1.5
-
     /// Distance from screen edge to trigger widget snap
     static let edgeSnapThreshold: CGFloat = 36.0
 

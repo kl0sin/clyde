@@ -15,7 +15,11 @@ final class NotificationServiceTests: XCTestCase {
 
     func testNotificationContentUsesCWDWhenNoCustomName() {
         let service = NotificationService()
-        let session = Session(pid: 123, workingDirectory: "/Users/me/Projects/tally-up")
+        let session = Session(
+            pid: 123,
+            workingDirectory: "/Users/me/Projects/tally-up",
+            sessionId: UUID().uuidString
+        )
 
         let content = service.buildNotificationContent(for: session)
         XCTAssertEqual(content.body, "tally-up is ready")

@@ -3,26 +3,53 @@ import XCTest
 
 @MainActor
 final class IntegrationTests: XCTestCase {
-    func testFullPollingCycleUpdatesViewModels() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = "1111\n2222"
-        shell.responses["pgrep -P"] = "9999" // children = busy
-        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
-        shell.responses["lsof"] = "n/Users/me/project-a/.claude/settings.local.json"
 
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+    private func tempStateDir() -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-tests-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func writeInfo(in dir: URL, sessionId: String, cwd: String) {
+        let pid = getpid()
+        let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","started_at":0}"#
+        try? body.write(to: dir.appendingPathComponent("\(sessionId)-info"), atomically: true, encoding: .utf8)
+    }
+
+    private func writeBusy(in dir: URL, sessionId: String, cwd: String) {
+        let pid = getpid()
+        let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","timestamp":\#(Int(Date().timeIntervalSince1970))}"#
+        try? body.write(to: dir.appendingPathComponent("\(sessionId)-busy"), atomically: true, encoding: .utf8)
+    }
+
+    func testFullPollingCycleUpdatesViewModels() async {
+        let dir = tempStateDir()
+        // NOTE: only one session because all hook fixtures must use the
+        // current process's PID to survive the kill(pid, 0) liveness check;
+        // we can't fake multiple distinct live PIDs in a unit test.
+        let sid = UUID().uuidString
+        writeInfo(in: dir, sessionId: sid, cwd: "/Users/me/project-a")
+        writeBusy(in: dir, sessionId: sid, cwd: "/Users/me/project-a")
+
+        // Mock pgrep to return nothing so the test doesn't pick up real
+        // claude processes running on the host.
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir)
         let appVM = AppViewModel(processMonitor: monitor)
         let sessionVM = SessionListViewModel(processMonitor: monitor)
 
         await monitor.poll()
 
         XCTAssertEqual(appVM.clydeState, .busy)
-        XCTAssertEqual(appVM.statusText, "2 working")
-        XCTAssertEqual(sessionVM.sessionCount, 2)
-        XCTAssertEqual(sessionVM.busyCount, 2)
+        XCTAssertEqual(appVM.statusText, "1 working")
+        XCTAssertEqual(sessionVM.sessionCount, 1)
+        XCTAssertEqual(sessionVM.busyCount, 1)
 
-        // Sessions end
-        shell.responses["pgrep -x claude"] = ""
+        // Session ends — SessionEnd hook would remove both files.
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-info"))
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-busy"))
         await monitor.poll()
 
         XCTAssertEqual(appVM.clydeState, .sleeping)
@@ -31,27 +58,27 @@ final class IntegrationTests: XCTestCase {
     }
 
     func testNotificationFiringOnIdleTransition() async {
-        let shell = MockShellExecutor()
-        shell.responses["pgrep -x claude"] = "1234"
-        shell.responses["pgrep -P"] = "9999" // busy
-        shell.responses["ps -o stat=,args= -p"] = "S+ /bin/bash some-tool"
-        shell.responses["lsof"] = "n/Users/me/shipyard/.claude/settings.local.json"
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        writeInfo(in: dir, sessionId: sid, cwd: "/Users/me/shipyard")
+        writeBusy(in: dir, sessionId: sid, cwd: "/Users/me/shipyard")
 
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1)
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir)
 
         var notifiedSession: Session?
         monitor.onSessionBecameIdle = { session in
             notifiedSession = session
         }
 
-        // First poll: busy (has children)
+        // First poll: busy (busy marker present)
         await monitor.poll()
         XCTAssertNil(notifiedSession)
         XCTAssertEqual(monitor.sessions.first?.status, .busy)
 
-        // Children gone = idle, notification fires immediately
-        shell.responses.removeValue(forKey: "pgrep -P")
-        shell.responses.removeValue(forKey: "ps -o stat=,args= -p")
+        // Stop hook removes the busy marker → session becomes idle, notification fires.
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-busy"))
         await monitor.poll()
 
         XCTAssertNotNil(notifiedSession)

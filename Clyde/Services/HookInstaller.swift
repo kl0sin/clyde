@@ -19,11 +19,11 @@ enum HookInstaller {
     /// Bumped whenever the embedded hook script changes. The version line is
     /// embedded in the script itself; Clyde reads it from the installed copy
     /// at startup and prompts a reinstall if it's older.
-    static let currentScriptVersion = 3
+    static let currentScriptVersion = 9
 
     static let hookScript = ##"""
     #!/bin/bash
-    # clyde-hook-version: 3
+    # clyde-hook-version: 9
     # Clyde notification hook — signals Clyde about Claude session state transitions.
     # Installed automatically by Clyde. Safe to remove manually.
     #
@@ -135,9 +135,24 @@ enum HookInstaller {
         UserPromptSubmit)
             atomic_write "$STATE_DIR/$KEY-busy" \
                 "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"timestamp\": $TIMESTAMP}"
+            # If this is an existing session that predates Clyde, the
+            # SessionStart hook never fired for it. Backfill -info so the
+            # session "graduates" to full hook tracking from now on.
+            if [ ! -f "$STATE_DIR/$KEY-info" ]; then
+                atomic_write "$STATE_DIR/$KEY-info" \
+                    "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP}"
+            fi
             ;;
         Stop)
-            rm -f "$STATE_DIR/$KEY-busy"
+            # Clear both the busy marker AND any pending attention event for
+            # this session. Stop means the turn is over — any permission
+            # request inside that turn has been resolved by the user.
+            rm -f "$STATE_DIR/$KEY-busy" "$EVENTS_DIR/$KEY.json"
+            ;;
+        PreToolUse)
+            # Tools can only run after permission was granted, so clear any
+            # pending attention flag. The session stays busy via its marker.
+            rm -f "$EVENTS_DIR/$KEY.json"
             ;;
     esac
 
@@ -150,12 +165,15 @@ enum HookInstaller {
     /// - `UserPromptSubmit`: user sent a new prompt → busy start
     /// - `Stop`: Claude finished responding → busy end
     /// - `PermissionRequest`: Claude needs user approval → attention
+    /// - `PreToolUse`: Claude is about to run a tool → permission was resolved,
+    ///                 so clear any pending attention flag
     static let registeredHookEvents = [
         "SessionStart",
         "SessionEnd",
         "UserPromptSubmit",
         "Stop",
         "PermissionRequest",
+        "PreToolUse",
     ]
 
     static var isInstalled: Bool {
@@ -327,7 +345,7 @@ enum HookInstaller {
 
         if var hooks = settings["hooks"] as? [String: Any] {
             // Clean up all currently registered events plus any legacy ones we may have used before.
-            let legacyEvents = ["Notification", "PreToolUse"]
+            let legacyEvents = ["Notification"]
             for eventName in Self.registeredHookEvents + legacyEvents {
                 removeClydeHook(&hooks, eventName: eventName)
             }

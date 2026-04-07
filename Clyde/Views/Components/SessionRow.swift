@@ -8,6 +8,7 @@ struct SessionRow: View {
     let disambiguator: String?
     let onRename: (String) -> Void
     let onFocus: () -> Void
+    let onReset: (() -> Void)?
 
     @State private var isEditing = false
     @State private var editName = ""
@@ -135,6 +136,23 @@ struct SessionRow: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture { onFocus() }
+        .contextMenu {
+            Button(action: { onFocus() }) {
+                Label("Focus terminal", systemImage: "arrow.up.right.square")
+            }
+            Button(action: {
+                editName = session.customName ?? ""
+                isEditing = true
+            }) {
+                Label("Rename", systemImage: "pencil")
+            }
+            if let onReset {
+                Divider()
+                Button(role: .destructive, action: onReset) {
+                    Label("Reset session state", systemImage: "arrow.counterclockwise")
+                }
+            }
+        }
         .onChange(of: session.status) { newStatus in
             if lastSeenStatus != nil && lastSeenStatus != newStatus {
                 // Flash the row on state change

@@ -77,6 +77,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.orderFront(nil)
         setupMenuBarIcon()
         appViewModel.start()
+        registerGlobalHotKey()
+        // Onboarding is deferred until the panel has been up for a moment
+        // and we can present a non-blocking dialog.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.showOnboardingIfNeeded()
+        }
 
         // Window move → snap to edges
         NotificationCenter.default.addObserver(
@@ -168,6 +174,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor @objc private func openSettings() {
         appViewModel.showSettings = true
         appViewModel.isCollapsed = false
+    }
+
+    // MARK: - Onboarding
+
+    private static let onboardingShownKey = "onboardingShown"
+
+    private var onboardingWindow: NSWindow?
+
+    @MainActor private func showOnboardingIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Self.onboardingShownKey) else { return }
+
+        // LSUIElement apps don't normally appear in the Dock; temporarily
+        // switch to .regular so our custom onboarding window gets focus
+        // and standard window-level behaviour.
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+
+        let onboardingView = OnboardingView(
+            onGetStarted: { [weak self] in
+                self?.dismissOnboarding()
+            },
+            onOpenSettings: { [weak self] in
+                self?.dismissOnboarding()
+                self?.openSettings()
+            }
+        )
+
+        let hostingController = NSHostingController(rootView: onboardingView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Welcome to Clyde"
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.styleMask = [.titled, .closable, .fullSizeContentView]
+        window.backgroundColor = NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)
+        window.isMovableByWindowBackground = true
+        window.center()
+        window.level = .floating
+        window.makeKeyAndOrderFront(nil)
+        onboardingWindow = window
+
+        defaults.set(true, forKey: Self.onboardingShownKey)
+    }
+
+    @MainActor private func dismissOnboarding() {
+        onboardingWindow?.close()
+        onboardingWindow = nil
+        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: - Expand/Collapse Animation
@@ -292,6 +346,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var snapDebounceWork: DispatchWorkItem?
+    private var globalHotKeyMonitor: Any?
+    private var localHotKeyMonitor: Any?
+
+    // MARK: - Global hotkey (⌃⌘C)
+
+    /// Toggles the expanded view from anywhere on the system.
+    /// Uses NSEvent monitors (no entitlements needed). The local monitor
+    /// covers the case when Clyde itself is the key window.
+    @MainActor private func registerGlobalHotKey() {
+        let handler: (NSEvent) -> Void = { [weak self] event in
+            guard let self else { return }
+            // ⌃⌘C — control + command + "c"
+            let needsModifiers: NSEvent.ModifierFlags = [.control, .command]
+            let activeFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard activeFlags == needsModifiers else { return }
+            guard event.charactersIgnoringModifiers?.lowercased() == "c" else { return }
+            DispatchQueue.main.async {
+                self.toggleFromHotkey()
+            }
+        }
+
+        globalHotKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: handler)
+        localHotKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            handler(event)
+            return event
+        }
+    }
+
+    @MainActor private func toggleFromHotkey() {
+        appViewModel.toggleExpanded()
+        if !appViewModel.isCollapsed {
+            panel.makeKeyAndOrderFront(nil)
+        }
+    }
 
     func snapToNearestEdge() {
         let frame = panel.frame

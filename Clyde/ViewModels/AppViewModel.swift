@@ -78,15 +78,17 @@ final class AppViewModel: ObservableObject {
             self.notificationService.playReadySound()
         }
 
-        // When session becomes busy again, clear its attention flag
+        // Forward ProcessMonitor updates to our own observers.
+        //
+        // Historical note: we used to clear the attention flag here whenever a
+        // session was seen as .busy, on the theory that "busy means user is
+        // working in that session again". That was wrong — permission
+        // requests happen *while* Claude is still busy (Stop hasn't fired),
+        // so clearing attention on busy immediately wiped every permission
+        // alert. Attention is now only cleared by explicit user action
+        // (focusSession), by the hook's SessionEnd, or by the scan timeout.
         processMonitor.objectWillChange
-            .sink { [weak self] _ in
-                guard let self else { return }
-                for session in self.processMonitor.sessions where session.status == .busy {
-                    self.attentionMonitor.clearAttention(pid: session.pid)
-                }
-                self.objectWillChange.send()
-            }
+            .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
 
         attentionMonitor.objectWillChange
@@ -167,7 +169,7 @@ final class AppViewModel: ObservableObject {
                 shouldAutoInstall = false
             }
 
-            var resolvedIssue: HookInstaller.HealthIssue? = issue
+            let resolvedIssue: HookInstaller.HealthIssue?
             if shouldAutoInstall {
                 do {
                     try HookInstaller.install()
@@ -177,9 +179,12 @@ final class AppViewModel: ObservableObject {
                     ClydeLog.hooks.error("Auto-install failed: \(error.localizedDescription, privacy: .public)")
                     resolvedIssue = .autoRepairFailed(reason: error.localizedDescription)
                 }
+            } else {
+                resolvedIssue = issue
             }
 
-            await MainActor.run { self.hookHealthIssue = resolvedIssue }
+            let finalIssue = resolvedIssue
+            await MainActor.run { self.hookHealthIssue = finalIssue }
         }
     }
 
@@ -196,6 +201,41 @@ final class AppViewModel: ObservableObject {
     /// on the next launch.
     func setHookOptOut(_ optedOut: Bool) {
         UserDefaults.standard.set(optedOut, forKey: Self.hookOptOutKey)
+    }
+
+    /// Wipe all hook-driven state files (state/, events/) and clear the
+    /// in-memory caches. Useful when the user suspects something is stuck.
+    /// Sessions will reappear on the next hook event or pgrep poll.
+    func resetAllHookState() {
+        let toClear = [AppPaths.stateDir, AppPaths.eventsDir]
+        for dir in toClear {
+            if let files = try? FileManager.default.contentsOfDirectory(atPath: dir.path) {
+                for f in files {
+                    try? FileManager.default.removeItem(at: dir.appendingPathComponent(f))
+                }
+            }
+        }
+        ClydeLog.general.info("All hook state cleared by user")
+        // Re-poll so the UI reflects the wipe immediately.
+        Task { await processMonitor.poll() }
+    }
+
+    /// Wipe state for a single session (info + busy markers + any pending
+    /// attention event). Used by the per-session reset action in the
+    /// expanded view.
+    func resetSession(_ session: Session) {
+        if let sid = session.sessionId {
+            let names = ["\(sid)-info", "\(sid)-busy"]
+            for name in names {
+                try? FileManager.default.removeItem(at: AppPaths.stateDir.appendingPathComponent(name))
+            }
+            try? FileManager.default.removeItem(at: AppPaths.eventsDir.appendingPathComponent("\(sid).json"))
+        }
+        // Also clear the in-memory attention flag for this PID, in case
+        // there were legacy events keyed by something else.
+        attentionMonitor.clearAttention(pid: session.pid)
+        ClydeLog.general.info("Session \(session.pid, privacy: .public) state cleared by user")
+        Task { await processMonitor.poll() }
     }
 
     /// Build a multi-line diagnostic dump and copy it to the pasteboard.

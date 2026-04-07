@@ -6,6 +6,8 @@ struct SettingsView: View {
     @ObservedObject var notificationService: NotificationService
     @AppStorage("pollingInterval") private var pollingInterval: Double = AppConstants.defaultPollingInterval
     @State private var copiedDiagnostics = false
+    @State private var resetConfirmation = false
+    @State private var resetDone = false
 
     init(appViewModel: AppViewModel) {
         self.appViewModel = appViewModel
@@ -26,6 +28,7 @@ struct SettingsView: View {
                     monitoringSection
                     soundSection
                     SettingsSection(title: "Claude Integration") { ClaudeHooksRow(appViewModel: appViewModel) }
+                    maintenanceSection
                     aboutSection
                 }
                 .padding(16)
@@ -148,6 +151,53 @@ struct SettingsView: View {
                 .onChange(of: selection.wrappedValue) { newSound in
                     NSSound(named: NSSound.Name(newSound))?.play()
                 }
+            }
+        }
+    }
+
+    private var maintenanceSection: some View {
+        SettingsSection(title: "Maintenance") {
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Reset tracking state")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white)
+                    Text("Wipes all session and event files in ~/.clyde/. Sessions will reappear on the next hook fire or pgrep poll. Use this if Clyde gets stuck in a wrong state.")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(white: 0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button(action: {
+                    if resetConfirmation {
+                        appViewModel.resetAllHookState()
+                        resetConfirmation = false
+                        resetDone = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            resetDone = false
+                        }
+                    } else {
+                        resetConfirmation = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(4))
+                            resetConfirmation = false
+                        }
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: resetDone ? "checkmark" : (resetConfirmation ? "exclamationmark.triangle.fill" : "trash"))
+                            .font(.system(size: 11))
+                        Text(resetDone ? "State cleared" : (resetConfirmation ? "Click again to confirm" : "Reset all state"))
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(resetDone ? .green : (resetConfirmation ? .orange : Color(white: 0.8)))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background((resetDone ? Color.green : (resetConfirmation ? Color.orange : Color(white: 0.18))).opacity(resetConfirmation ? 0.15 : 0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
             }
         }
     }

@@ -21,6 +21,12 @@ struct Session: Identifiable, Equatable {
         if let customName, !customName.isEmpty {
             return customName
         }
+        // Sessions without a hook session_id were discovered via pgrep alone,
+        // so we don't have a trustworthy cwd for them — fall back to a
+        // generic label until the next hook event populates the -info file.
+        if sessionId == nil {
+            return "Session \(pid)"
+        }
         if workingDirectory.isEmpty {
             return "Session \(pid)"
         }

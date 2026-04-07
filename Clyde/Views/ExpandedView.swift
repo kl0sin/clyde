@@ -32,6 +32,9 @@ struct ExpandedView: View {
                     },
                     onFocus: { session in
                         appViewModel.focusSession(session)
+                    },
+                    onReset: { session in
+                        appViewModel.resetSession(session)
                     }
                 )
             }
