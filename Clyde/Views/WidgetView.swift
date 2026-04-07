@@ -14,8 +14,8 @@ struct WidgetView: View {
                 .frame(width: 22, height: 22)
 
                 Text("Clyde")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundColor(Color(white: 0.55))
                     .fixedSize()
 
                 RoundedRectangle(cornerRadius: 0.5)

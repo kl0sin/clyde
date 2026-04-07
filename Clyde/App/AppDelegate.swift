@@ -137,8 +137,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
     }
 
-    /// Pick an SF Symbol + label that reflects the dominant Clyde state.
-    /// Mirrors the priority used by the widget badge: attention > busy > ready > none.
+    /// Render the menu bar button: Clyde silhouette (template) + a count
+    /// label coloured to reflect the dominant state. Icon is always the
+    /// same shape so the user sees "that's Clyde" at a glance; the state
+    /// lives in the count's colour.
     @MainActor private func refreshMenuBarItem() {
         guard let button = statusItem?.button else { return }
 
@@ -148,34 +150,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let working = liveSessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
         let ready = liveSessions.count - working - attention
 
-        // Match the rest of the macOS menu bar: template (auto-tinted)
-        // monochrome icons. State is communicated by the symbol shape +
-        // the numeric label, not by colour.
-        let symbolName: String
-        let label: String
+        // Always the Clyde mascot as template — same silhouette regardless
+        // of state, auto-tinted by macOS to match the menu bar appearance.
+        button.image = ClydeMenuBarIcon.templateImage()
 
+        // State is conveyed by a small coloured dot prefix; the count
+        // itself stays in the system label colour so it's always readable
+        // regardless of what's behind the menu bar (wallpaper, transparent
+        // background, dark/light mode).
+        let count: Int
+        let dotColor: NSColor
         if attention > 0 {
-            symbolName = "hand.tap.fill"
-            label = " \(attention)"
+            count = attention
+            dotColor = .systemBlue
         } else if working > 0 {
-            symbolName = "bolt.fill"
-            label = " \(working)"
+            count = working
+            // Custom purple matching the widget and expanded view, but
+            // lifted a notch for menu bar readability.
+            dotColor = NSColor(red: 0.831, green: 0.549, blue: 1.0, alpha: 1)
         } else if ready > 0 {
-            symbolName = "checkmark"
-            label = " \(ready)"
+            count = ready
+            dotColor = .systemGreen
         } else {
-            symbolName = "cpu"
-            label = ""
+            // No sessions — drop the count entirely, icon alone.
+            button.attributedTitle = NSAttributedString(string: "")
+            return
         }
 
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .heavy)
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Clyde")?
-            .withSymbolConfiguration(config)
-        image?.isTemplate = true
-        button.image = image
-        button.title = label
-        button.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        button.contentTintColor = nil
+        let combined = NSMutableAttributedString()
+        combined.append(NSAttributedString(
+            string: " ● ",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 9, weight: .bold),
+                .foregroundColor: dotColor,
+                .baselineOffset: 1,
+            ]
+        ))
+        combined.append(NSAttributedString(
+            string: "\(count)",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                .foregroundColor: NSColor.labelColor,
+            ]
+        ))
+        button.attributedTitle = combined
     }
 
     @MainActor @objc private func menuBarClicked() {
