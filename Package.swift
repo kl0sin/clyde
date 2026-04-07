@@ -9,6 +9,9 @@ let package = Package(
             name: "Clyde",
             path: "Clyde",
             exclude: ["Info.plist"],
+            resources: [
+                .copy("Resources/clyde-hook.sh")
+            ],
             linkerSettings: [
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",
