@@ -42,7 +42,7 @@
          and is used to sign DMG payloads. Without a valid signature
          Sparkle refuses to install. -->
     <key>SUPublicEDKey</key>
-    <string>SPARKLE_PUBLIC_KEY_PLACEHOLDER</string>
+    <string>d90ecLzhadif16wQ17K4m1Kf+tDfH0BIJgwcB1SkK+k=</string>
     <key>SUEnableAutomaticChecks</key>
     <true/>
     <!-- Daily automatic check (in seconds). -->
