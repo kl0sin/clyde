@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import AppKit
+import Darwin
 
 @MainActor
 final class AppViewModel: ObservableObject {
@@ -13,6 +14,7 @@ final class AppViewModel: ObservableObject {
     let terminalLauncher: TerminalLauncher
     let notificationService: NotificationService
     let attentionMonitor: AttentionMonitor
+    let activityLog: ActivityLog
 
     var clydeState: ClydeState {
         // Attention takes priority over busy — if any session is waiting for
@@ -37,6 +39,9 @@ final class AppViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var errorClearTask: Task<Void, Never>?
+    private var hookDirSource: DispatchSourceFileSystemObject?
+    private var hookDirFD: Int32 = -1
+    private var hookHealTimer: Timer?
 
     convenience init() {
         self.init(
@@ -66,6 +71,10 @@ final class AppViewModel: ObservableObject {
         self.terminalLauncher = terminalLauncher
         self.notificationService = notificationService
         self.attentionMonitor = attentionMonitor
+        self.activityLog = ActivityLog(
+            processMonitor: processMonitor,
+            attentionMonitor: attentionMonitor
+        )
 
         processMonitor.onSessionBecameIdle = { [weak self] session in
             guard let self else { return }
@@ -141,7 +150,45 @@ final class AppViewModel: ObservableObject {
         processMonitor.startPolling()
         attentionMonitor.start()
         ensureHookHealthy()
+        startHookSelfHealing()
         ClydeLog.general.info("Clyde started")
+    }
+
+    /// Watch `~/.claude/hooks/` for changes and re-run auto-repair the
+    /// moment anything tampers with the hook script (delete, replace,
+    /// truncate, ...). Plus a 60s safety-net timer for cases where the
+    /// FSEvents source somehow drops an event.
+    private func startHookSelfHealing() {
+        let hooksDir = AppPaths.claudeHooksDir
+        try? FileManager.default.createDirectory(at: hooksDir, withIntermediateDirectories: true)
+
+        let fd = open(hooksDir.path, O_EVTONLY)
+        if fd >= 0 {
+            hookDirFD = fd
+            let source = DispatchSource.makeFileSystemObjectSource(
+                fileDescriptor: fd,
+                eventMask: [.write, .delete, .rename, .extend, .attrib],
+                queue: DispatchQueue.main
+            )
+            source.setEventHandler { [weak self] in
+                self?.ensureHookHealthy()
+            }
+            source.setCancelHandler { [weak self] in
+                if let fd = self?.hookDirFD, fd >= 0 {
+                    close(fd)
+                    self?.hookDirFD = -1
+                }
+            }
+            source.resume()
+            hookDirSource = source
+        }
+
+        // Belt-and-braces: a 60s tick that re-runs the health check in case
+        // FSEvents misses something. Cheap, just a stat() call.
+        hookHealTimer?.invalidate()
+        hookHealTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.ensureHookHealthy() }
+        }
     }
 
     /// Auto-install or auto-repair the hook on startup.

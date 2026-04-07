@@ -45,6 +45,8 @@ struct ExpandedView: View {
 
             Spacer(minLength: 0)
 
+            ActivityTimelineView(log: appViewModel.activityLog)
+
             SummaryBar(
                 sessionCount: sessionViewModel.sessionCount,
                 busyCount: sessionViewModel.busyCount,

@@ -1,0 +1,152 @@
+import Foundation
+import Combine
+
+/// Records a chronological feed of session lifecycle events for the
+/// expanded view's activity timeline. Subscribes to the existing
+/// `ProcessMonitor` and `AttentionMonitor` publishers, diffs against
+/// its own remembered state, and emits `ActivityEvent` rows.
+///
+/// Storage is in-memory only — at most `maxEvents` rows are kept,
+/// FIFO. The list resets on app launch.
+@MainActor
+final class ActivityLog: ObservableObject {
+    @Published private(set) var events: [ActivityEvent] = []
+
+    private let maxEvents = 50
+
+    /// Last-seen status / attention state per PID. Used to detect
+    /// transitions across publish ticks without double-counting.
+    private struct Snapshot {
+        var status: SessionStatus
+        var hadAttention: Bool
+        var displayName: String
+    }
+    private var snapshots: [pid_t: Snapshot] = [:]
+
+    private weak var processMonitor: ProcessMonitor?
+    private weak var attentionMonitor: AttentionMonitor?
+    private var cancellables = Set<AnyCancellable>()
+
+    init(processMonitor: ProcessMonitor, attentionMonitor: AttentionMonitor) {
+        self.processMonitor = processMonitor
+        self.attentionMonitor = attentionMonitor
+
+        // Seed the snapshot map without firing any events for sessions
+        // that already exist when the app launches.
+        for session in processMonitor.sessions where !session.isGhost {
+            snapshots[session.pid] = Snapshot(
+                status: session.status,
+                hadAttention: attentionMonitor.attentionPIDs.contains(session.pid),
+                displayName: session.displayName
+            )
+        }
+
+        processMonitor.$sessions
+            .receive(on: RunLoop.main)
+            .sink { [weak self] sessions in
+                self?.reconcile(sessions: sessions)
+            }
+            .store(in: &cancellables)
+
+        attentionMonitor.$attentionPIDs
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                if let sessions = self?.processMonitor?.sessions {
+                    self?.reconcile(sessions: sessions)
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Drop the entire history. Surfaced via the timeline UI's "clear" button.
+    func clear() {
+        events.removeAll()
+    }
+
+    // MARK: - Diffing
+
+    private func reconcile(sessions: [Session]) {
+        let attentionPIDs = attentionMonitor?.attentionPIDs ?? []
+        let live = sessions.filter { !$0.isGhost }
+        let livePIDs = Set(live.map(\.pid))
+
+        // Newly seen sessions
+        for session in live where snapshots[session.pid] == nil {
+            append(.init(
+                timestamp: Date(),
+                kind: .sessionStarted,
+                sessionDisplayName: session.displayName,
+                sessionPID: session.pid
+            ))
+        }
+
+        // Status / attention transitions
+        for session in live {
+            let hadAttention = attentionPIDs.contains(session.pid)
+            let prev = snapshots[session.pid]
+
+            if let prev {
+                if prev.status == .idle && session.status == .busy {
+                    append(.init(
+                        timestamp: Date(),
+                        kind: .promptSubmitted,
+                        sessionDisplayName: session.displayName,
+                        sessionPID: session.pid
+                    ))
+                } else if prev.status == .busy && session.status == .idle && !hadAttention {
+                    append(.init(
+                        timestamp: Date(),
+                        kind: .sessionReady,
+                        sessionDisplayName: session.displayName,
+                        sessionPID: session.pid
+                    ))
+                }
+
+                if !prev.hadAttention && hadAttention {
+                    append(.init(
+                        timestamp: Date(),
+                        kind: .permissionRequested,
+                        sessionDisplayName: session.displayName,
+                        sessionPID: session.pid
+                    ))
+                } else if prev.hadAttention && !hadAttention && session.status == .busy {
+                    // Attention cleared while still busy → user resolved
+                    // the prompt and Claude is processing the answer.
+                    append(.init(
+                        timestamp: Date(),
+                        kind: .permissionResolved,
+                        sessionDisplayName: session.displayName,
+                        sessionPID: session.pid
+                    ))
+                }
+            }
+
+            snapshots[session.pid] = Snapshot(
+                status: session.status,
+                hadAttention: hadAttention,
+                displayName: session.displayName
+            )
+        }
+
+        // Sessions that disappeared
+        let knownPIDs = Set(snapshots.keys)
+        for goneP in knownPIDs.subtracting(livePIDs) {
+            if let snapshot = snapshots[goneP] {
+                append(.init(
+                    timestamp: Date(),
+                    kind: .sessionEnded,
+                    sessionDisplayName: snapshot.displayName,
+                    sessionPID: goneP
+                ))
+            }
+            snapshots.removeValue(forKey: goneP)
+        }
+    }
+
+    private func append(_ event: ActivityEvent) {
+        events.insert(event, at: 0)
+        if events.count > maxEvents {
+            events.removeLast(events.count - maxEvents)
+        }
+    }
+}
