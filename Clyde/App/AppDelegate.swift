@@ -105,19 +105,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "cpu", accessibilityDescription: "Clyde")
-            button.image?.size = NSSize(width: 16, height: 16)
             button.action = #selector(menuBarClicked)
             button.target = self
+            button.imagePosition = .imageLeft
         }
 
+        refreshMenuBarItem()
         updateMenuBarMenu()
 
-        // Update menu when sessions change
+        // Update menu + icon whenever sessions or attention change.
         appViewModel.processMonitor.objectWillChange
-            .debounce(for: .seconds(1), scheduler: RunLoop.main)
-            .sink { [weak self] _ in self?.updateMenuBarMenu() }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshMenuBarItem()
+                self?.updateMenuBarMenu()
+            }
             .store(in: &cancellables)
+        appViewModel.attentionMonitor.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshMenuBarItem()
+                self?.updateMenuBarMenu()
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Pick an SF Symbol + label that reflects the dominant Clyde state.
+    /// Mirrors the priority used by the widget badge: attention > busy > ready > none.
+    @MainActor private func refreshMenuBarItem() {
+        guard let button = statusItem?.button else { return }
+
+        let liveSessions = appViewModel.processMonitor.sessions.filter { !$0.isGhost }
+        let attentionPIDs = appViewModel.attentionMonitor.attentionPIDs
+        let attention = liveSessions.filter { attentionPIDs.contains($0.pid) }.count
+        let working = liveSessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
+        let ready = liveSessions.count - working - attention
+
+        // Match the rest of the macOS menu bar: template (auto-tinted)
+        // monochrome icons. State is communicated by the symbol shape +
+        // the numeric label, not by colour.
+        let symbolName: String
+        let label: String
+
+        if attention > 0 {
+            symbolName = "hand.tap.fill"
+            label = " \(attention)"
+        } else if working > 0 {
+            symbolName = "bolt.fill"
+            label = " \(working)"
+        } else if ready > 0 {
+            symbolName = "checkmark"
+            label = " \(ready)"
+        } else {
+            symbolName = "cpu"
+            label = ""
+        }
+
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .heavy)
+        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Clyde")?
+            .withSymbolConfiguration(config)
+        image?.isTemplate = true
+        button.image = image
+        button.title = label
+        button.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        button.contentTintColor = nil
     }
 
     @MainActor @objc private func menuBarClicked() {
@@ -131,18 +182,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor private func updateMenuBarMenu() {
         let menu = NSMenu()
 
-        let sessions = appViewModel.processMonitor.sessions
-        if sessions.isEmpty {
+        let allSessions = appViewModel.processMonitor.sessions
+        let liveSessions = allSessions.filter { !$0.isGhost }
+        let attentionPIDs = appViewModel.attentionMonitor.attentionPIDs
+
+        if liveSessions.isEmpty {
             let item = NSMenuItem(title: "No Claude sessions", action: nil, keyEquivalent: "")
             item.isEnabled = false
             menu.addItem(item)
         } else {
-            for session in sessions {
-                let status = session.status == .busy ? "⏳" : "✅"
+            for session in liveSessions {
+                let status: String
+                if attentionPIDs.contains(session.pid) {
+                    status = "🔵"
+                } else if session.status == .busy {
+                    status = "🟠"
+                } else {
+                    status = "🟢"
+                }
                 let title = "\(status) \(session.displayName)"
                 let item = NSMenuItem(title: title, action: #selector(menuSessionClicked(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = session.pid
+                menu.addItem(item)
+            }
+        }
+
+        let ghosts = allSessions.filter { $0.isGhost }
+        if !ghosts.isEmpty {
+            menu.addItem(.separator())
+            let header = NSMenuItem(title: "Recently ended", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            for ghost in ghosts {
+                let item = NSMenuItem(title: "⚪ \(ghost.displayName)", action: nil, keyEquivalent: "")
+                item.isEnabled = false
                 menu.addItem(item)
             }
         }
