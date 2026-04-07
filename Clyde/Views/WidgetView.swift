@@ -75,7 +75,13 @@ struct WidgetView: View {
 private struct CompactStatusView: View {
     @ObservedObject var viewModel: AppViewModel
     @ObservedObject var attentionMonitor: AttentionMonitor
-    @State private var isPulsing = false
+
+    /// Slow ambient breathing for the working state (1.5s autoreverse).
+    @State private var workingPhase = false
+    /// Faster pulse for the attention state (0.8s autoreverse).
+    @State private var attentionPhase = false
+    /// Continuously expanding ring for attention (1.5s, non-autoreverse).
+    @State private var attentionRingExpand = false
 
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -163,27 +169,67 @@ private struct CompactStatusView: View {
             tickColumn(snapshot: snapshot, isEmpty: isEmpty)
         }
         .frame(width: 66, alignment: .leading)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                isPulsing = true
-            }
+        // Smooth crossfade when the dominant state changes (e.g. ready → working).
+        .animation(.easeInOut(duration: 0.35), value: dom.kind)
+        .onAppear { startAmbientAnimations() }
+    }
+
+    private func startAmbientAnimations() {
+        // Working: slow gentle breathing (opacity + tiny scale).
+        withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+            workingPhase = true
+        }
+        // Attention: faster pulse to draw the eye.
+        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+            attentionPhase = true
+        }
+        // Attention ring: a wave that expands outward and fades, then resets.
+        withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
+            attentionRingExpand = true
         }
     }
 
     /// Big number block on the left. 30 × 30 with the state's tinted
-    /// background. Pulses softly when the state is attention or working.
+    /// background. Working "breathes", attention pulses faster and gets a
+    /// glow ring; ready and empty are static.
     private func dominantBlock(kind: StatusKind, count: Int, isEmpty: Bool) -> some View {
         let bg: Color = isEmpty ? Color(white: 0.16) : kind.color.opacity(0.20)
         let fg: Color = isEmpty ? Color(white: 0.30) : kind.color
-        let shouldPulse = !isEmpty && kind.pulses
-        return Text("\(count)")
-            .font(.system(size: 14, weight: .heavy, design: .rounded))
-            .monospacedDigit()
-            .foregroundColor(fg)
-            .frame(width: 30, height: 30)
-            .background(bg)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .opacity(shouldPulse && isPulsing ? 0.4 : 1.0)
+
+        let isWorking = !isEmpty && kind == .working
+        let isAttention = !isEmpty && kind == .attention
+
+        // Per-state animated values, all driven by the three @State phases.
+        let scale: CGFloat = isWorking ? (workingPhase ? 1.03 : 1.0) : 1.0
+        let opacity: Double = {
+            if isWorking { return workingPhase ? 1.0 : 0.7 }
+            if isAttention { return attentionPhase ? 1.0 : 0.55 }
+            return 1.0
+        }()
+
+        return ZStack {
+            // Attention ring: stroked rounded-rect that grows and fades out,
+            // then loops. Sits behind the block. Only rendered for attention.
+            if isAttention {
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(kind.color, lineWidth: 1.5)
+                    .frame(width: 30, height: 30)
+                    .scaleEffect(attentionRingExpand ? 1.55 : 1.0)
+                    .opacity(attentionRingExpand ? 0.0 : 0.7)
+            }
+
+            Text("\(count)")
+                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .foregroundColor(fg)
+                .frame(width: 30, height: 30)
+                .background(bg)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .scaleEffect(scale)
+                .opacity(opacity)
+        }
+        .frame(width: 30, height: 30)
     }
 
     /// Two stacked tick rows on the right showing the non-dominant counts

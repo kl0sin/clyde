@@ -9,3 +9,4 @@ DerivedData/
 *.d
 *.o
 *.swiftdeps
+*.swiftdeps~
