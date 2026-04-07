@@ -22,6 +22,10 @@ final class ActivityLog: ObservableObject {
         var displayName: String
     }
     private var snapshots: [pid_t: Snapshot] = [:]
+    /// Hash of the last sessions+attention input we processed. Used to
+    /// short-circuit reconcile() when nothing relevant has changed (the
+    /// monitors emit on every poll, even if their state is identical).
+    private var lastReconcileFingerprint: Int = 0
 
     private weak var processMonitor: ProcessMonitor?
     private weak var attentionMonitor: AttentionMonitor?
@@ -69,6 +73,20 @@ final class ActivityLog: ObservableObject {
         let attentionPIDs = attentionMonitor?.attentionPIDs ?? []
         let live = sessions.filter { !$0.isGhost }
         let livePIDs = Set(live.map(\.pid))
+
+        // Cheap fingerprint of inputs that could trigger an event. If nothing
+        // observable changed since the previous tick, skip the diff entirely.
+        var hasher = Hasher()
+        for s in live {
+            hasher.combine(s.pid)
+            hasher.combine(s.status)
+            hasher.combine(attentionPIDs.contains(s.pid))
+        }
+        let fingerprint = hasher.finalize()
+        if fingerprint == lastReconcileFingerprint && snapshots.keys.allSatisfy(livePIDs.contains) {
+            return
+        }
+        lastReconcileFingerprint = fingerprint
 
         // Newly seen sessions
         for session in live where snapshots[session.pid] == nil {

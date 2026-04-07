@@ -1,0 +1,12 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     version="2.0">
+    <channel>
+        <title>Clyde</title>
+        <link>https://kl0sin.github.io/clyde/appcast.xml</link>
+        <description>Auto-update feed for the Clyde menu bar app.</description>
+        <language>en</language>
+        <!-- New <item> entries are inserted here by scripts/release/update-appcast.sh -->
+    </channel>
+</rss>

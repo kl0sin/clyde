@@ -1,0 +1,582 @@
+/* ============================================================
+   Clyde landing page
+   Dark + purple to match the app's brand.
+   ============================================================ */
+
+:root {
+  --bg: #0a0a10;
+  --bg-alt: #0f0f17;
+  --bg-card: #14141d;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #f0f0f5;
+  --text-dim: #8a8a99;
+  --text-faint: #5a5a6a;
+
+  --purple: #bf5af2;
+  --purple-bright: #d99cff;
+  --purple-deep: #7b2eb8;
+  --green: #34c759;
+  --green-bright: #5ee884;
+  --blue: #4a90e2;
+  --blue-bright: #7ab8ff;
+
+  --radius: 12px;
+  --radius-lg: 18px;
+  --shadow-glow: 0 0 60px rgba(191, 90, 242, 0.18);
+
+  --max-width: 1100px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+a { color: inherit; text-decoration: none; }
+a:hover { color: var(--purple-bright); }
+
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ============================================================
+   NAV
+   ============================================================ */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(20px);
+  background: rgba(10, 10, 16, 0.72);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.brand-mark {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  background-image: url('img/clyde.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.nav nav {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.nav nav a.ghost {
+  border: 1px solid var(--border-strong);
+  padding: 6px 14px;
+  border-radius: 8px;
+  color: var(--text);
+  transition: all 0.18s;
+}
+.nav nav a.ghost:hover {
+  border-color: var(--purple);
+  background: rgba(191, 90, 242, 0.08);
+}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+
+.hero {
+  position: relative;
+  padding: 100px 24px 120px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 800px 600px at 50% 0%, rgba(191, 90, 242, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 600px 400px at 20% 80%, rgba(74, 144, 226, 0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 600px 400px at 80% 80%, rgba(52, 199, 89, 0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.hero-content {
+  position: relative;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.hero-mascot {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.sprite-wrapper {
+  position: relative;
+  width: 144px;
+  height: 144px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sprite-glow {
+  position: absolute;
+  inset: -20px;
+  background: radial-gradient(circle, rgba(191, 90, 242, 0.4) 0%, transparent 70%);
+  filter: blur(20px);
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.sprite-clyde {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  background-image: url('img/clyde.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  animation: sprite-bob 4s ease-in-out infinite;
+}
+
+@keyframes sprite-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+h1 {
+  font-size: 64px;
+  font-weight: 800;
+  margin: 0 0 20px;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--purple-bright) 0%, var(--purple) 50%, var(--blue-bright) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.tagline {
+  font-size: 22px;
+  color: var(--text);
+  margin: 0 0 14px;
+  font-weight: 500;
+}
+
+.subtagline {
+  font-size: 16px;
+  color: var(--text-dim);
+  margin: 0 0 40px;
+  max-width: 540px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.cta-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.cta-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 28px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--purple) 0%, var(--purple-deep) 100%);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  box-shadow: 0 8px 24px rgba(191, 90, 242, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+.cta-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(191, 90, 242, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+.cta-icon {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 14px 24px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-weight: 500;
+  font-size: 15px;
+  transition: all 0.18s;
+}
+.cta-secondary:hover {
+  border-color: var(--purple);
+  background: rgba(191, 90, 242, 0.08);
+  color: var(--text);
+}
+
+.cta-meta {
+  font-size: 13px;
+  color: var(--text-faint);
+  margin: 12px 0 0;
+}
+
+/* ============================================================
+   FEATURES
+   ============================================================ */
+
+.features {
+  padding: 120px 0;
+  background: var(--bg-alt);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.section-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--purple-bright);
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+.section-header h2 {
+  font-size: 40px;
+  font-weight: 800;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.section-sub {
+  font-size: 16px;
+  color: var(--text-dim);
+  max-width: 580px;
+  margin: 0 auto;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.feature {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+  transition: all 0.2s;
+}
+.feature:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.feature-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.icon-bolt    { background: rgba(191, 90, 242, 0.15); color: var(--purple-bright); }
+.icon-bolt::before { content: '⚡'; }
+.icon-bell    { background: rgba(74, 144, 226, 0.15); color: var(--blue-bright); }
+.icon-bell::before { content: '🔔'; font-size: 16px; }
+.icon-stack   { background: rgba(52, 199, 89, 0.15); color: var(--green-bright); }
+.icon-stack::before { content: '☰'; font-size: 22px; }
+.icon-keys    { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+.icon-keys::before { content: '⌘'; }
+.icon-shield  { background: rgba(191, 90, 242, 0.15); color: var(--purple-bright); }
+.icon-shield::before { content: '🛡'; font-size: 16px; }
+.icon-source  { background: rgba(74, 144, 226, 0.15); color: var(--blue-bright); }
+.icon-source::before { content: '<>'; font-size: 14px; }
+
+.feature h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 10px;
+  color: var(--text);
+}
+
+.feature p {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.6;
+}
+
+kbd {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: -apple-system, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ============================================================
+   HOW IT WORKS
+   ============================================================ */
+
+.how {
+  padding: 120px 0;
+}
+
+.how-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.how-step {
+  text-align: center;
+  padding: 32px 24px;
+}
+
+.how-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 800;
+  font-feature-settings: "tnum";
+  margin-bottom: 24px;
+}
+
+.capsule-sprite {
+  width: 18px;
+  height: 18px;
+  background-image: url('img/clyde.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.capsule-ready {
+  background: linear-gradient(180deg, rgba(94, 232, 132, 0.30) 0%, rgba(45, 166, 76, 0.20) 100%);
+  color: var(--green-bright);
+  box-shadow: 0 0 16px rgba(52, 199, 89, 0.35), inset 0 0 0 0.5px rgba(94, 232, 132, 0.5);
+}
+.capsule-working {
+  background: linear-gradient(180deg, rgba(217, 156, 255, 0.32) 0%, rgba(156, 63, 224, 0.22) 100%);
+  color: var(--purple-bright);
+  box-shadow: 0 0 18px rgba(191, 90, 242, 0.4), inset 0 0 0 0.5px rgba(217, 156, 255, 0.55);
+  animation: capsule-pulse 2s ease-in-out infinite;
+}
+.capsule-attention {
+  background: linear-gradient(180deg, rgba(122, 184, 255, 0.34) 0%, rgba(37, 99, 212, 0.22) 100%);
+  color: var(--blue-bright);
+  box-shadow: 0 0 20px rgba(74, 144, 226, 0.5), inset 0 0 0 0.5px rgba(122, 184, 255, 0.6);
+  animation: capsule-pulse-fast 1.2s ease-in-out infinite;
+}
+
+@keyframes capsule-pulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(191, 90, 242, 0.4), inset 0 0 0 0.5px rgba(217, 156, 255, 0.55); }
+  50% { box-shadow: 0 0 28px rgba(191, 90, 242, 0.6), inset 0 0 0 0.5px rgba(217, 156, 255, 0.75); }
+}
+@keyframes capsule-pulse-fast {
+  0%, 100% { box-shadow: 0 0 20px rgba(74, 144, 226, 0.5), inset 0 0 0 0.5px rgba(122, 184, 255, 0.6); }
+  50% { box-shadow: 0 0 32px rgba(74, 144, 226, 0.75), inset 0 0 0 0.5px rgba(122, 184, 255, 0.8); }
+}
+
+.how-step h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.how-step p {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* ============================================================
+   INSTALL
+   ============================================================ */
+
+.install {
+  padding: 120px 0;
+  background: var(--bg-alt);
+  border-top: 1px solid var(--border);
+}
+
+.install-card {
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 40px 48px;
+}
+
+.install-card ol {
+  margin: 0 0 24px;
+  padding: 0 0 0 20px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.install-card li {
+  margin-bottom: 14px;
+  line-height: 1.7;
+}
+
+.install-card li::marker {
+  color: var(--purple-bright);
+  font-weight: 700;
+}
+
+.install-card code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 13px;
+  color: var(--purple-bright);
+}
+
+.install-card a {
+  color: var(--purple-bright);
+  border-bottom: 1px solid rgba(191, 90, 242, 0.3);
+}
+
+.install-meta {
+  font-size: 13px;
+  color: var(--text-faint);
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+
+footer {
+  padding: 60px 0 40px;
+  border-top: 1px solid var(--border);
+}
+
+.footer-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.footer-nav {
+  display: flex;
+  gap: 24px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.footer-meta {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin: 0;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 760px) {
+  .nav nav { gap: 16px; font-size: 13px; }
+  .nav nav a:not(.ghost):not([href*="github"]) { display: none; }
+
+  h1 { font-size: 44px; }
+  .tagline { font-size: 18px; }
+  .subtagline { font-size: 15px; }
+  .hero { padding: 70px 24px 90px; }
+
+  .section-header h2 { font-size: 30px; }
+  .features, .how, .install { padding: 80px 0; }
+
+  .feature-grid { grid-template-columns: 1fr; }
+  .how-grid { grid-template-columns: 1fr; }
+
+  .install-card { padding: 28px; }
+
+  .cta-row { flex-direction: column; }
+  .cta-primary, .cta-secondary { width: 100%; justify-content: center; }
+}

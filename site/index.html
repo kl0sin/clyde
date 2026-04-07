@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clyde — A friendly Claude Code session monitor for macOS</title>
+  <meta name="description" content="Clyde lives in your menu bar and shows you what every Claude Code session is doing in real time. Free, open source, native macOS.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Clyde — Claude Code session monitor">
+  <meta property="og:description" content="Know what Claude is doing — without alt-tabbing.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="img/og-preview.png">
+
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" href="img/favicon.png">
+</head>
+<body>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="#top">
+        <span class="brand-mark"></span>
+        <span class="brand-name">Clyde</span>
+      </a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/kl0sin/clyde" class="ghost">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- HERO -->
+    <section class="hero" id="top">
+      <div class="hero-bg"></div>
+      <div class="hero-content">
+        <div class="hero-mascot">
+          <div class="sprite-wrapper">
+            <div class="sprite-glow"></div>
+            <div class="sprite-clyde"></div>
+          </div>
+        </div>
+
+        <h1>Meet <span class="gradient-text">Clyde</span></h1>
+        <p class="tagline">Know what Claude is doing — without alt-tabbing.</p>
+        <p class="subtagline">
+          A friendly menu bar companion for Claude Code on macOS.
+          Real-time session tracking, attention alerts, multi-session view.
+        </p>
+
+        <div class="cta-row">
+          <a href="https://github.com/kl0sin/clyde/releases/latest" class="cta-primary">
+            <span class="cta-icon">↓</span>
+            Download for macOS
+          </a>
+          <a href="#how" class="cta-secondary">See how it works</a>
+        </div>
+
+        <p class="cta-meta">Free · Open source · macOS 13+ · Universal binary</p>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="features" id="features">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-label">What it does</p>
+          <h2>Stop tab-switching just to check on Claude.</h2>
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature">
+            <div class="feature-icon icon-bolt"></div>
+            <h3>Real-time tracking</h3>
+            <p>See exactly when Claude is working, idle, or waiting for permission. Powered by Claude Code's native hooks — instant, not polled.</p>
+          </div>
+
+          <div class="feature">
+            <div class="feature-icon icon-bell"></div>
+            <h3>Attention alerts</h3>
+            <p>Sound and banner the moment Claude needs your input. Never miss a permission request again, no matter which window has focus.</p>
+          </div>
+
+          <div class="feature">
+            <div class="feature-icon icon-stack"></div>
+            <h3>Multi-session view</h3>
+            <p>Track every Claude session across every terminal in one place. Drag to reorder, name them, jump back to the right window with a click.</p>
+          </div>
+
+          <div class="feature">
+            <div class="feature-icon icon-keys"></div>
+            <h3>Quiet by default</h3>
+            <p>Lives in your menu bar. Press <kbd>⌃⌘C</kbd> to expand, click to focus a session, snooze when you need quiet time.</p>
+          </div>
+
+          <div class="feature">
+            <div class="feature-icon icon-shield"></div>
+            <h3>Privacy-first</h3>
+            <p>Everything stays on your Mac. No accounts, no telemetry, no analytics. Clyde never talks to a server — Claude or otherwise.</p>
+          </div>
+
+          <div class="feature">
+            <div class="feature-icon icon-source"></div>
+            <h3>Open source</h3>
+            <p>Audit the code, file issues, send PRs. Built in SwiftUI as a single self-contained Swift Package — no Xcode project required.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="how" id="how">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-label">How it works</p>
+          <h2>Three states, one menu bar item.</h2>
+          <p class="section-sub">Clyde reads from Claude Code's hook events and shows the dominant state of all your sessions in a single capsule.</p>
+        </div>
+
+        <div class="how-grid">
+          <div class="how-step">
+            <div class="how-capsule capsule-ready">
+              <div class="capsule-sprite"></div>
+              <span>3</span>
+            </div>
+            <h3>Ready</h3>
+            <p>All your sessions finished what they were doing. Take a sip of coffee.</p>
+          </div>
+
+          <div class="how-step">
+            <div class="how-capsule capsule-working">
+              <div class="capsule-sprite"></div>
+              <span>2</span>
+            </div>
+            <h3>Working</h3>
+            <p>Claude is processing a prompt or running a tool. The little dot orbits.</p>
+          </div>
+
+          <div class="how-step">
+            <div class="how-capsule capsule-attention">
+              <div class="capsule-sprite"></div>
+              <span>1</span>
+            </div>
+            <h3>Needs you</h3>
+            <p>Claude wants permission to do something. Clyde waves and rings.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSTALL -->
+    <section class="install" id="install">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-label">Install</p>
+          <h2>Two clicks. No accounts.</h2>
+        </div>
+
+        <div class="install-card">
+          <ol>
+            <li>
+              <strong>Download</strong> the latest <code>.dmg</code> from
+              <a href="https://github.com/kl0sin/clyde/releases/latest">GitHub Releases</a>.
+            </li>
+            <li><strong>Drag</strong> Clyde into your Applications folder.</li>
+            <li>
+              <strong>Launch.</strong> Clyde will offer to install its Claude Code hook
+              automatically — accept and you're done.
+            </li>
+          </ol>
+
+          <p class="install-meta">
+            Requires macOS 13 Ventura or later. Universal binary (Apple Silicon &amp; Intel).
+            Code-signed and notarized by Apple.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <span class="brand-mark"></span>
+        <span>Clyde</span>
+      </div>
+      <nav class="footer-nav">
+        <a href="https://github.com/kl0sin/clyde">GitHub</a>
+        <a href="https://github.com/kl0sin/clyde/releases">Releases</a>
+        <a href="https://github.com/kl0sin/clyde/issues">Issues</a>
+        <a href="privacy.html">Privacy</a>
+      </nav>
+      <p class="footer-meta">© 2026 — Made with care by Mateusz Kłosiński. MIT licensed.</p>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -4,7 +4,7 @@ import os
 /// Unified logging interface for Clyde. Routes to os.log for Console.app
 /// and optionally to a file at ~/.clyde/logs/clyde.log.
 enum ClydeLog {
-    private static let subsystem = "com.clyde.app"
+    private static let subsystem = "io.github.kl0sin.clyde"
     static let general = os.Logger(subsystem: subsystem, category: "general")
     static let process = os.Logger(subsystem: subsystem, category: "process")
     static let terminal = os.Logger(subsystem: subsystem, category: "terminal")

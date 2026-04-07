@@ -31,7 +31,7 @@ struct SessionListView: View {
     }
 
     @ViewBuilder
-    private func rowWithIndicator(item: (session: Session, suffix: String?)) -> some View {
+    private func rowWithIndicator(item: (session: Session, suffix: String?, idleIndex: Int?)) -> some View {
         let isDragging = draggedSession?.id == item.session.id
         let isDropTarget = dropTargetSession?.id == item.session.id && draggedSession?.id != item.session.id
 
@@ -43,6 +43,7 @@ struct SessionListView: View {
             SessionRow(
                 session: item.session,
                 disambiguator: item.suffix,
+                idleIndex: item.idleIndex,
                 onRename: { name in onRename(item.session.id, name) },
                 onFocus: { onFocus(item.session) },
                 onReset: { onReset(item.session) },
@@ -93,8 +94,9 @@ struct SessionListView: View {
             .shadow(color: Color.accentColor.opacity(0.6), radius: 3)
     }
 
-    /// Numbered suffix for sessions sharing the same project name.
-    private var disambiguated: [(session: Session, suffix: String?)] {
+    /// Per-row metadata: disambiguation suffix when names collide, plus the
+    /// 1-based slot index for idle (non-active, non-ghost) sessions.
+    private var disambiguated: [(session: Session, suffix: String?, idleIndex: Int?)] {
         var counts: [String: Int] = [:]
         var indices: [String: Int] = [:]
 
@@ -102,14 +104,23 @@ struct SessionListView: View {
             counts[s.displayName, default: 0] += 1
         }
 
+        var nextIdleSlot = 1
         return sessions.map { session in
             let name = session.displayName
+            var suffix: String? = nil
             if (counts[name] ?? 0) > 1 {
                 let nextIndex = (indices[name] ?? 0) + 1
                 indices[name] = nextIndex
-                return (session, "#\(nextIndex)")
+                suffix = "#\(nextIndex)"
             }
-            return (session, nil)
+
+            let isActive = !session.isGhost && (session.needsAttention || session.status == .busy)
+            var idleIndex: Int? = nil
+            if !isActive && !session.isGhost {
+                idleIndex = nextIdleSlot
+                nextIdleSlot += 1
+            }
+            return (session, suffix, idleIndex)
         }
     }
 }

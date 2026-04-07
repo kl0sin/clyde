@@ -19,31 +19,31 @@ import Cocoa
 
 let _e: NSColor? = nil
 let _w: NSColor? = .white
-let _g: NSColor? = NSColor(red: 0.30, green: 1.00, blue: 0.50, alpha: 1)
-let _h: NSColor? = NSColor(white: 0.95, alpha: 1)
-let _d: NSColor? = NSColor(white: 0.65, alpha: 1)
-let _b: NSColor? = NSColor(red: 0.08, green: 0.08, blue: 0.10, alpha: 1)
-let _c: NSColor? = NSColor(red: 0.35, green: 0.70, blue: 1.00, alpha: 1)
-let _y: NSColor? = NSColor(red: 1.00, green: 0.85, blue: 0.20, alpha: 1)
-let _f: NSColor? = NSColor(white: 0.45, alpha: 1)
+let _h: NSColor? = NSColor(red: 0.910, green: 0.910, blue: 0.940, alpha: 1) // forehead shine
+let _s: NSColor? = NSColor(red: 0.565, green: 0.565, blue: 0.627, alpha: 1) // right-side shadow
+let _b: NSColor? = NSColor(red: 0.100, green: 0.100, blue: 0.140, alpha: 1) // outline / eyes / mouth
+let _g: NSColor? = NSColor(red: 0.369, green: 0.910, blue: 0.518, alpha: 1) // antenna tip
+let _G: NSColor? = NSColor(red: 0.659, green: 1.000, blue: 0.769, alpha: 1) // antenna halo
+let _d: NSColor? = NSColor(red: 0.353, green: 0.353, blue: 0.416, alpha: 1) // antenna stem
 
 let sprite: [[NSColor?]] = [
-    [_e, _e, _e, _e, _e, _e, _e, _g, _g, _e, _e, _e, _e, _e, _e, _e],
-    [_e, _e, _e, _e, _e, _e, _e, _d, _d, _e, _e, _e, _e, _e, _e, _e],
-    [_e, _e, _e, _e, _e, _e, _b, _d, _d, _b, _e, _e, _e, _e, _e, _e],
-    [_e, _e, _e, _e, _b, _b, _h, _h, _h, _h, _b, _b, _e, _e, _e, _e],
-    [_e, _e, _e, _b, _h, _w, _w, _w, _w, _w, _w, _h, _b, _e, _e, _e],
-    [_e, _e, _e, _b, _w, _b, _b, _w, _w, _b, _b, _w, _b, _e, _e, _e],
-    [_e, _e, _e, _b, _w, _b, _b, _w, _w, _b, _b, _w, _b, _e, _e, _e],
-    [_e, _e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _b, _e, _e, _e],
-    [_e, _e, _e, _b, _h, _w, _w, _w, _w, _w, _w, _h, _b, _e, _e, _e],
-    [_e, _e, _e, _e, _b, _b, _b, _b, _b, _b, _b, _b, _e, _e, _e, _e],
-    [_e, _e, _b, _h, _w, _c, _c, _c, _c, _c, _c, _w, _h, _b, _e, _e],
-    [_e, _e, _b, _w, _y, _c, _c, _c, _c, _c, _c, _y, _w, _b, _e, _e],
-    [_e, _e, _b, _h, _w, _c, _c, _c, _c, _c, _c, _w, _h, _b, _e, _e],
-    [_e, _e, _e, _b, _b, _d, _d, _d, _d, _d, _d, _b, _b, _e, _e, _e],
-    [_e, _e, _e, _e, _b, _f, _f, _b, _b, _f, _f, _b, _e, _e, _e, _e],
-    [_e, _e, _e, _e, _b, _b, _b, _e, _e, _b, _b, _b, _e, _e, _e, _e],
+    //0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
+    [_e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e], // 0
+    [_e, _e, _e, _e, _e, _e, _G, _g, _g, _G, _e, _e, _e, _e, _e, _e], // 1  antenna tip + halo
+    [_e, _e, _e, _e, _e, _e, _e, _d, _d, _e, _e, _e, _e, _e, _e, _e], // 2  stem
+    [_e, _e, _e, _e, _b, _b, _b, _b, _b, _b, _b, _b, _e, _e, _e, _e], // 3  top border
+    [_e, _e, _e, _b, _w, _h, _h, _h, _h, _h, _h, _w, _s, _b, _e, _e], // 4  forehead shine
+    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 5
+    [_e, _e, _b, _w, _w, _w, _b, _w, _w, _w, _b, _w, _w, _s, _b, _e], // 6  eye top + sparkle
+    [_e, _e, _b, _w, _w, _b, _b, _w, _w, _b, _b, _w, _w, _s, _b, _e], // 7  eye bottom
+    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 8
+    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 9
+    [_e, _e, _b, _w, _w, _w, _w, _b, _b, _w, _w, _w, _w, _s, _b, _e], // 10 closed grin
+    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 11
+    [_e, _e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e, _e], // 12
+    [_e, _e, _e, _e, _b, _b, _b, _b, _b, _b, _b, _b, _e, _e, _e, _e], // 13 bottom border
+    [_e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e], // 14
+    [_e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e], // 15
 ]
 
 // MARK: - Icon drawing

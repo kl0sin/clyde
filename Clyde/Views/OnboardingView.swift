@@ -1,8 +1,23 @@
 import SwiftUI
+import AppKit
 
 struct OnboardingView: View {
     let onGetStarted: () -> Void
     let onOpenSettings: () -> Void
+
+    /// Adaptive window size: prefers 420×500 but shrinks to fit small
+    /// displays. Computed once when the view is first laid out.
+    private static var preferredSize: CGSize {
+        let target = CGSize(width: 420, height: 500)
+        guard let visible = NSScreen.main?.visibleFrame else { return target }
+        // Leave a 40pt margin so the window has breathing room.
+        let maxW = max(320, visible.width - 80)
+        let maxH = max(420, visible.height - 80)
+        return CGSize(
+            width: min(target.width, maxW),
+            height: min(target.height, maxH)
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,11 +28,11 @@ struct OnboardingView: View {
 
                 Text("Meet Clyde")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
 
                 Text("Your Claude Code session companion")
                     .font(.system(size: 13))
-                    .foregroundColor(Color(white: 0.6))
+                    .foregroundStyle(Color(white: 0.6))
             }
             .padding(.top, 32)
             .padding(.bottom, 28)
@@ -59,7 +74,7 @@ struct OnboardingView: View {
                 Button(action: onOpenSettings) {
                     Text("Open Settings")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(Color(white: 0.8))
+                        .foregroundStyle(Color(white: 0.8))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(Color(white: 0.18))
@@ -70,7 +85,7 @@ struct OnboardingView: View {
                 Button(action: onGetStarted) {
                     Text("Get started")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(
@@ -88,7 +103,7 @@ struct OnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
         }
-        .frame(width: 420, height: 500)
+        .frame(width: Self.preferredSize.width, height: Self.preferredSize.height)
         .background(
             ZStack {
                 Color(nsColor: NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1))
@@ -105,16 +120,16 @@ struct OnboardingView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundColor(color)
+                .foregroundStyle(color)
                 .frame(width: 22, alignment: .center)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
                 Text(description)
                     .font(.system(size: 11))
-                    .foregroundColor(Color(white: 0.55))
+                    .foregroundStyle(Color(white: 0.55))
             }
 
             Spacer(minLength: 0)

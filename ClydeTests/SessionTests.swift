@@ -34,12 +34,12 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(session.displayName, "shipyard")
     }
 
-    func testDisplayNameFallsBackToUntitledForHomeDirectoryCWD() {
-        // The classic "lsof found only the global settings file" case:
-        // cwd is the home directory, which tells us nothing about the
-        // project. Fall back to the friendly generic label.
+    func testDisplayNameUsesHomeLabelForHomeDirectoryCWD() {
+        // cwd == ~ tells us nothing about a project, but it IS distinctly
+        // "the home directory". Surface that as "Home" rather than the
+        // generic Untitled fallback.
         let session = Session(pid: 123, workingDirectory: NSHomeDirectory())
-        XCTAssertEqual(session.displayName, "Untitled session")
+        XCTAssertEqual(session.displayName, "Home")
     }
 
     func testDisplayNameFallsBackToUntitledForEmptyCWD() {

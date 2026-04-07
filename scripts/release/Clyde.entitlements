@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened Runtime entitlements for a Developer ID-signed,
+         non-sandboxed menu bar app. Clyde reads ~/.claude/ and writes
+         ~/.clyde/ outside of any sandbox container, so we deliberately
+         do NOT enable App Sandbox. -->
+
+    <!-- Sparkle's auto-update helper needs to launch a child process
+         (Autoupdate). Allow JIT for that. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Sparkle uses dyld to load a framework with non-system signature. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!-- Required for Sparkle's installer XPC service. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+</dict>
+</plist>

@@ -20,7 +20,9 @@ final class FloatingPanel: NSPanel {
         // Explicit drag regions only — SessionListView uses onDrag/onDrop
         // for reordering, so we can't let the whole background move the
         // window or every row drag becomes a window drag.
-        isMovableByWindowBackground = false
+        // Starts collapsed → background drag enabled. Toggled off when
+        // expanding so the session list's drag-to-reorder works.
+        isMovableByWindowBackground = true
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
@@ -113,6 +115,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.performTransition(collapsed: isCollapsed)
             }
             .store(in: &cancellables)
+
+        // React to "show floating widget" toggle: when the user turns the
+        // widget off we hide the panel whenever it's in collapsed mode and
+        // rely on the menu bar item as the only entry point.
+        appViewModel.$widgetVisible
+            .receive(on: RunLoop.main)
+            .sink { [weak self] visible in
+                self?.applyWidgetVisibility(visible)
+            }
+            .store(in: &cancellables)
+
+        // Honour the saved preference at launch.
+        applyWidgetVisibility(appViewModel.widgetVisible)
+    }
+
+    /// Show or hide the panel based on `widgetVisible` and the current
+    /// expanded/collapsed mode. The panel is always shown when expanded
+    /// (so the user can interact with the session list); it's hidden in
+    /// collapsed mode only when the user opted out of the floating widget.
+    @MainActor private func applyWidgetVisibility(_ visible: Bool) {
+        if visible {
+            // Always present in either mode.
+            panel.orderFront(nil)
+            return
+        }
+        // Hidden floating widget — only show the panel while the
+        // expanded view is up.
+        if appViewModel.isCollapsed {
+            panel.orderOut(nil)
+        } else {
+            panel.orderFront(nil)
+        }
     }
 
     // MARK: - Menu Bar Icon
@@ -124,6 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(menuBarClicked)
             button.target = self
             button.imagePosition = .imageLeft
+            button.setAccessibilityLabel("Clyde — Claude Code session monitor")
+            button.setAccessibilityRole(.button)
         }
 
         refreshMenuBarItem()
@@ -175,14 +211,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let working = liveSessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
         let ready = liveSessions.count - working - attention
 
-        // Always the Clyde mascot as template — same silhouette regardless
-        // of state, auto-tinted by macOS to match the menu bar appearance.
-        button.image = ClydeMenuBarIcon.templateImage()
-
-        // Snooze takes priority: show "zzz Xm" regardless of live counts so
-        // the user clearly sees the app is muted.
+        // Snooze takes priority: show the template Clyde icon + "💤 Xm"
+        // so the user clearly sees the app is muted.
         if appViewModel.notificationService.isSnoozed {
             let remaining = appViewModel.notificationService.minutesRemaining
+            button.image = ClydeMenuBarIcon.templateImage()
             let title = NSAttributedString(
                 string: " 💤 \(remaining)m",
                 attributes: [
@@ -194,46 +227,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // State is conveyed by a small coloured dot prefix; the count
-        // itself stays in the system label colour so it's always readable
-        // regardless of what's behind the menu bar (wallpaper, transparent
-        // background, dark/light mode).
-        let count: Int
-        let dotColor: NSColor
-        if attention > 0 {
-            count = attention
-            dotColor = .systemBlue
-        } else if working > 0 {
-            count = working
-            // Custom purple matching the widget and expanded view, but
-            // lifted a notch for menu bar readability.
-            dotColor = NSColor(red: 0.831, green: 0.549, blue: 1.0, alpha: 1)
-        } else if ready > 0 {
-            count = ready
-            dotColor = .systemGreen
-        } else {
-            // No sessions — drop the count entirely, icon alone.
+        // No live sessions → drop the rich capsule and fall back to the
+        // plain template Clyde silhouette so the menu bar stays quiet.
+        if attention == 0 && working == 0 && ready == 0 {
+            button.image = ClydeMenuBarIcon.templateImage()
             button.attributedTitle = NSAttributedString(string: "")
             return
         }
 
-        let combined = NSMutableAttributedString()
-        combined.append(NSAttributedString(
-            string: " ● ",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 9, weight: .bold),
-                .foregroundColor: dotColor,
-                .baselineOffset: 1,
-            ]
-        ))
-        combined.append(NSAttributedString(
-            string: "\(count)",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-                .foregroundColor: NSColor.labelColor,
-            ]
-        ))
-        button.attributedTitle = combined
+        // Render the rich capsule (sprite watermark + dominant count) plus
+        // the two stacked ticks for the non-dominant states. The image
+        // builder picks the dominant state internally with the same
+        // attention > working > ready priority used everywhere else.
+        button.image = ClydeMenuBarStatus.image(
+            attention: attention,
+            working: working,
+            ready: ready
+        )
+        // The capsule already contains the count; clear any prior title
+        // so we don't double up text next to the image.
+        button.attributedTitle = NSAttributedString(string: "")
     }
 
     @MainActor @objc private func menuBarClicked() {
@@ -260,11 +273,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
         } else {
             for session in liveSessions {
+                // Coloured-bullet prefix matching the rest of the app:
+                // blue = attention, purple = working, green = ready.
                 let status: String
                 if attentionPIDs.contains(session.pid) {
                     status = "🔵"
                 } else if session.status == .busy {
-                    status = "🟠"
+                    status = "🟣"
                 } else {
                     status = "🟢"
                 }
@@ -326,6 +341,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
+
+        let updateItem = NSMenuItem(
+            title: "Check for updates…",
+            action: #selector(UpdateController.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        updateItem.target = UpdateController.shared
+        menu.addItem(updateItem)
 
         menu.addItem(.separator())
 
@@ -405,7 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Expand/Collapse Animation
 
-    private func performTransition(collapsed: Bool) {
+    @MainActor private func performTransition(collapsed: Bool) {
         guard !isAnimating else { return }
         isAnimating = true
 
@@ -461,49 +484,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.minSize = NSSize(width: 1, height: 1)
         panel.maxSize = NSSize(width: 10000, height: 10000)
 
+        // If the floating widget is hidden, we should re-show the panel
+        // before animating into the expanded mode (orderFront brings it
+        // back from the orderOut'd state).
+        // Collapsed widget can be dragged from anywhere; expanded view
+        // disables background-drag so SessionListView's onDrag/onDrop works.
+        panel.isMovableByWindowBackground = collapsed
+
+        let hideWhenCollapsed = !appViewModel.widgetVisible
+        if !collapsed && hideWhenCollapsed {
+            panel.orderFront(nil)
+        }
+
         animateFrame(to: targetFrame, duration: 0.35) { [weak self] in
             guard let self else { return }
             // Re-lock to target size
             self.panel.minSize = targetSize
             self.panel.maxSize = targetSize
             self.isAnimating = false
+
+            // Hide the panel after the collapse animation finishes when
+            // the user has chosen not to see the floating widget.
+            if collapsed && hideWhenCollapsed {
+                self.panel.orderOut(nil)
+            }
         }
     }
 
     private func animateFrame(to target: NSRect, duration: TimeInterval, completion: @escaping () -> Void) {
-        let start = panel.frame
-        let startTime = CACurrentMediaTime()
-        let interval = 1.0 / 120.0
-
+        // Native AppKit animation — handles cancellation, system motion
+        // settings, and frame interpolation properly. Replaces a hand-rolled
+        // 120Hz Timer that drove `setFrame` manually.
         isProgrammaticMove = true
 
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] timer in
-            guard let self else { timer.invalidate(); return }
-
-            let elapsed = CACurrentMediaTime() - startTime
-            let progress = min(elapsed / duration, 1.0)
-
-            let t = 1 - pow(1 - progress, 4)
-
-            let x = start.origin.x + (target.origin.x - start.origin.x) * t
-            let y = start.origin.y + (target.origin.y - start.origin.y) * t
-            let w = start.size.width + (target.size.width - start.size.width) * t
-            let h = start.size.height + (target.size.height - start.size.height) * t
-
-            self.panel.setFrame(NSRect(x: x, y: y, width: w, height: h), display: false)
-
-            if progress >= 1.0 {
-                timer.invalidate()
-                self.panel.setFrame(target, display: true)
-                // Keep isProgrammaticMove=true longer to absorb lingering notifications
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    self.isProgrammaticMove = false
-                }
-                completion()
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = duration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            ctx.allowsImplicitAnimation = true
+            self.panel.animator().setFrame(target, display: true)
+        }, completionHandler: { [weak self] in
+            guard let self else { return }
+            self.panel.setFrame(target, display: true)
+            // Keep isProgrammaticMove=true a touch longer to absorb any
+            // lingering didMove notifications dispatched after the animation.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.isProgrammaticMove = false
             }
-        }
-
-        RunLoop.main.add(timer, forMode: .common)
+            completion()
+        })
     }
 
     // MARK: - Edge Snapping

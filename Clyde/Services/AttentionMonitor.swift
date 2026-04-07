@@ -24,7 +24,11 @@ final class AttentionMonitor: ObservableObject {
     }
 
     deinit {
+        // Resources held outside the main actor — safe to release from a
+        // nonisolated deinit. Cancelling the dispatch source closes the FD
+        // via its cancel handler.
         pollTimer?.invalidate()
+        dirSource?.cancel()
     }
 
     func start() {

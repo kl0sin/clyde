@@ -10,11 +10,11 @@ struct EmptyStateView: View {
 
             Text("No Claude sessions")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(Color(white: 0.5))
+                .foregroundStyle(Color(white: 0.5))
 
             Text("Start claude in any terminal\nand Clyde will detect it")
                 .font(.system(size: 11))
-                .foregroundColor(Color(white: 0.35))
+                .foregroundStyle(Color(white: 0.35))
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

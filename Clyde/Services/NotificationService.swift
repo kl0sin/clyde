@@ -146,6 +146,11 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         }
     }
 
+    /// Default fallbacks used when a configured sound name resolves to nil
+    /// (deleted system sound, typo in UserDefaults, etc.).
+    private static let fallbackReadySound = "Glass"
+    private static let fallbackAttentionSound = "Hero"
+
     func playReadySound(for session: Session? = nil) {
         guard soundEnabled, !isSnoozed else { return }
         let name: String
@@ -154,7 +159,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         } else {
             name = readySound
         }
-        NSSound(named: NSSound.Name(name))?.play()
+        playSound(named: name, fallback: Self.fallbackReadySound)
     }
 
     func playAttentionSound(for session: Session? = nil) {
@@ -165,7 +170,21 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         } else {
             name = attentionSound
         }
-        NSSound(named: NSSound.Name(name))?.play()
+        playSound(named: name, fallback: Self.fallbackAttentionSound)
+    }
+
+    /// Plays a named NSSound, logging and falling back to a known-good
+    /// sound if the requested one is missing or fails to start.
+    private func playSound(named name: String, fallback: String) {
+        if let sound = NSSound(named: NSSound.Name(name)) {
+            if sound.play() { return }
+            ClydeLog.general.warning("NSSound '\(name, privacy: .public)' refused to play; trying fallback")
+        } else {
+            ClydeLog.general.warning("NSSound '\(name, privacy: .public)' not found; trying fallback")
+        }
+        if let fb = NSSound(named: NSSound.Name(fallback)) {
+            _ = fb.play()
+        }
     }
 
     func buildNotificationContent(for session: Session) -> UNMutableNotificationContent {

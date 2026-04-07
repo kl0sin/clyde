@@ -7,11 +7,14 @@ enum HookInstaller {
     enum InstallError: LocalizedError {
         case writeFailed(String)
         case parseFailed
+        case bundledScriptMissing
 
         var errorDescription: String? {
             switch self {
             case .writeFailed(let msg): return "Failed to write: \(msg)"
             case .parseFailed: return "Failed to parse existing ~/.claude/settings.json"
+            case .bundledScriptMissing:
+                return "The bundled hook script (clyde-hook.sh) is missing from the app. Reinstall Clyde."
             }
         }
     }
@@ -27,10 +30,15 @@ enum HookInstaller {
     /// Loads the hook script source from the bundled resource. The script
     /// itself lives in `Clyde/Resources/clyde-hook.sh` so it can be edited
     /// with proper bash highlighting and tested in isolation.
-    static var hookScript: String {
+    ///
+    /// Throws `InstallError.bundledScriptMissing` if the resource was lost
+    /// from the app bundle (e.g. corrupted install). Previously this was a
+    /// `preconditionFailure` that crashed the app on every property access.
+    static func loadHookScript() throws -> String {
         guard let url = Bundle.module.url(forResource: "clyde-hook", withExtension: "sh"),
               let contents = try? String(contentsOf: url, encoding: .utf8) else {
-            preconditionFailure("clyde-hook.sh resource is missing from the Clyde target")
+            ClydeLog.hooks.error("Bundled clyde-hook.sh resource is missing")
+            throw InstallError.bundledScriptMissing
         }
         return contents
     }
@@ -124,17 +132,21 @@ enum HookInstaller {
 
     private static func readInstalledVersion() -> Int? {
         guard let data = try? String(contentsOf: AppPaths.clydeHookScript, encoding: .utf8) else {
+            ClydeLog.hooks.warning("Could not read installed hook script for version check")
             return nil
         }
         // Match a line like "# clyde-hook-version: 2".
-        for line in data.components(separatedBy: "\n").prefix(10) {
+        for line in data.components(separatedBy: "\n").prefix(20) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("#") else { continue }
             if let range = trimmed.range(of: "clyde-hook-version:") {
                 let value = trimmed[range.upperBound...].trimmingCharacters(in: .whitespaces)
-                return Int(value)
+                if let parsed = Int(value) { return parsed }
+                ClydeLog.hooks.warning("Hook version line present but unparseable: \(value, privacy: .public)")
+                return nil
             }
         }
+        ClydeLog.hooks.warning("Installed hook script has no clyde-hook-version line")
         return nil
     }
 
@@ -164,8 +176,9 @@ enum HookInstaller {
             withIntermediateDirectories: true
         )
 
+        let scriptContents = try loadHookScript()
         do {
-            try hookScript.write(to: AppPaths.clydeHookScript, atomically: true, encoding: .utf8)
+            try scriptContents.write(to: AppPaths.clydeHookScript, atomically: true, encoding: .utf8)
         } catch {
             ClydeLog.hooks.error("Failed to write hook script: \(error.localizedDescription, privacy: .public)")
             throw InstallError.writeFailed(error.localizedDescription)

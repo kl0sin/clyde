@@ -8,7 +8,7 @@ enum SessionTheme {
     static let processingColor = Color(red: 0.749, green: 0.353, blue: 0.949) // #bf5af2
     static let attentionColor = Color.blue
     static let readyColor = Color.green
-    static let processingLabel = "Processing"
+    static let processingLabel = "Working"
     static let attentionLabel = "Needs input"
     static let readyLabel = "Ready"
 

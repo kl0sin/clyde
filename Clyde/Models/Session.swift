@@ -24,7 +24,7 @@ struct Session: Identifiable, Equatable {
 
     var displayName: String {
         if let customName, !customName.isEmpty {
-            return customName
+            return Self.sanitize(customName)
         }
         // Use the project folder name whenever cwd is known and looks like a
         // real project path. The home directory itself is the classic
@@ -32,9 +32,25 @@ struct Session: Identifiable, Equatable {
         // `lsof` finds only the global ~/.claude/settings file, so we treat
         // it as "unknown" and fall back to the generic label.
         if !workingDirectory.isEmpty && workingDirectory != NSHomeDirectory() {
-            return (workingDirectory as NSString).lastPathComponent
+            return Self.sanitize((workingDirectory as NSString).lastPathComponent)
+        }
+        if workingDirectory == NSHomeDirectory() {
+            return "Home"
         }
         return "Untitled session"
+    }
+
+    /// Strip control characters and clamp the length so a hostile or
+    /// corrupted cwd can't break the row layout. Anything past 64 chars
+    /// gets ellipsised — long enough for any reasonable folder name.
+    private static func sanitize(_ raw: String) -> String {
+        let cleaned = raw.unicodeScalars
+            .filter { !CharacterSet.controlCharacters.contains($0) }
+            .reduce(into: "") { $0.unicodeScalars.append($1) }
+        if cleaned.count > 64 {
+            return String(cleaned.prefix(63)) + "…"
+        }
+        return cleaned.isEmpty ? "Untitled session" : cleaned
     }
 
     init(pid: pid_t, workingDirectory: String = "", status: SessionStatus = .busy, sessionId: String? = nil) {

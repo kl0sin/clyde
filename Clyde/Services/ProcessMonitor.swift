@@ -56,7 +56,13 @@ final class ProcessMonitor: ObservableObject {
     }
 
     deinit {
+        // Release everything we hold so resources don't outlive the monitor
+        // when nobody calls stopPolling() before deallocation.
+        // Task.cancel() and DispatchSource.cancel() are both safe to invoke
+        // from a nonisolated context. The cancel handler closes stateDirFD.
         pollTask?.cancel()
+        stateWatchTask?.cancel()
+        stateDirSource?.cancel()
     }
 
     /// Hook-derived metadata for discovered sessions, keyed by PID.

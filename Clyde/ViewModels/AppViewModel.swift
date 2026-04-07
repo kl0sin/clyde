@@ -9,6 +9,9 @@ final class AppViewModel: ObservableObject {
     @Published var showSettings = false
     @Published var lastError: String?
     @Published var hookHealthIssue: HookInstaller.HealthIssue?
+    @Published var widgetVisible: Bool {
+        didSet { UserDefaults.standard.set(widgetVisible, forKey: Self.widgetVisibleKey) }
+    }
 
     let processMonitor: ProcessMonitor
     let terminalLauncher: TerminalLauncher
@@ -43,6 +46,15 @@ final class AppViewModel: ObservableObject {
     private var hookDirFD: Int32 = -1
     private var hookHealTimer: Timer?
 
+    deinit {
+        // Release everything we own. The class is @MainActor but deinit runs
+        // nonisolated; cancelling tasks/sources/timers is safe from any
+        // context, and the dispatch source's cancel handler closes hookDirFD.
+        errorClearTask?.cancel()
+        hookDirSource?.cancel()
+        hookHealTimer?.invalidate()
+    }
+
     convenience init() {
         self.init(
             processMonitor: ProcessMonitor(),
@@ -75,6 +87,7 @@ final class AppViewModel: ObservableObject {
             processMonitor: processMonitor,
             attentionMonitor: attentionMonitor
         )
+        self.widgetVisible = (UserDefaults.standard.object(forKey: Self.widgetVisibleKey) as? Bool) ?? true
 
         processMonitor.onSessionBecameIdle = { [weak self] session in
             guard let self else { return }
@@ -137,6 +150,7 @@ final class AppViewModel: ObservableObject {
     }
 
     private static let hookOptOutKey = "hookAutoInstallOptOut"
+    private static let widgetVisibleKey = "widgetVisible"
 
     func start() {
         notificationService.requestPermission()
@@ -349,12 +363,19 @@ final class AppViewModel: ObservableObject {
     }
 
     private func showError(_ message: String) {
+        // Dedupe identical back-to-back errors. The previous behaviour
+        // restarted the auto-clear timer on every duplicate, which meant a
+        // burst of identical failures kept the banner visible indefinitely.
+        if lastError == message, errorClearTask != nil { return }
+
         lastError = message
         errorClearTask?.cancel()
-        errorClearTask = Task {
+        errorClearTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(4))
-            if !Task.isCancelled {
-                await MainActor.run { self.lastError = nil }
+            guard let self, !Task.isCancelled else { return }
+            await MainActor.run {
+                self.lastError = nil
+                self.errorClearTask = nil
             }
         }
     }

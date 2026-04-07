@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy — Clyde</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">
+        <span class="brand-mark"></span>
+        <span class="brand-name">Clyde</span>
+      </a>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="https://github.com/kl0sin/clyde" class="ghost">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section style="padding: 100px 24px;">
+      <div class="container" style="max-width: 720px;">
+        <p class="section-label">Privacy</p>
+        <h1 style="font-size: 44px; margin-bottom: 24px;">Clyde collects nothing.</h1>
+
+        <p style="font-size: 17px; color: var(--text-dim); line-height: 1.7;">
+          Clyde is a local macOS app. It does not have a backend, does not call
+          home, does not contain any analytics, telemetry, crash reporting,
+          remote logging, or third-party SDKs of any kind.
+        </p>
+
+        <h2 style="margin-top: 48px;">What Clyde reads</h2>
+        <p style="color: var(--text-dim);">
+          Clyde reads two things from your local file system:
+        </p>
+        <ul style="color: var(--text-dim); line-height: 1.8;">
+          <li><code>~/.claude/</code> — to install its hook script and read Claude Code's settings.</li>
+          <li><code>~/.clyde/</code> — to read the per-session state files written by the hook.</li>
+        </ul>
+
+        <h2 style="margin-top: 48px;">What Clyde stores</h2>
+        <p style="color: var(--text-dim);">
+          User preferences (sound choices, snooze state, custom session names, drag-to-reorder positions)
+          are stored in <code>UserDefaults</code> and a small JSON file at <code>~/.clyde/</code>.
+          All of it stays on your Mac.
+        </p>
+
+        <h2 style="margin-top: 48px;">What Clyde sends</h2>
+        <p style="color: var(--text-dim);">
+          Nothing. Clyde has no network code. You can verify this by reading the source on
+          <a href="https://github.com/kl0sin/clyde" style="color: var(--purple-bright);">GitHub</a>
+          or by inspecting outgoing connections with Little Snitch / Lulu.
+        </p>
+
+        <p style="margin-top: 60px; font-size: 13px; color: var(--text-faint);">
+          Last updated: 2026-04-07
+        </p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

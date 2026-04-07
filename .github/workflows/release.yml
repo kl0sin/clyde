@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: macos-14   # Apple Silicon runner — has Xcode + codesign
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so we can read CHANGELOG context
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import signing certificate
+        env:
+          DEVELOPER_ID_CERT_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 }}
+          DEVELOPER_ID_CERT_PASSWORD:   ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD:            "ci-temp-keychain-password"
+        run: |
+          set -euo pipefail
+
+          # Materialise the .p12 cert from the base64-encoded secret.
+          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
+          echo "$DEVELOPER_ID_CERT_P12_BASE64" | base64 --decode > "$CERT_PATH"
+
+          # Create a fresh keychain and import the cert into it. We use a
+          # disposable per-job keychain so we never touch the runner's
+          # default login keychain.
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERT_PATH" \
+              -P "$DEVELOPER_ID_CERT_PASSWORD" \
+              -A -t cert -f pkcs12 \
+              -k "$KEYCHAIN_PATH"
+
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | sed 's/"//g')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Stamp version into Info.plist
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" Clyde/Info.plist
+          # Use the run number as monotonic build number.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" Clyde/Info.plist
+
+      - name: Build
+        run: scripts/release/build.sh
+
+      - name: Sign
+        env:
+          DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+        run: scripts/release/sign.sh
+
+      - name: Notarize
+        env:
+          APPLE_ID:           ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID:      ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: scripts/release/notarize.sh
+
+      - name: Make DMG
+        env:
+          DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+        run: scripts/release/make-dmg.sh
+
+      - name: Update appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          GITHUB_REPO:         ${{ github.repository }}
+        run: |
+          scripts/release/update-appcast.sh "build/release/Clyde-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Commit appcast back to main
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout main
+          git pull --rebase
+          git add site/appcast.xml
+          git commit -m "chore(release): appcast for v${{ steps.version.outputs.version }}" || true
+          git push origin main
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Clyde ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            build/release/Clyde-${{ steps.version.outputs.version }}.dmg

@@ -25,7 +25,7 @@ struct SummaryBar: View {
             } else {
                 Text("Waiting for sessions...")
                     .font(.system(size: 10))
-                    .foregroundColor(Color(white: 0.4))
+                    .foregroundStyle(Color(white: 0.4))
             }
 
             Spacer()
@@ -33,14 +33,14 @@ struct SummaryBar: View {
             if sessionCount > 0 {
                 Text("\(sessionCount) \(sessionCount == 1 ? "session" : "sessions")")
                     .font(.system(size: 10))
-                    .foregroundColor(Color(white: 0.4))
+                    .foregroundStyle(Color(white: 0.4))
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(Color.white.opacity(0.03))
         .overlay(
-            Rectangle().frame(height: 1).foregroundColor(Color(white: 0.18)),
+            Rectangle().frame(height: 1).foregroundStyle(Color(white: 0.18)),
             alignment: .top
         )
     }
@@ -63,7 +63,7 @@ struct StatusPill: View {
 
             Text("\(count) \(label)")
                 .font(.system(size: 10, weight: .medium))
-                .foregroundColor(color.opacity(0.9))
+                .foregroundStyle(color.opacity(0.9))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 3)

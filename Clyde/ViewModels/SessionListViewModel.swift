@@ -31,7 +31,13 @@ final class SessionListViewModel: ObservableObject {
         return "pid:\(session.pid)"
     }
 
-    var sessions: [Session] {
+    /// Cached, enriched session list. Recomputed via `recomputeSessions()`
+    /// whenever processMonitor / attentionMonitor / names / order change.
+    /// Previously this was a computed property doing filter+map+sort+dedupe
+    /// on every read, which fired on every view body evaluation.
+    @Published private(set) var sessions: [Session] = []
+
+    private func recomputeSessions() {
         let attentionPIDs = attentionMonitor?.attentionPIDs ?? []
         let enriched: [Session] = processMonitor.sessions.map { session in
             var s = session
@@ -67,7 +73,10 @@ final class SessionListViewModel: ObservableObject {
         let orderedSet = Set(ordered.map(\.id))
         let tail = live.filter { !orderedSet.contains($0.id) }
 
-        return ordered + tail + ghosts
+        let new = ordered + tail + ghosts
+        if new != sessions {
+            sessions = new
+        }
     }
 
     /// Counters reflect *live* sessions only — ghost rows (sessions that
@@ -85,12 +94,19 @@ final class SessionListViewModel: ObservableObject {
         self.attentionMonitor = attentionMonitor
         loadPersistedNames()
         loadPersistedOrder()
-        processMonitor.objectWillChange
-            .sink { [weak self] _ in self?.objectWillChange.send() }
+
+        // Recompute the cached `sessions` array whenever underlying state
+        // changes. We sink on the typed publishers (not objectWillChange)
+        // so we get the *new* value and can diff it inside recomputeSessions().
+        processMonitor.$sessions
+            .sink { [weak self] _ in self?.recomputeSessions() }
             .store(in: &cancellables)
-        attentionMonitor?.objectWillChange
-            .sink { [weak self] _ in self?.objectWillChange.send() }
+        attentionMonitor?.$attentionPIDs
+            .sink { [weak self] _ in self?.recomputeSessions() }
             .store(in: &cancellables)
+
+        // Seed the cache with whatever the monitors already have.
+        recomputeSessions()
     }
 
     /// Move a subset of session rows to a new position, mirroring the
@@ -104,7 +120,7 @@ final class SessionListViewModel: ObservableObject {
         // silently dropped.
         orderedSessionIds = current.map { Self.orderKey(for: $0) }
         persistOrder()
-        objectWillChange.send()
+        recomputeSessions()
     }
 
     func renameSession(id: UUID, to name: String) {
@@ -126,7 +142,7 @@ final class SessionListViewModel: ObservableObject {
                 namesById[id] = trimmed
             }
         }
-        objectWillChange.send()
+        recomputeSessions()
     }
 
     // MARK: - Persistence

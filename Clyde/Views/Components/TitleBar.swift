@@ -25,10 +25,10 @@ struct TitleBar: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Clyde")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
                 Text(subtitle)
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(accentColor.opacity(0.85))
+                    .foregroundStyle(accentColor.opacity(0.85))
             }
 
             Spacer()
@@ -77,7 +77,7 @@ struct TitleBar: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color(white: 0.55))
+                .foregroundStyle(Color(white: 0.55))
                 .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
         }

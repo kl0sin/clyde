@@ -1,103 +1,166 @@
+<div align="center">
+
+<img src="site/img/clyde.svg" width="120" alt="Clyde">
+
 # Clyde
 
-A native macOS floating widget that monitors Claude Code sessions. Know at a glance when Claude is working, ready, or waiting for your input — without switching to the terminal.
+**A friendly Claude Code session monitor for macOS.**
+
+Know what Claude is doing — without alt-tabbing.
+
+[Website](https://kl0sin.github.io/clyde/) ·
+[Download](https://github.com/kl0sin/clyde/releases/latest) ·
+[Changelog](CHANGELOG.md)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-blue)
+![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
+![Universal](https://img.shields.io/badge/binary-universal-purple)
+
+</div>
+
+---
+
+Clyde is a tiny SwiftUI menu bar app that watches every
+[Claude Code](https://claude.com/claude-code) session running on your Mac
+and shows you, in one glance, whether they're working, ready, or need
+your attention.
+
+It connects to Claude Code's native hook events, so updates are
+**instant** — no polling, no lag, no missed permission requests.
 
 ## Features
 
-- **Floating widget** — always-on-top, compact, with Clyde the mascot showing global state
-- **Session monitor** — detects all running Claude Code sessions, shows which project each one belongs to
-- **Smart state detection** — uses child process tree walk (not CPU heuristics) to reliably tell busy from idle
-- **Click to focus** — click any session to jump to its terminal window (auto-detects iTerm2, Terminal.app, Warp, Ghostty)
-- **Attention alerts** — installs a Claude Code hook that signals when permission is required
-- **Custom sounds** — different sounds for "session ready" and "permission needed"
-- **Menu bar icon** — alternative access point with dropdown session list
+- 🟢 **Real-time session tracking** — busy / ready / needs-input, fed by
+  Claude Code's native hooks. No polling.
+- 🔔 **Attention alerts** — sound and macOS notification the moment
+  Claude asks for permission. Never miss a prompt again.
+- 🗂 **Multi-session view** — every Claude session, every terminal, in
+  one expandable panel. Drag to reorder, name them, click to focus the
+  matching window.
+- 📜 **Activity timeline** — recent prompts, permissions and session
+  lifecycle, in plain language.
+- 🎯 **Menu bar capsule** — dominant state at a glance, with two ticks
+  for the other states.
+- 💤 **Snooze** — 15 / 30 / 60 / 120 minute mute when you need quiet.
+- ⌨️ **Global hotkey** — `⌃⌘C` to expand from anywhere.
+- 🛠 **Self-installs the hook** — Clyde adds and self-heals its hook
+  script in `~/.claude/hooks/` so you never have to think about it.
+- 🔒 **Privacy-first** — no telemetry, no network calls, no accounts.
+  Everything stays on your Mac.
 
-## Requirements
+## Install
 
-- macOS 13 Ventura or later
-- Xcode 15+ (for building)
-- Claude Code CLI installed
+### Download (recommended)
 
-## Building
+Grab the latest signed `.dmg` from
+[Releases](https://github.com/kl0sin/clyde/releases/latest), drag
+`Clyde.app` to your Applications folder, and launch it.
+
+On first run Clyde offers to install its Claude Code hook automatically —
+accept and you're done.
+
+### Homebrew
 
 ```bash
-# Development build
-swift build
-
-# Release build with .app bundle
-./scripts/build-app.sh release
+brew tap kl0sin/tap
+brew install --cask clyde
 ```
 
-The `.app` bundle is created at `.build/release/Clyde.app`.
+> The cask is published from [`Casks/clyde.rb`](Casks/clyde.rb) into a
+> dedicated tap. You only need to `brew tap kl0sin/tap` once per machine.
 
-## Installation
+### Updates
+
+Clyde uses [Sparkle](https://sparkle-project.org/) to auto-update. New
+versions are downloaded and verified in the background; you'll see an
+"Update available" prompt with release notes.
+
+You can also trigger an update check manually from **Settings → Check
+for updates…** or from the menu bar dropdown.
+
+## How it works
+
+Clyde reads two things from your local file system:
+
+- `~/.claude/` — to install its hook script and discover Claude Code's
+  settings.
+- `~/.clyde/` — where the hook script writes per-session state files
+  that Clyde watches via FSEvents.
+
+When you submit a prompt, Claude Code fires a `UserPromptSubmit` hook →
+the hook script writes a `<sessionId>-busy` marker → Clyde sees it
+within milliseconds and updates the UI. When Claude finishes, the `Stop`
+hook removes the marker. Permission requests fire `PermissionRequest` →
+Clyde rings a sound and shows the attention pill.
+
+That's the entire architecture. No polling, no daemon, no privileged
+helpers.
+
+## Screenshots
+
+> _Screenshots coming with the v0.1.0 release._
+
+## Build from source
+
+Clyde is a single self-contained Swift Package. No Xcode project,
+nothing to configure.
 
 ```bash
-# Build and install
-./scripts/build-app.sh release
-cp -r .build/release/Clyde.app /Applications/
-open /Applications/Clyde.app
+git clone https://github.com/kl0sin/clyde.git
+cd clyde
+swift run Clyde
 ```
 
-## Usage
-
-1. **Launch Clyde** — the floating widget appears in the top-right corner
-2. **Click the widget** to expand the session list
-3. **Double-click a session name** to rename it
-4. **Click a session row** to focus its terminal window
-5. **Right-click the widget** for context menu (Open, Settings, Quit)
-
-### Settings
-
-Open via the gear icon or right-click menu:
-
-- **Monitoring** — polling interval (1–10 seconds)
-- **Sound** — enable/disable + separate sounds for "ready" and "needs input"
-- **Claude Integration** — one-click install/uninstall of the attention hook
-- **About** — version info and quit
-
-### Claude Hook Integration
-
-When enabled, Clyde installs a bash script at `~/.claude/hooks/clyde-notify.sh` and adds it to your `~/.claude/settings.json` as a `PermissionRequest` hook. The hook writes event files to `~/.clyde/events/` which Clyde polls every second.
-
-Safe to uninstall — the uninstaller cleans both the script and the settings entry while preserving your other hooks.
-
-## Architecture
-
-- **Swift + SwiftUI** (macOS 13+, no external dependencies)
-- **MVVM** — View Models wrap services, Views observe via `@Published`
-- **NSPanel** — borderless floating panel with custom 120fps animation
-- **Services layer**:
-  - `ProcessMonitor` — polls `pgrep -x claude` + `pgrep -P` for state
-  - `AttentionMonitor` — watches `~/.clyde/events/` for hook signals
-  - `HookInstaller` — merges hook into `~/.claude/settings.json`
-  - `TerminalLauncher` — walks process tree, dispatches to per-terminal adapters
-  - `NotificationService` — sounds and system notifications
-
-## Development
+For a release build wrapped in a proper `.app` bundle:
 
 ```bash
-# Run tests
+scripts/release/build.sh
+open build/release/Clyde.app
+```
+
+See [`docs/release-process.md`](docs/release-process.md) for the full
+release pipeline (signing, notarization, DMG, appcast, GitHub Releases).
+
+## Project layout
+
+```
+Clyde/                  Main app source
+├── App/                NSApplicationDelegate, panel + menu bar
+├── Models/             Session, ClydeState, ActivityEvent
+├── Services/           ProcessMonitor, AttentionMonitor, hook installer, ...
+├── ViewModels/         App + session list view models
+├── Views/              SwiftUI views
+├── Resources/          clyde-hook.sh (the hook script that ships in the bundle)
+└── Assets/             AppIcon.icns (generated by scripts/generate-icon.swift)
+
+ClydeTests/             XCTest test target
+scripts/                Build + release tooling
+site/                   GitHub Pages landing page (deployed via Actions)
+Casks/                  Homebrew cask formula
+.github/workflows/      CI: deploy-site.yml, release.yml
+docs/                   Pre-launch checklist + release process docs
+```
+
+## Tests
+
+```bash
 swift test
-
-# Run app in debug mode
-swift build && ./.build/debug/Clyde
 ```
 
-### Project structure
+Some tests touch the user's real `~/.claude/settings.json`. They pass on
+a clean machine and fail in a "polluted" dev environment where Clyde is
+already installed — that's expected. CI runs them on a fresh runner.
 
-```
-Clyde/
-├── App/              # AppDelegate, ClydeApp, Info.plist
-├── Models/           # Session, ClydeState
-├── Services/         # ProcessMonitor, AttentionMonitor, TerminalLauncher, ...
-├── TerminalAdapters/ # iTerm2, Terminal.app, Warp, Ghostty
-├── ViewModels/       # AppViewModel, SessionListViewModel
-└── Views/
-    ├── Components/   # SessionRow, TitleBar, SummaryBar, ...
-    ├── WidgetView, ExpandedView, ContentView, SettingsView, ClydeAnimationView
-```
+## Contributing
+
+Bug reports and PRs welcome. For non-trivial changes please open an
+issue first so we can discuss the approach.
 
 ## License
 
-TBD
+[MIT](LICENSE) — use it, fork it, sell it, do whatever.
+
+---
+
+<sub>Built in SwiftUI with care by <a href="https://github.com/kl0sin">Mateusz Kłosiński</a>.</sub>

@@ -6,6 +6,9 @@ import AppKit
 struct SessionRow: View {
     let session: Session
     let disambiguator: String?
+    /// Position among idle (non-ghost, non-busy, non-attention) sessions,
+    /// used for the slot number on the left. Nil for active sessions.
+    let idleIndex: Int?
     let onRename: (String) -> Void
     let onFocus: () -> Void
     let onReset: (() -> Void)?
@@ -26,7 +29,7 @@ struct SessionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            SessionStatusIndicator(session: session)
+            SessionStatusIndicator(session: session, idleIndex: idleIndex)
 
             VStack(alignment: .leading, spacing: 3) {
                 if isEditing {
@@ -37,7 +40,7 @@ struct SessionRow: View {
                         })
                         .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
                         .background(Color(white: 0.2))
@@ -49,7 +52,7 @@ struct SessionRow: View {
                         }) {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.green)
+                                .foregroundStyle(.green)
                                 .frame(width: 20, height: 20)
                                 .contentShape(Rectangle())
                         }
@@ -58,7 +61,7 @@ struct SessionRow: View {
                         Button(action: { isEditing = false }) {
                             Image(systemName: "xmark")
                                 .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.gray)
+                                .foregroundStyle(.gray)
                                 .frame(width: 20, height: 20)
                                 .contentShape(Rectangle())
                         }
@@ -68,13 +71,13 @@ struct SessionRow: View {
                     HStack(spacing: 6) {
                         Text(session.displayName)
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .lineLimit(1)
 
                         if let suffix = disambiguator {
                             Text(suffix)
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(Color(white: 0.35))
+                                .foregroundStyle(Color(white: 0.35))
                         }
 
                         if isHovered {
@@ -84,7 +87,7 @@ struct SessionRow: View {
                             }) {
                                 Image(systemName: "pencil")
                                     .font(.system(size: 9))
-                                    .foregroundColor(Color(white: 0.35))
+                                    .foregroundStyle(Color(white: 0.35))
                                     .frame(width: 18, height: 18)
                                     .contentShape(Rectangle())
                             }
@@ -96,7 +99,7 @@ struct SessionRow: View {
 
                 Text(session.workingDirectory.isEmpty ? "Unknown path" : abbreviatePath(session.workingDirectory))
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(Color(white: 0.4))
+                    .foregroundStyle(Color(white: 0.4))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -105,11 +108,13 @@ struct SessionRow: View {
 
             if !isEditing {
                 VStack(alignment: .trailing, spacing: 3) {
-                    statusPill(for: session)
+                    if showsStatusPill {
+                        statusPill(for: session)
+                    }
 
                     Text(timeAgo(session.endedAt ?? session.statusChangedAt))
                         .font(.system(size: 9))
-                        .foregroundColor(Color(white: 0.35))
+                        .foregroundStyle(timeColor)
                 }
             }
         }
@@ -118,13 +123,15 @@ struct SessionRow: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(stateFlash
-                    ? SessionTheme.color(for: session.status).opacity(0.15)
-                    : (isHovered ? Color(white: 0.14) : Color.clear))
+                .fill(rowBackground)
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture { onFocus() }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(session.displayName), \(accessibilityStatusDescription)")
+        .accessibilityHint("Double-tap to focus terminal")
+        .accessibilityAddTraits(.isButton)
         .contextMenu {
             Button(action: { onFocus() }) {
                 Label("Focus terminal", systemImage: "arrow.up.right.square")
@@ -185,6 +192,47 @@ struct SessionRow: View {
         }
     }
 
+    /// Pill is shown for active states (busy / attention) and ghosts.
+    /// Idle ready sessions are silent — the slot number on the left and
+    /// the dimmed time stamp carry the state.
+    private var showsStatusPill: Bool {
+        if session.isGhost { return true }
+        if session.needsAttention { return true }
+        if session.status == .busy { return true }
+        return false
+    }
+
+    private var isActive: Bool {
+        !session.isGhost && (session.needsAttention || session.status == .busy)
+    }
+
+    private var rowBackground: Color {
+        if stateFlash {
+            return SessionTheme.color(for: session.status).opacity(0.15)
+        }
+        if isHovered { return Color(white: 0.14) }
+        if isActive {
+            let tint: Color = session.needsAttention
+                ? SessionTheme.attentionColor
+                : SessionTheme.processingColor
+            return tint.opacity(0.07)
+        }
+        return Color.clear
+    }
+
+    private var accessibilityStatusDescription: String {
+        if session.isGhost { return "ended" }
+        if session.needsAttention { return "needs your input" }
+        if session.status == .busy { return "working" }
+        return "ready, idle"
+    }
+
+    private var timeColor: Color {
+        if session.needsAttention { return SessionTheme.attentionColor }
+        if session.status == .busy { return SessionTheme.processingColor }
+        return Color(white: 0.3)
+    }
+
     /// Status pill on the right of the row. Ghost and ready are static.
     /// Busy and attention pulse a leading dot so the row visually "breathes"
     /// in sync with the widget.
@@ -197,7 +245,7 @@ struct SessionRow: View {
                 Text("Ended")
                     .font(.system(size: 10, weight: .semibold))
             }
-            .foregroundColor(Color(white: 0.5))
+            .foregroundStyle(Color(white: 0.5))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(Color(white: 0.18))
@@ -212,7 +260,7 @@ struct SessionRow: View {
                 Text(SessionTheme.attentionLabel)
                     .font(.system(size: 10, weight: .semibold))
             }
-            .foregroundColor(SessionTheme.attentionColor)
+            .foregroundStyle(SessionTheme.attentionColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(SessionTheme.attentionColor.opacity(0.15))
@@ -227,7 +275,7 @@ struct SessionRow: View {
                 Text(SessionTheme.processingLabel)
                     .font(.system(size: 10, weight: .semibold))
             }
-            .foregroundColor(SessionTheme.processingColor)
+            .foregroundStyle(SessionTheme.processingColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(SessionTheme.processingColor.opacity(0.12))
@@ -236,7 +284,7 @@ struct SessionRow: View {
             // Ready
             Text(SessionTheme.readyLabel)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(SessionTheme.readyColor)
+                .foregroundStyle(SessionTheme.readyColor)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(SessionTheme.readyColor.opacity(0.1))
@@ -288,57 +336,70 @@ struct SessionRow: View {
 
 struct SessionStatusIndicator: View {
     let session: Session
+    /// Slot number for idle sessions. Nil → render the active sprite.
+    let idleIndex: Int?
 
     @State private var bounce = false
     @State private var orbitAngle: Double = 0
     @State private var attentionPulse = false
 
-    private var halo: Color {
+    private var isActive: Bool {
+        !session.isGhost && (session.needsAttention || session.status == .busy)
+    }
+
+    private var accent: Color {
         if session.needsAttention { return SessionTheme.attentionColor }
-        return SessionTheme.color(for: session.status)
+        if session.status == .busy { return SessionTheme.processingColor }
+        return Color(white: 0.25)
     }
 
     var body: some View {
         ZStack {
-            // Halo background — coloured per dominant state, subtle tint.
-            Circle()
-                .fill(halo.opacity(0.14))
+            // Squircle base — same shape as the header sprite.
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(isActive ? accent.opacity(0.18) : Color(white: 0.11))
                 .frame(width: 36, height: 36)
-            Circle()
-                .strokeBorder(halo.opacity(session.needsAttention && attentionPulse ? 0.55 : 0.22), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(
+                    isActive
+                        ? accent.opacity(session.needsAttention && attentionPulse ? 0.65 : 0.55)
+                        : Color(white: 0.18),
+                    lineWidth: isActive ? 1.5 : 1
+                )
                 .frame(width: 36, height: 36)
 
-            // Mini Clyde — ClydeAnimationView uses the wider ClydeState
-            // enum so we map from the per-session SessionStatus here.
-            let mascotState: ClydeState = {
-                if session.needsAttention { return .attention }
-                return session.status == .busy ? .busy : .idle
-            }()
-            ClydeAnimationView(state: mascotState, pixelSize: 1.2)
-                .frame(width: 20, height: 20)
-                .offset(y: (session.status == .busy && bounce) ? -1 : 1)
+            if isActive {
+                // Active session: full sprite + accents.
+                let mascotState: ClydeState = session.needsAttention ? .attention : .busy
+                ClydeAnimationView(state: mascotState, pixelSize: 1.2)
+                    .frame(width: 20, height: 20)
+                    .offset(y: (session.status == .busy && bounce) ? -1 : 1)
 
-            // Busy accent: small orbiting purple dot around the mascot.
-            if session.status == .busy && !session.needsAttention {
-                Circle()
-                    .fill(SessionTheme.processingColor)
-                    .frame(width: 4, height: 4)
-                    .shadow(color: SessionTheme.processingColor, radius: 3)
-                    .offset(x: cos(orbitAngle) * 15, y: sin(orbitAngle) * 15)
-            }
+                if session.status == .busy && !session.needsAttention {
+                    Circle()
+                        .fill(SessionTheme.processingColor)
+                        .frame(width: 4, height: 4)
+                        .shadow(color: SessionTheme.processingColor, radius: 3)
+                        .offset(x: cos(orbitAngle) * 15, y: sin(orbitAngle) * 15)
+                }
 
-            // Attention accent: yellow "!" badge in top-right corner.
-            if session.needsAttention {
-                Circle()
-                    .fill(SessionTheme.attentionColor)
-                    .frame(width: 12, height: 12)
-                    .overlay(
-                        Text("!")
-                            .font(.system(size: 9, weight: .heavy, design: .rounded))
-                            .foregroundColor(.white)
-                    )
-                    .offset(x: 13, y: -13)
-                    .scaleEffect(attentionPulse ? 1.1 : 0.92)
+                if session.needsAttention {
+                    Circle()
+                        .fill(SessionTheme.attentionColor)
+                        .frame(width: 12, height: 12)
+                        .overlay(
+                            Text("!")
+                                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                                .foregroundStyle(.white)
+                        )
+                        .offset(x: 13, y: -13)
+                        .scaleEffect(attentionPulse ? 1.1 : 0.92)
+                }
+            } else {
+                // Idle: numbered slot. Two-digit format keeps width stable.
+                Text(String(format: "%02d", idleIndex ?? 0))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(white: 0.42))
             }
         }
         .onAppear {

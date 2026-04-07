@@ -15,7 +15,7 @@ struct ActivityTimelineView: View {
         }
         .background(Color.white.opacity(0.02))
         .overlay(
-            Rectangle().frame(height: 1).foregroundColor(Color(white: 0.18)),
+            Rectangle().frame(height: 1).foregroundStyle(Color(white: 0.18)),
             alignment: .top
         )
     }
@@ -27,14 +27,14 @@ struct ActivityTimelineView: View {
             HStack(spacing: 8) {
                 Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(Color(white: 0.5))
+                    .foregroundStyle(Color(white: 0.5))
                 Text("Activity")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(white: 0.7))
+                    .foregroundStyle(Color(white: 0.7))
                 if !log.events.isEmpty {
                     Text("\(log.events.count)")
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(white: 0.45))
+                        .foregroundStyle(Color(white: 0.45))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(Color(white: 0.18))
@@ -43,7 +43,7 @@ struct ActivityTimelineView: View {
                 Spacer()
                 Image(systemName: expanded ? "chevron.down" : "chevron.up")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(Color(white: 0.45))
+                    .foregroundStyle(Color(white: 0.45))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -57,7 +57,7 @@ struct ActivityTimelineView: View {
         if log.events.isEmpty {
             Text("No activity yet")
                 .font(.system(size: 11))
-                .foregroundColor(Color(white: 0.4))
+                .foregroundStyle(Color(white: 0.4))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -68,7 +68,7 @@ struct ActivityTimelineView: View {
                     Button(action: { log.clear() }) {
                         Text("Clear")
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(Color(white: 0.45))
+                            .foregroundStyle(Color(white: 0.45))
                     }
                     .buttonStyle(.plain)
                 }
@@ -92,16 +92,16 @@ struct ActivityTimelineView: View {
         HStack(spacing: 8) {
             Image(systemName: event.kind.symbol)
                 .font(.system(size: 10))
-                .foregroundColor(color(for: event.kind))
+                .foregroundStyle(color(for: event.kind))
                 .frame(width: 14)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(event.kind.label)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
                 Text(event.sessionDisplayName)
                     .font(.system(size: 9, weight: .regular, design: .monospaced))
-                    .foregroundColor(Color(white: 0.45))
+                    .foregroundStyle(Color(white: 0.45))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -110,7 +110,7 @@ struct ActivityTimelineView: View {
 
             Text(timeAgo(event.timestamp))
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundColor(Color(white: 0.4))
+                .foregroundStyle(Color(white: 0.4))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 5)

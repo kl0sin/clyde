@@ -31,7 +31,7 @@ struct ContentView: View {
         }
         .animation(.easeOut(duration: 0.2), value: appViewModel.lastError)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .edgesIgnoringSafeArea(.all)
+        .ignoresSafeArea()
     }
 }
 
@@ -42,10 +42,10 @@ struct ErrorBanner: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 11))
-                .foregroundColor(.red)
+                .foregroundStyle(.red)
             Text(message)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white)
+                .foregroundStyle(.white)
                 .lineLimit(2)
         }
         .padding(.horizontal, 10)

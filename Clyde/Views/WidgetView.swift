@@ -9,13 +9,13 @@ struct WidgetView: View {
             HStack(spacing: 10) {
                 ClydeAnimationView(
                     state: viewModel.clydeState,
-                    pixelSize: 1.4
+                    pixelSize: 1.75
                 )
-                .frame(width: 22, height: 22)
+                .frame(width: 28, height: 28)
 
                 Text("Clyde")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundColor(Color(white: 0.55))
+                    .foregroundStyle(Color(white: 0.55))
                     .fixedSize()
 
                 RoundedRectangle(cornerRadius: 0.5)
@@ -36,10 +36,20 @@ struct WidgetView: View {
         .background(Color.black.opacity(0.001)) // Capture hit tests in corners
         .background(
             ZStack {
+                // Material underlay — gives the slight blur on whatever is
+                // behind the widget.
                 RoundedRectangle(cornerRadius: 12)
                     .fill(.ultraThinMaterial)
                     .environment(\.colorScheme, .dark)
 
+                // Solid dark overlay so the widget reads consistently on
+                // any background (white desktop, photo wallpaper, etc.).
+                // Without this the ultraThinMaterial washes out to grey on
+                // light backgrounds and the text disappears.
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(nsColor: NSColor(red: 0.08, green: 0.08, blue: 0.1, alpha: 0.88)))
+
+                // Subtle top highlight for depth.
                 RoundedRectangle(cornerRadius: 12)
                     .fill(
                         LinearGradient(
@@ -52,7 +62,7 @@ struct WidgetView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -219,7 +229,7 @@ private struct CompactStatusView: View {
                 .font(.system(size: 14, weight: .heavy, design: .rounded))
                 .monospacedDigit()
                 .contentTransition(.numericText())
-                .foregroundColor(fg)
+                .foregroundStyle(fg)
                 .frame(width: 30, height: 30)
                 .background(bg)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -247,7 +257,9 @@ private struct CompactStatusView: View {
     /// 30 × 30 dominant block, driven by a high-frequency TimelineView.
     /// 2.4 s per full loop.
     private func workingTracerDot(color: Color) -> some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+        // 30 FPS is plenty for a single orbiting dot — halves the CPU cost
+        // versus 60 FPS without any perceivable difference.
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let period: TimeInterval = 2.4
             let progress = CGFloat((t / period).truncatingRemainder(dividingBy: 1.0))
@@ -314,7 +326,7 @@ private struct CompactStatusView: View {
             Text("\(count)")
                 .font(.system(size: 9, weight: .bold, design: .rounded))
                 .monospacedDigit()
-                .foregroundColor(textColor)
+                .foregroundStyle(textColor)
         }
     }
 }

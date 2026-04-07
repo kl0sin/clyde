@@ -10,3 +10,19 @@ DerivedData/
 *.o
 *.swiftdeps
 *.swiftdeps~
+
+# Claude Code workflow / skills — personal dev environment, not part of
+# the published app source.
+.claude/
+.agents/
+skills-lock.json
+
+# Local release artifacts (build.sh outputs).
+build/
+
+# Apple Developer credentials — must NEVER be committed.
+*.p12
+*.cer
+*.certSigningRequest
+sparkle-private-key
+*.keychain-db
