@@ -211,35 +211,42 @@ enum HookInstaller {
     }
 
     static func uninstall() throws {
-        try? FileManager.default.removeItem(at: AppPaths.clydeHookScript)
+        // Order matters: we must remove the registration from settings.json
+        // BEFORE deleting the script file on disk. Otherwise there's a window
+        // where Claude Code still thinks the hook exists but the file is gone,
+        // and every hook invocation in that window errors with
+        // "No such file or directory".
+        if let data = try? Data(contentsOf: AppPaths.claudeSettingsFile),
+           var settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
 
-        guard let data = try? Data(contentsOf: AppPaths.claudeSettingsFile),
-              var settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            ClydeLog.hooks.info("Hook uninstalled (no settings to clean)")
-            return
-        }
-
-        if var hooks = settings["hooks"] as? [String: Any] {
-            // Clean up all currently registered events plus any legacy ones we may have used before.
-            let legacyEvents = ["Notification"]
-            for eventName in Self.registeredHookEvents + legacyEvents {
-                removeClydeHook(&hooks, eventName: eventName)
+            if var hooks = settings["hooks"] as? [String: Any] {
+                // Clean up all currently registered events plus any legacy ones
+                // we may have used before.
+                let legacyEvents = ["Notification"]
+                for eventName in Self.registeredHookEvents + legacyEvents {
+                    removeClydeHook(&hooks, eventName: eventName)
+                }
+                settings["hooks"] = hooks
             }
-            settings["hooks"] = hooks
-        }
 
-        if let newData = try? JSONSerialization.data(
-            withJSONObject: settings,
-            options: [.prettyPrinted, .sortedKeys]
-        ) {
             do {
+                let newData = try JSONSerialization.data(
+                    withJSONObject: settings,
+                    options: [.prettyPrinted, .sortedKeys]
+                )
                 try newData.write(to: AppPaths.claudeSettingsFile)
-                ClydeLog.hooks.info("Hook uninstalled successfully")
             } catch {
                 ClydeLog.hooks.error("Failed to write cleaned settings: \(error.localizedDescription, privacy: .public)")
                 throw InstallError.writeFailed(error.localizedDescription)
             }
+        } else {
+            ClydeLog.hooks.info("Hook uninstalled (no settings to clean)")
         }
+
+        // Only now, once settings.json no longer references the script, is it
+        // safe to delete the file itself.
+        try? FileManager.default.removeItem(at: AppPaths.clydeHookScript)
+        ClydeLog.hooks.info("Hook uninstalled successfully")
     }
 
     private static func mergeHookBlock(_ hooks: inout [String: Any], eventName: String, block: [String: Any]) {

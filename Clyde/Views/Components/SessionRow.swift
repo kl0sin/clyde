@@ -21,6 +21,8 @@ struct SessionRow: View {
     @State private var isHovered = false
     @State private var stateFlash = false
     @State private var lastSeenStatus: SessionStatus?
+    /// Drives the ambient pulse on busy / attention status pills.
+    @State private var pillPulse = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -103,39 +105,7 @@ struct SessionRow: View {
 
             if !isEditing {
                 VStack(alignment: .trailing, spacing: 3) {
-                    if session.isGhost {
-                        HStack(spacing: 4) {
-                            Image(systemName: "moon.zzz.fill")
-                                .font(.system(size: 8))
-                            Text("Ended")
-                                .font(.system(size: 10, weight: .semibold))
-                        }
-                        .foregroundColor(Color(white: 0.5))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color(white: 0.18))
-                        .clipShape(Capsule())
-                    } else if session.needsAttention {
-                        HStack(spacing: 4) {
-                            Image(systemName: "hand.tap.fill")
-                                .font(.system(size: 8))
-                            Text("Needs input")
-                                .font(.system(size: 10, weight: .semibold))
-                        }
-                        .foregroundColor(.blue)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.blue.opacity(0.15))
-                        .clipShape(Capsule())
-                    } else {
-                        Text(SessionTheme.label(for: session.status))
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(SessionTheme.color(for: session.status))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(SessionTheme.color(for: session.status).opacity(0.1))
-                            .clipShape(Capsule())
-                    }
+                    statusPill(for: session)
 
                     Text(timeAgo(session.endedAt ?? session.statusChangedAt))
                         .font(.system(size: 9))
@@ -207,7 +177,71 @@ struct SessionRow: View {
             }
             lastSeenStatus = newStatus
         }
-        .onAppear { lastSeenStatus = session.status }
+        .onAppear {
+            lastSeenStatus = session.status
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                pillPulse = true
+            }
+        }
+    }
+
+    /// Status pill on the right of the row. Ghost and ready are static.
+    /// Busy and attention pulse a leading dot so the row visually "breathes"
+    /// in sync with the widget.
+    @ViewBuilder
+    private func statusPill(for session: Session) -> some View {
+        if session.isGhost {
+            HStack(spacing: 4) {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.system(size: 8))
+                Text("Ended")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundColor(Color(white: 0.5))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color(white: 0.18))
+            .clipShape(Capsule())
+        } else if session.needsAttention {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(SessionTheme.attentionColor)
+                    .frame(width: 6, height: 6)
+                    .opacity(pillPulse ? 0.4 : 1.0)
+                    .shadow(color: SessionTheme.attentionColor.opacity(pillPulse ? 0.0 : 0.8), radius: pillPulse ? 0 : 4)
+                Text(SessionTheme.attentionLabel)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundColor(SessionTheme.attentionColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(SessionTheme.attentionColor.opacity(0.15))
+            .clipShape(Capsule())
+        } else if session.status == .busy {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(SessionTheme.processingColor)
+                    .frame(width: 6, height: 6)
+                    .opacity(pillPulse ? 0.4 : 1.0)
+                    .shadow(color: SessionTheme.processingColor.opacity(pillPulse ? 0.0 : 0.7), radius: pillPulse ? 0 : 3)
+                Text(SessionTheme.processingLabel)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundColor(SessionTheme.processingColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(SessionTheme.processingColor.opacity(0.12))
+            .clipShape(Capsule())
+        } else {
+            // Ready
+            Text(SessionTheme.readyLabel)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(SessionTheme.readyColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(SessionTheme.readyColor.opacity(0.1))
+                .clipShape(Capsule())
+        }
     }
 
     private func abbreviatePath(_ path: String) -> String {

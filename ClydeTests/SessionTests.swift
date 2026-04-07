@@ -27,11 +27,24 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(session.displayName, "shipyard")
     }
 
-    func testDisplayNameWithoutSessionIdShowsGenericLabel() {
-        // pgrep-discovered sessions (no hook -info) don't have a trustworthy
-        // cwd, so the display falls back to "Session <pid>".
+    func testDisplayNameWithoutSessionIdUsesCWDWhenMeaningful() {
+        // A pgrep-discovered session with a proper project cwd still shows
+        // the project name — even without a hook session_id.
         let session = Session(pid: 123, workingDirectory: "/Users/me/Projects/shipyard")
-        XCTAssertEqual(session.displayName, "Session 123")
+        XCTAssertEqual(session.displayName, "shipyard")
+    }
+
+    func testDisplayNameFallsBackToUntitledForHomeDirectoryCWD() {
+        // The classic "lsof found only the global settings file" case:
+        // cwd is the home directory, which tells us nothing about the
+        // project. Fall back to the friendly generic label.
+        let session = Session(pid: 123, workingDirectory: NSHomeDirectory())
+        XCTAssertEqual(session.displayName, "Untitled session")
+    }
+
+    func testDisplayNameFallsBackToUntitledForEmptyCWD() {
+        let session = Session(pid: 123, workingDirectory: "")
+        XCTAssertEqual(session.displayName, "Untitled session")
     }
 
     func testInitialStatusIsBusy() {

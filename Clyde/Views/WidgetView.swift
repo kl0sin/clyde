@@ -76,12 +76,13 @@ private struct CompactStatusView: View {
     @ObservedObject var viewModel: AppViewModel
     @ObservedObject var attentionMonitor: AttentionMonitor
 
-    /// Slow ambient breathing for the working state (1.5s autoreverse).
-    @State private var workingPhase = false
     /// Faster pulse for the attention state (0.8s autoreverse).
     @State private var attentionPhase = false
-    /// Continuously expanding ring for attention (1.5s, non-autoreverse).
-    @State private var attentionRingExpand = false
+    /// First expanding ring for attention (1.5s, non-autoreverse).
+    @State private var attentionRingA = false
+    /// Second expanding ring for attention, delayed 0.75s so the two
+    /// rings form a continuous outward wave instead of a single beat.
+    @State private var attentionRingB = false
 
     init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -98,16 +99,10 @@ private struct CompactStatusView: View {
         var color: Color {
             switch self {
             case .attention: return .blue
-            case .working:   return .orange
+            // Custom purple ~#bf5af2 — slightly brighter than system .purple
+            // and specifically chosen for the "AI thinking" vibe.
+            case .working:   return Color(red: 0.749, green: 0.353, blue: 0.949)
             case .ready:     return .green
-            }
-        }
-
-        /// Whether this state should pulse when shown as the dominant block.
-        var pulses: Bool {
-            switch self {
-            case .attention, .working: return true
-            case .ready:               return false
             }
         }
     }
@@ -175,23 +170,31 @@ private struct CompactStatusView: View {
     }
 
     private func startAmbientAnimations() {
-        // Working: slow gentle breathing (opacity + tiny scale).
-        withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-            workingPhase = true
-        }
         // Attention: faster pulse to draw the eye.
         withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
             attentionPhase = true
         }
-        // Attention ring: a wave that expands outward and fades, then resets.
+        // Attention rings: two waves that expand outward and fade, with the
+        // second offset by 0.75s so they form a continuous ripple.
         withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
-            attentionRingExpand = true
+            attentionRingA = true
+        }
+        withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false).delay(0.75)) {
+            attentionRingB = true
         }
     }
 
     /// Big number block on the left. 30 × 30 with the state's tinted
-    /// background. Working "breathes", attention pulses faster and gets a
-    /// glow ring; ready and empty are static.
+    /// background.
+    ///
+    /// Working: a bright dot continuously traces the rounded-rect perimeter,
+    /// driven by a `TimelineView(.animation)` with a 2.4s period. The block
+    /// itself stays perfectly still so the digit is readable.
+    ///
+    /// Attention: the digit pulses in opacity and two concentric stroked
+    /// rings expand outward in a staggered wave.
+    ///
+    /// Ready / empty: completely static.
     private func dominantBlock(kind: StatusKind, count: Int, isEmpty: Bool) -> some View {
         let bg: Color = isEmpty ? Color(white: 0.16) : kind.color.opacity(0.20)
         let fg: Color = isEmpty ? Color(white: 0.30) : kind.color
@@ -199,23 +202,13 @@ private struct CompactStatusView: View {
         let isWorking = !isEmpty && kind == .working
         let isAttention = !isEmpty && kind == .attention
 
-        // Per-state animated values, all driven by the three @State phases.
-        let scale: CGFloat = isWorking ? (workingPhase ? 1.03 : 1.0) : 1.0
-        let opacity: Double = {
-            if isWorking { return workingPhase ? 1.0 : 0.7 }
-            if isAttention { return attentionPhase ? 1.0 : 0.55 }
-            return 1.0
-        }()
+        let pulsingOpacity: Double = isAttention ? (attentionPhase ? 1.0 : 0.55) : 1.0
 
         return ZStack {
-            // Attention ring: stroked rounded-rect that grows and fades out,
-            // then loops. Sits behind the block. Only rendered for attention.
+            // Attention: two staggered expanding rings behind the block.
             if isAttention {
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(kind.color, lineWidth: 1.5)
-                    .frame(width: 30, height: 30)
-                    .scaleEffect(attentionRingExpand ? 1.55 : 1.0)
-                    .opacity(attentionRingExpand ? 0.0 : 0.7)
+                attentionRing(color: kind.color, expand: attentionRingA)
+                attentionRing(color: kind.color, expand: attentionRingB)
             }
 
             Text("\(count)")
@@ -226,10 +219,71 @@ private struct CompactStatusView: View {
                 .frame(width: 30, height: 30)
                 .background(bg)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-                .scaleEffect(scale)
-                .opacity(opacity)
+                .opacity(pulsingOpacity)
+
+            // Working: dot traces the rounded-rect perimeter.
+            if isWorking {
+                workingTracerDot(color: kind.color)
+            }
         }
         .frame(width: 30, height: 30)
+    }
+
+    /// One expanding-and-fading ring overlay. Sizing is fixed at 30 × 30
+    /// (same as the block) and the `scaleEffect` drives the outward wave.
+    private func attentionRing(color: Color, expand: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 10)
+            .stroke(color, lineWidth: 1.5)
+            .frame(width: 30, height: 30)
+            .scaleEffect(expand ? 1.55 : 1.0)
+            .opacity(expand ? 0.0 : 0.7)
+    }
+
+    /// A bright dot travelling along the rounded-rect perimeter of the
+    /// 30 × 30 dominant block, driven by a high-frequency TimelineView.
+    /// 2.4 s per full loop.
+    private func workingTracerDot(color: Color) -> some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let period: TimeInterval = 2.4
+            let progress = CGFloat((t / period).truncatingRemainder(dividingBy: 1.0))
+            let pos = perimeterPosition(progress)
+            return Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+                .shadow(color: color, radius: 4)
+                .shadow(color: color.opacity(0.5), radius: 8)
+                .position(pos)
+        }
+        .frame(width: 30, height: 30)
+        .allowsHitTesting(false)
+    }
+
+    /// Linearly interpolates a point along the perimeter of a 30 × 30 box
+    /// with 8 pt corner radius. Approximated with eight waypoints (top-
+    /// right, right-top, ...) so the dot visits each side segment in equal
+    /// time; the slight corner cut is imperceptible at this scale.
+    private func perimeterPosition(_ t: CGFloat) -> CGPoint {
+        let waypoints: [CGPoint] = [
+            CGPoint(x: 8,  y: 0),
+            CGPoint(x: 22, y: 0),
+            CGPoint(x: 30, y: 8),
+            CGPoint(x: 30, y: 22),
+            CGPoint(x: 22, y: 30),
+            CGPoint(x: 8,  y: 30),
+            CGPoint(x: 0,  y: 22),
+            CGPoint(x: 0,  y: 8),
+            CGPoint(x: 8,  y: 0),
+        ]
+        let scaled = t * 8
+        let idx = min(Int(scaled), 7)
+        let local = scaled - CGFloat(idx)
+        let from = waypoints[idx]
+        let to = waypoints[idx + 1]
+        return CGPoint(
+            x: from.x + (to.x - from.x) * local,
+            y: from.y + (to.y - from.y) * local
+        )
     }
 
     /// Two stacked tick rows on the right showing the non-dominant counts

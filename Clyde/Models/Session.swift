@@ -26,16 +26,15 @@ struct Session: Identifiable, Equatable {
         if let customName, !customName.isEmpty {
             return customName
         }
-        // Sessions without a hook session_id were discovered via pgrep alone,
-        // so we don't have a trustworthy cwd for them — fall back to a
-        // generic label until the next hook event populates the -info file.
-        if sessionId == nil {
-            return "Session \(pid)"
+        // Use the project folder name whenever cwd is known and looks like a
+        // real project path. The home directory itself is the classic
+        // unreliable value that legacy pgrep-based detection returns when
+        // `lsof` finds only the global ~/.claude/settings file, so we treat
+        // it as "unknown" and fall back to the generic label.
+        if !workingDirectory.isEmpty && workingDirectory != NSHomeDirectory() {
+            return (workingDirectory as NSString).lastPathComponent
         }
-        if workingDirectory.isEmpty {
-            return "Session \(pid)"
-        }
-        return (workingDirectory as NSString).lastPathComponent
+        return "Untitled session"
     }
 
     init(pid: pid_t, workingDirectory: String = "", status: SessionStatus = .busy, sessionId: String? = nil) {

@@ -113,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshMenuBarItem()
         updateMenuBarMenu()
 
-        // Update menu + icon whenever sessions or attention change.
+        // Update menu + icon whenever sessions, attention, or custom names change.
         appViewModel.processMonitor.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -127,6 +127,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.refreshMenuBarItem()
                 self?.updateMenuBarMenu()
             }
+            .store(in: &cancellables)
+        // Rename events live in the session view model — subscribe so a new
+        // custom name shows up in the dropdown without waiting for the next
+        // process monitor tick.
+        sessionViewModel.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateMenuBarMenu() }
             .store(in: &cancellables)
     }
 
@@ -182,7 +189,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor private func updateMenuBarMenu() {
         let menu = NSMenu()
 
-        let allSessions = appViewModel.processMonitor.sessions
+        // Read from sessionViewModel.sessions so we pick up user-set custom
+        // names (stored per session_id in SessionListViewModel) instead of
+        // the raw processMonitor output.
+        let allSessions = sessionViewModel.sessions
         let liveSessions = allSessions.filter { !$0.isGhost }
         let attentionPIDs = appViewModel.attentionMonitor.attentionPIDs
 
