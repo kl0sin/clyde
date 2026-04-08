@@ -1,44 +1,9 @@
 import SwiftUI
 
-struct ContentView: View {
-    @ObservedObject var appViewModel: AppViewModel
-    @ObservedObject var sessionViewModel: SessionListViewModel
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            Group {
-                if appViewModel.isCollapsed {
-                    WidgetView(viewModel: appViewModel)
-                        .transition(.opacity)
-                } else if appViewModel.showSettings {
-                    SettingsView(appViewModel: appViewModel)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .transition(.opacity)
-                } else {
-                    ExpandedView(
-                        appViewModel: appViewModel,
-                        sessionViewModel: sessionViewModel
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .transition(.opacity)
-                }
-            }
-            .animation(.easeInOut(duration: 0.40), value: appViewModel.isCollapsed)
-            .animation(.easeInOut(duration: 0.30), value: appViewModel.showSettings)
-
-            // Error banner overlay
-            if !appViewModel.isCollapsed, let error = appViewModel.lastError {
-                ErrorBanner(message: error)
-                    .padding(.top, 8)
-                    .padding(.horizontal, 12)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.easeOut(duration: 0.2), value: appViewModel.lastError)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
-    }
-}
+/// `ContentView` is no longer used as a panel root — the dual-panel
+/// architecture means the widget panel hosts `WidgetView` directly and
+/// the expanded panel hosts `ExpandedRootView`. This file just keeps
+/// the shared `ErrorBanner` component used by the expanded panel.
 
 struct ErrorBanner: View {
     let message: String

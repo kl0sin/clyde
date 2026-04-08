@@ -51,18 +51,17 @@ enum AppConstants {
     /// How long a hook-signalled attention event remains valid
     static let attentionEventTimeout: TimeInterval = 60.0
 
-    /// How long a busy marker file remains "fresh" before Clyde considers it
-    /// stale and stops counting the session as busy. The hook script touches
-    /// the marker on every PreToolUse event, so an actively-working session
-    /// keeps refreshing it. The timeout only kicks in when something abnormal
-    /// happens (Claude crashes, user Ctrl+C interrupt, network hang, etc.) —
-    /// without it those scenarios would leave a session stuck in "working"
-    /// forever because Claude Code doesn't fire `Stop` on interrupt.
-    ///
-    /// 120s gives ~2 minutes of grace for pure-text generation phases where
-    /// no tool hooks fire. Long tool-using turns refresh the marker more
-    /// frequently than that and stay correctly busy.
-    static let busyMarkerTimeout: TimeInterval = 120.0
+    /// Busy markers are sticky: a marker is considered valid as long as the
+    /// owning Claude process is alive (`kill(pid, 0) == 0`). They are removed
+    /// only by the hook script on Stop / StopFailure / SessionEnd / interrupt,
+    /// or by Clyde itself when the PID disappears. We used to expire them on
+    /// mtime staleness (~120s), but that broke two real scenarios:
+    ///   1. Long pure-text turns (8–10 min of "thinking" with no tool calls)
+    ///      would briefly drop to "ready" mid-turn.
+    ///   2. Long permission prompts would expire the marker while the user
+    ///      was still picking an option, so resolving the prompt left the
+    ///      session stuck in "ready" instead of returning to "working".
+    /// Process liveness is the only correct signal for "is this turn over?".
 
     /// After a Claude session ends, keep the row visible as a ghost for this long.
     static let endedSessionLinger: TimeInterval = 300.0  // 5 minutes

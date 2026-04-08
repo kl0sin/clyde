@@ -340,7 +340,6 @@ struct SessionStatusIndicator: View {
     let idleIndex: Int?
 
     @State private var bounce = false
-    @State private var orbitAngle: Double = 0
     @State private var attentionPulse = false
 
     private var isActive: Bool {
@@ -358,7 +357,7 @@ struct SessionStatusIndicator: View {
             // Squircle base — same shape as the header sprite.
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(isActive ? accent.opacity(0.18) : Color(white: 0.11))
-                .frame(width: 36, height: 36)
+                .frame(width: 34, height: 34)
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .strokeBorder(
                     isActive
@@ -366,21 +365,28 @@ struct SessionStatusIndicator: View {
                         : Color(white: 0.18),
                     lineWidth: isActive ? 1.5 : 1
                 )
-                .frame(width: 36, height: 36)
+                .frame(width: 34, height: 34)
 
             if isActive {
-                // Active session: full sprite + accents.
+                // Active session: full sprite. The busy scale beat is
+                // driven by a TimelineView (frame-locked) so the
+                // animation always runs reliably — SwiftUI's
+                // withAnimation/.repeatForever in onAppear has been
+                // unreliable for newly-appearing rows.
                 let mascotState: ClydeState = session.needsAttention ? .attention : .busy
-                ClydeAnimationView(state: mascotState, pixelSize: 1.2)
-                    .frame(width: 20, height: 20)
-                    .offset(y: (session.status == .busy && bounce) ? -1 : 1)
-
                 if session.status == .busy && !session.needsAttention {
-                    Circle()
-                        .fill(SessionTheme.processingColor)
-                        .frame(width: 4, height: 4)
-                        .shadow(color: SessionTheme.processingColor, radius: 3)
-                        .offset(x: cos(orbitAngle) * 15, y: sin(orbitAngle) * 15)
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                        let t = context.date.timeIntervalSinceReferenceDate
+                        let phase = (sin(t * .pi * 2 / 1.4) + 1) / 2  // 0…1, 1.4s cycle
+                        let scale = 1.0 + phase * 0.12               // 1.0 … 1.12
+                        ClydeAnimationView(state: mascotState, pixelSize: 1.5)
+                            .frame(width: 24, height: 24)
+                            .scaleEffect(scale, anchor: .center)
+                    }
+                    .frame(width: 24, height: 24)
+                } else {
+                    ClydeAnimationView(state: mascotState, pixelSize: 1.5)
+                        .frame(width: 24, height: 24)
                 }
 
                 if session.needsAttention {
@@ -412,18 +418,6 @@ struct SessionStatusIndicator: View {
                 withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
                     attentionPulse = true
                 }
-            }
-        }
-        .task(id: session.status == .busy && !session.needsAttention) {
-            // Continuous orbit while busy — driven by a dedicated loop so
-            // it survives view re-renders and restarts cleanly on status
-            // transitions.
-            guard session.status == .busy, !session.needsAttention else { return }
-            let start = Date()
-            while !Task.isCancelled {
-                let elapsed = Date().timeIntervalSince(start)
-                orbitAngle = (elapsed / 2.0) * .pi * 2  // 2s per full orbit
-                try? await Task.sleep(for: .milliseconds(16))
             }
         }
     }

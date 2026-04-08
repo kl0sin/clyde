@@ -153,12 +153,11 @@ case "$HOOK_EVENT" in
         # Tools can only run after permission was granted, so clear any
         # pending attention flag. The session stays busy via its marker.
         rm -f "$EVENTS_DIR/$KEY.json"
-        # Refresh the busy marker's mtime so Clyde's staleness check
-        # doesn't expire it mid-turn. Without this, long tool-using runs
-        # would briefly drop to "ready" until the next user interaction.
-        # Combined with Clyde's reduced busyMarkerTimeout, this also
-        # ensures interrupted sessions (Ctrl+C) without a tool-failure
-        # event still clear within ~2 minutes.
+        # Touch the busy marker so its mtime tracks tool activity (used
+        # for diagnostics / activity timeline). Clyde itself no longer
+        # expires markers on staleness — they're sticky for as long as
+        # the Claude process is alive — but keeping mtime current is
+        # cheap and useful.
         [ -f "$STATE_DIR/$KEY-busy" ] && touch "$STATE_DIR/$KEY-busy"
         ;;
 esac

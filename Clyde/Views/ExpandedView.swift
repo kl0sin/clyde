@@ -9,8 +9,19 @@ struct ExpandedView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TitleBar(
+            ExpandedHeader(
                 clydeState: appViewModel.clydeState,
+                attentionCount: sessionViewModel.attentionCount,
+                workingCount: sessionViewModel.busyCount,
+                readyCount: sessionViewModel.idleCount,
+                isSnoozed: appViewModel.notificationService.isSnoozed,
+                onSnooze: {
+                    if appViewModel.notificationService.isSnoozed {
+                        appViewModel.notificationService.clearSnooze()
+                    } else {
+                        appViewModel.notificationService.snooze(minutes: 30)
+                    }
+                },
                 onSettings: { appViewModel.showSettings = true },
                 onCollapse: { appViewModel.toggleExpanded() }
             )
@@ -55,19 +66,21 @@ struct ExpandedView: View {
             )
         }
         .background(
-            // Background ZStack carries its own shadow so the shadow is
-            // recomputed only when the container size changes — not on
-            // every list redraw the way a top-level `.shadow` would.
+            // The NSPanel itself has `hasShadow = true` which gives the
+            // window a system shadow already. We deliberately do NOT
+            // add a SwiftUI `.shadow` here — earlier versions stacked
+            // an internal shadow with `y: 4` on top of the system
+            // shadow, which made the bottom edge of the expanded panel
+            // visually heavier than the top edge and produced an
+            // asymmetric gap to the widget depending on whether the
+            // panel opened above or below it.
             ZStack {
-                // Glassmorphism base
                 RoundedRectangle(cornerRadius: 12)
                     .fill(.ultraThinMaterial)
                     .environment(\.colorScheme, .dark)
-                // Dark overlay for readability
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color(nsColor: NSColor(red: 0.08, green: 0.08, blue: 0.1, alpha: 0.85)))
             }
-            .shadow(color: .black.opacity(0.4), radius: 16, y: 4)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)

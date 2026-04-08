@@ -276,16 +276,20 @@ final class ProcessMonitor: ObservableObject {
     /// `hookBusyPIDs` — doesn't kick a poll. Safe to call from poll() itself.
     @discardableResult
     private func refreshHookBusyPIDs() -> Bool {
-        let now = Date()
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: stateDir,
-            includingPropertiesForKeys: [.contentModificationDateKey]
+            includingPropertiesForKeys: nil
         ) else {
             let changed = !hookBusyPIDs.isEmpty
             if changed { hookBusyPIDs = [] }
             return changed
         }
 
+        // Sticky semantics: a -busy marker is valid for as long as its
+        // owning process is alive. The hook script removes it on Stop /
+        // StopFailure / SessionEnd / interrupt; we remove it here only
+        // when the PID is gone. No mtime expiry — long pure-text turns
+        // and long permission prompts must not silently flip to idle.
         var present: Set<pid_t> = []
         for file in files where file.lastPathComponent.hasSuffix("-busy") {
             guard let pid = readMarkerPID(file: file) else {
@@ -296,13 +300,7 @@ final class ProcessMonitor: ObservableObject {
                 try? FileManager.default.removeItem(at: file)
                 continue
             }
-            if let attrs = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
-               let mtime = attrs.contentModificationDate,
-               now.timeIntervalSince(mtime) < AppConstants.busyMarkerTimeout {
-                present.insert(pid)
-            } else {
-                try? FileManager.default.removeItem(at: file)
-            }
+            present.insert(pid)
         }
 
         let changed = present != hookBusyPIDs
@@ -332,8 +330,48 @@ final class ProcessMonitor: ObservableObject {
         let infoChanged = infoFilenames != lastInfoFilenames
         lastInfoFilenames = infoFilenames
 
+        // Fast path: when only the busy state of an EXISTING session
+        // flipped (no new info files = no new sessions), reflect that
+        // on the in-memory sessions array immediately, synchronously.
+        // This avoids waiting on the full `poll()` cycle (which shells
+        // out to pgrep — ~50–200 ms of latency before the UI catches
+        // up to the hook event).
+        if busyChanged {
+            applyBusyStateToSessions()
+        }
+
         if busyChanged || infoChanged {
             Task { await self.poll() }
+        }
+    }
+
+    /// Synchronously update the `status` of every live session in the
+    /// in-memory `sessions` array based on the current `hookBusyPIDs`.
+    /// Does not touch ghosts. Used as the fast path from
+    /// `pollHookState` so the UI reflects hook events instantly.
+    private func applyBusyStateToSessions() {
+        var changed = false
+        var updated = sessions
+        for index in updated.indices where !updated[index].isGhost {
+            let pid = updated[index].pid
+            let newStatus: SessionStatus = hookBusyPIDs.contains(pid) ? .busy : .idle
+            if updated[index].status != newStatus {
+                updated[index].status = newStatus
+                updated[index].statusChangedAt = Date()
+                changed = true
+                if newStatus == .idle {
+                    onSessionBecameIdle?(updated[index])
+                }
+            }
+        }
+        if changed {
+            sessions = updated
+            let liveSessions = sessions.filter { !$0.isGhost }
+            if liveSessions.isEmpty {
+                clydeState = .sleeping
+            } else {
+                clydeState = liveSessions.contains(where: { $0.status == .busy }) ? .busy : .idle
+            }
         }
     }
 
