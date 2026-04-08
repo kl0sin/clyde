@@ -44,6 +44,9 @@ final class AppViewModel: ObservableObject {
     private var errorClearTask: Task<Void, Never>?
     private var hookDirSource: DispatchSourceFileSystemObject?
     private var hookDirFD: Int32 = -1
+    private var settingsFileSource: DispatchSourceFileSystemObject?
+    private var settingsFileFD: Int32 = -1
+    private var settingsWatcherDebounce: DispatchWorkItem?
     private var hookHealTimer: Timer?
 
     deinit {
@@ -52,6 +55,8 @@ final class AppViewModel: ObservableObject {
         // context, and the dispatch source's cancel handler closes hookDirFD.
         errorClearTask?.cancel()
         hookDirSource?.cancel()
+        settingsFileSource?.cancel()
+        settingsWatcherDebounce?.cancel()
         hookHealTimer?.invalidate()
     }
 
@@ -163,9 +168,90 @@ final class AppViewModel: ObservableObject {
 
         processMonitor.startPolling()
         attentionMonitor.start()
+        // One-shot legacy migration must run BEFORE the first health check,
+        // otherwise the check sees the old `clyde-notify.sh` file in place
+        // and reports "everything fine" while settings.json points nowhere.
+        HookInstaller.migrateLegacyHookIfNeeded()
         ensureHookHealthy()
         startHookSelfHealing()
+        startSettingsWatcher()
         ClydeLog.general.info("Clyde started")
+    }
+
+    /// Watch `~/.claude/settings.json` itself. The hooks-dir watcher only
+    /// catches tampering with our script file; it doesn't catch the much
+    /// more common failure mode where some OTHER tool (e.g. claude-visual)
+    /// rewrites settings.json end-to-end and silently strips our hook
+    /// entries. When that happens, hooks stop firing entirely and Clyde's
+    /// "in progress" detection goes dark until the 60s safety-net timer.
+    /// This watcher closes that gap to ~300ms.
+    ///
+    /// Re-arms after every event because atomic writes (mktemp + mv) swap
+    /// the inode, so the FD we hold becomes orphaned and stops delivering.
+    private func startSettingsWatcher() {
+        armSettingsWatcher()
+    }
+
+    private func armSettingsWatcher() {
+        settingsFileSource?.cancel()
+        settingsFileSource = nil
+
+        let path = AppPaths.claudeSettingsFile.path
+        guard FileManager.default.fileExists(atPath: path) else {
+            // File doesn't exist yet — retry shortly. Claude creates it on
+            // first launch, so on a fresh machine we may briefly have nothing
+            // to watch.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.armSettingsWatcher()
+            }
+            return
+        }
+
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else {
+            ClydeLog.hooks.error("Failed to open settings.json for watching")
+            return
+        }
+        settingsFileFD = fd
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .delete, .rename, .extend, .attrib],
+            queue: DispatchQueue.main
+        )
+        source.setEventHandler { [weak self] in
+            self?.handleSettingsFileChanged()
+        }
+        source.setCancelHandler { [weak self] in
+            if let fd = self?.settingsFileFD, fd >= 0 {
+                close(fd)
+                self?.settingsFileFD = -1
+            }
+        }
+        source.resume()
+        settingsFileSource = source
+    }
+
+    private func handleSettingsFileChanged() {
+        // Suppress the FSEvents echo from our own writes. Without this guard,
+        // every install() triggers another health check that re-installs that
+        // triggers another event... a tight reinstall loop.
+        if let last = HookInstaller.lastSelfWriteAt,
+           Date().timeIntervalSince(last) < 1.5 {
+            armSettingsWatcher()
+            return
+        }
+
+        // Debounce — external tools often write the file in two passes
+        // (truncate then content). Coalescing avoids running the health
+        // check against a half-written intermediate state.
+        settingsWatcherDebounce?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.ensureHookHealthy()
+            self?.armSettingsWatcher()
+        }
+        settingsWatcherDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     /// Watch `~/.claude/hooks/` for changes and re-run auto-repair the
@@ -221,6 +307,7 @@ final class AppViewModel: ObservableObject {
                 await MainActor.run { self.hookHealthIssue = nil }
                 return
             }
+            ClydeLog.hooks.info("Health check found issue: \(issue.bannerMessage, privacy: .public)")
 
             let shouldAutoInstall: Bool
             switch issue {
