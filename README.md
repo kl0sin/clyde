@@ -99,7 +99,25 @@ helpers.
 
 ## Screenshots
 
-> _Screenshots coming with the v0.1.0 release._
+**The expanded view — every Claude session at a glance.**
+Hero header tells you the dominant state, the list shows each session
+with its directory, and the activity bar at the bottom keeps a
+running tally.
+
+![Clyde expanded view with multiple Claude Code sessions](site/img/screenshots/expanded.png)
+
+**The collapsed widget.** Floats wherever you drop it. The big number
+is the dominant state count; the two ticks on the right show the
+others. Click to expand, drag to move, hide entirely if you only want
+the menu bar.
+
+![Clyde floating widget on the desktop](site/img/screenshots/widget.png)
+
+**The menu bar item.** Pixel‑accurate Clyde silhouette plus a colour
+capsule for the dominant state — purple = working, green = ready,
+blue = needs attention.
+
+![Clyde menu bar item](site/img/screenshots/menubar.png)
 
 ## Build from source
 

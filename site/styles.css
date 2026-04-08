@@ -271,6 +271,230 @@ h1 {
 }
 
 /* ============================================================
+   SHOWCASE — interactive screenshot tabs
+   ============================================================ */
+
+.showcase {
+  padding: 120px 0 100px;
+  position: relative;
+  overflow: hidden;
+}
+
+.showcase::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 700px 500px at 80% 0%, rgba(191, 90, 242, 0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 600px 400px at 10% 100%, rgba(74, 144, 226, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.showcase .container { position: relative; }
+
+.showcase-tabs {
+  margin-top: 56px;
+}
+
+/* Hide the underlying radio inputs — labels do the visual work. */
+.showcase-tabs > input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.showcase-tablist {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.showcase-tab {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 22px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+  user-select: none;
+}
+
+.showcase-tab:hover {
+  background: rgba(191, 90, 242, 0.06);
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.showcase-tab-num {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  transition: color 0.2s;
+}
+
+.showcase-tab-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.showcase-tab-text strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.showcase-tab-text em {
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Active tab — driven by the matching :checked radio. */
+#tab-expanded:checked ~ .showcase-tablist label[for="tab-expanded"],
+#tab-widget:checked   ~ .showcase-tablist label[for="tab-widget"],
+#tab-menubar:checked  ~ .showcase-tablist label[for="tab-menubar"] {
+  background: linear-gradient(135deg, rgba(191, 90, 242, 0.14) 0%, rgba(74, 144, 226, 0.10) 100%);
+  border-color: var(--purple);
+  box-shadow: 0 0 0 1px var(--purple), 0 12px 32px rgba(191, 90, 242, 0.18);
+}
+
+#tab-expanded:checked ~ .showcase-tablist label[for="tab-expanded"] .showcase-tab-num,
+#tab-widget:checked   ~ .showcase-tablist label[for="tab-widget"] .showcase-tab-num,
+#tab-menubar:checked  ~ .showcase-tablist label[for="tab-menubar"] .showcase-tab-num {
+  color: var(--purple-bright);
+}
+
+/* Keyboard focus ring — radios are visually hidden but still focusable. */
+.showcase-tabs > input[type="radio"]:focus-visible + .showcase-tablist label,
+#tab-expanded:focus-visible ~ .showcase-tablist label[for="tab-expanded"],
+#tab-widget:focus-visible   ~ .showcase-tablist label[for="tab-widget"],
+#tab-menubar:focus-visible  ~ .showcase-tablist label[for="tab-menubar"] {
+  outline: 2px solid var(--purple-bright);
+  outline-offset: 3px;
+}
+
+.showcase-panels {
+  position: relative;
+}
+
+.showcase-panel {
+  display: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 48px;
+  align-items: center;
+  padding: 40px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  animation: showcase-fade 0.45s ease both;
+}
+
+@keyframes showcase-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+#tab-expanded:checked ~ .showcase-panels .showcase-panel-expanded,
+#tab-widget:checked   ~ .showcase-panels .showcase-panel-widget,
+#tab-menubar:checked  ~ .showcase-panels .showcase-panel-menubar {
+  display: grid;
+}
+
+.showcase-copy h3 {
+  font-size: 28px;
+  font-weight: 800;
+  margin: 0 0 16px;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.showcase-copy p {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text-dim);
+  margin: 0 0 20px;
+}
+
+.showcase-copy p strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.showcase-bullets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.showcase-bullets li {
+  position: relative;
+  padding-left: 22px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.showcase-bullets li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple-bright) 0%, var(--blue-bright) 100%);
+  box-shadow: 0 0 12px rgba(191, 90, 242, 0.5);
+}
+
+.showcase-image {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.showcase-image::before {
+  content: "";
+  position: absolute;
+  inset: -20px;
+  background: radial-gradient(ellipse, rgba(191, 90, 242, 0.18) 0%, transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.showcase-image img {
+  position: relative;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.showcase-image-menubar {
+  padding: 60px 0;
+}
+
+.showcase-image-menubar img {
+  max-width: 80%;
+}
+
+/* ============================================================
    FEATURES
    ============================================================ */
 
@@ -594,6 +818,19 @@ footer {
 
   .feature-grid { grid-template-columns: 1fr; }
   .how-grid { grid-template-columns: 1fr; }
+
+  .showcase { padding: 80px 0 60px; }
+  .showcase-tablist { grid-template-columns: 1fr; gap: 8px; margin-bottom: 24px; }
+  .showcase-tab { padding: 14px 18px; }
+  .showcase-tab-num { font-size: 18px; }
+  .showcase-panel {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 28px;
+  }
+  .showcase-copy h3 { font-size: 22px; }
+  .showcase-image-menubar { padding: 20px 0; }
+  .showcase-image-menubar img { max-width: 100%; }
 
   .install-card { padding: 28px; }
 

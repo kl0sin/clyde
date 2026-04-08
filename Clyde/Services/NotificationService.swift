@@ -73,6 +73,17 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         if snoozeUntil != nil { scheduleWakeTimer() }
     }
 
+    deinit {
+        // UNUserNotificationCenter retains its delegate. If a future
+        // version of Clyde ever recreates NotificationService (tests,
+        // hot-reload, etc.), failing to clear the delegate would leak
+        // this instance and its Combine subscribers. Cheap to do, so
+        // we do it.
+        if UNUserNotificationCenter.current().delegate === self {
+            UNUserNotificationCenter.current().delegate = nil
+        }
+    }
+
     // MARK: - Snooze API
 
     /// Begin a snooze window of the given duration (in minutes).

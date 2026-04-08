@@ -182,17 +182,13 @@ private struct CompactStatusView: View {
     /// rings expand outward in a staggered wave.
     ///
     /// Ready / empty: completely static.
+    @ViewBuilder
     private func dominantBlock(kind: StatusKind, count: Int, isEmpty: Bool) -> some View {
-        let shouldPulse = !isEmpty && (kind == .working || kind == .attention)
-
-        if shouldPulse {
-            return AnyView(pulsingDominantBlock(kind: kind, count: count))
-        }
-
-        let bg: Color = isEmpty ? Color(white: 0.16) : kind.color.opacity(0.20)
-        let fg: Color = isEmpty ? Color(white: 0.30) : kind.color
-
-        return AnyView(
+        if !isEmpty && (kind == .working || kind == .attention) {
+            pulsingDominantBlock(kind: kind, count: count)
+        } else {
+            let bg: Color = isEmpty ? Color(white: 0.16) : kind.color.opacity(0.20)
+            let fg: Color = isEmpty ? Color(white: 0.30) : kind.color
             Text("\(count)")
                 .font(.system(size: 14, weight: .heavy, design: .rounded))
                 .monospacedDigit()
@@ -201,7 +197,7 @@ private struct CompactStatusView: View {
                 .frame(width: 30, height: 30)
                 .background(bg)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-        )
+        }
     }
 
     /// Pulsing dominant block, used for both `working` and `attention`

@@ -14,6 +14,7 @@ struct SettingsView: View {
     @ObservedObject var notificationService: NotificationService
     @AppStorage("pollingInterval") private var pollingInterval: Double = AppConstants.defaultPollingInterval
     @State private var copiedDiagnostics = false
+    @State private var showAcknowledgements = false
     @State private var resetConfirmation = false
     @State private var resetDone = false
     /// Currently-playing preview sound, kept so we can stop it before
@@ -199,6 +200,37 @@ struct SettingsView: View {
         SettingsSection(title: "Maintenance") {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
+                    Text("Reveal Clyde data folder")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white)
+                    Text("Opens ~/.clyde/ in Finder — useful when sharing diagnostics or inspecting hook state by hand.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(white: 0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button(action: {
+                    let dir = AppPaths.clydeDir
+                    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    NSWorkspace.shared.open(dir)
+                }) {
+                    HStack {
+                        Image(systemName: "folder")
+                            .font(.system(size: 11))
+                        Text("Reveal in Finder")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(Color(white: 0.8))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Color(white: 0.18))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+
+                Divider().background(Color(white: 0.2))
+
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Reset tracking state")
                         .font(.system(size: 12))
                         .foregroundStyle(.white)
@@ -305,6 +337,26 @@ struct SettingsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
+
+            Divider().background(Color(white: 0.2))
+
+            Button(action: { showAcknowledgements = true }) {
+                HStack {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 11))
+                    Text("Acknowledgements")
+                        .font(.system(size: 12))
+                }
+                .foregroundStyle(Color(white: 0.7))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color(white: 0.16))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showAcknowledgements) {
+                AcknowledgementsSheet(isPresented: $showAcknowledgements)
+            }
 
             Divider().background(Color(white: 0.2))
 
@@ -443,4 +495,105 @@ struct SettingsSection<Content: View>: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
+}
+
+/// Third-party license display. Lists every dependency Clyde links
+/// against and reproduces the upstream license verbatim, as required
+/// by their respective terms.
+struct AcknowledgementsSheet: View {
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Acknowledgements")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                Spacer()
+                Button(action: { isPresented = false }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color(white: 0.6))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .background(Color(white: 0.11))
+
+            Divider().background(Color(white: 0.2))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Clyde is built on the open-source work of others. Their licenses are reproduced below.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(white: 0.55))
+
+                    licenseEntry(
+                        name: "Sparkle",
+                        url: "https://sparkle-project.org",
+                        body: Self.sparkleLicense
+                    )
+                }
+                .padding(18)
+            }
+            .background(Color(white: 0.09))
+        }
+        .frame(width: 520, height: 460)
+        .background(Color(white: 0.09))
+    }
+
+    @ViewBuilder
+    private func licenseEntry(name: String, url: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(name)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+            Text(url)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Color(white: 0.5))
+            Text(body)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Color(white: 0.7))
+                .textSelection(.enabled)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(white: 0.13))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    /// Verbatim copy of the Sparkle LICENSE file (MIT). Bundled inline so
+    /// the acknowledgements screen works without filesystem access and
+    /// survives any future bundling changes. Update if Sparkle is upgraded
+    /// across a license boundary.
+    private static let sparkleLicense = """
+    Copyright (c) 2006-2013 Andy Matuschak.
+    Copyright (c) 2009-2013 Elgato Systems GmbH.
+    Copyright (c) 2011-2014 Kornel Lesiński.
+    Copyright (c) 2015-2017 Mayur Pawashe.
+    Copyright (c) 2014 C.W. Betts.
+    Copyright (c) 2014 Petroules Corporation.
+    Copyright (c) 2014 Big Nerd Ranch.
+    All rights reserved.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of
+    this software and associated documentation files (the "Software"), to deal in
+    the Software without restriction, including without limitation the rights to
+    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+    the Software, and to permit persons to whom the Software is furnished to do so,
+    subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+    FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+    COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+    IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+    """
 }

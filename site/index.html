@@ -35,6 +35,7 @@
         <span class="brand-name">Clyde</span>
       </a>
       <nav aria-label="Primary">
+        <a href="#showcase">Tour</a>
         <a href="#features">Features</a>
         <a href="#how">How it works</a>
         <a href="#install">Install</a>
@@ -72,6 +73,94 @@
         </div>
 
         <p class="cta-meta">Free · Open source · macOS 13+ · Universal binary</p>
+      </div>
+    </section>
+
+    <!-- SHOWCASE — interactive tabs with screenshots -->
+    <section class="showcase" id="showcase">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-label">A quick tour</p>
+          <h2>Three views. Same source of truth.</h2>
+          <p class="section-sub">Clyde lives in three places at once — pick the level of detail you want, switch on the fly.</p>
+        </div>
+
+        <div class="showcase-tabs" role="tablist" aria-label="App screenshots">
+          <input type="radio" name="showcase-tab" id="tab-expanded" checked>
+          <input type="radio" name="showcase-tab" id="tab-widget">
+          <input type="radio" name="showcase-tab" id="tab-menubar">
+
+          <div class="showcase-tablist">
+            <label for="tab-expanded" class="showcase-tab" role="tab">
+              <span class="showcase-tab-num">01</span>
+              <span class="showcase-tab-text">
+                <strong>Expanded view</strong>
+                <em>Every session, all at once</em>
+              </span>
+            </label>
+            <label for="tab-widget" class="showcase-tab" role="tab">
+              <span class="showcase-tab-num">02</span>
+              <span class="showcase-tab-text">
+                <strong>Floating widget</strong>
+                <em>One glance, zero context switch</em>
+              </span>
+            </label>
+            <label for="tab-menubar" class="showcase-tab" role="tab">
+              <span class="showcase-tab-num">03</span>
+              <span class="showcase-tab-text">
+                <strong>Menu bar</strong>
+                <em>Quiet by default</em>
+              </span>
+            </label>
+          </div>
+
+          <div class="showcase-panels">
+            <div class="showcase-panel showcase-panel-expanded" role="tabpanel">
+              <div class="showcase-copy">
+                <h3>See every Claude session in one place.</h3>
+                <p>Hero header tells you the dominant state at a glance — <strong>1 attention, 2 working, 2 ready</strong>. The list shows each session with its directory and live activity. Click to focus the right terminal, drag to reorder, name them whatever makes sense to you.</p>
+                <ul class="showcase-bullets">
+                  <li>Real‑time, hook‑driven — never polled</li>
+                  <li>Per‑session names, sounds, and ordering</li>
+                  <li>Activity timeline of every prompt &amp; permission</li>
+                </ul>
+              </div>
+              <div class="showcase-image">
+                <img src="img/screenshots/expanded.png" alt="Clyde expanded view showing four Claude Code sessions with status pills" loading="lazy">
+              </div>
+            </div>
+
+            <div class="showcase-panel showcase-panel-widget" role="tabpanel">
+              <div class="showcase-copy">
+                <h3>One floating capsule. Zero alt‑tabbing.</h3>
+                <p>The widget lives wherever you drop it. The big number is the dominant state count; the two ticks on the right keep score of the others. It pulses gently when Claude is working, flashes blue when something needs you, and goes dark when nothing is up.</p>
+                <ul class="showcase-bullets">
+                  <li>Drag anywhere, snaps to screen edges</li>
+                  <li>Click to expand · global hotkey ⌃⌘C</li>
+                  <li>Hide entirely if you only want the menu bar</li>
+                </ul>
+              </div>
+              <div class="showcase-image">
+                <img src="img/screenshots/widget.png" alt="Clyde collapsed widget floating on a colourful desktop wallpaper" loading="lazy">
+              </div>
+            </div>
+
+            <div class="showcase-panel showcase-panel-menubar" role="tabpanel">
+              <div class="showcase-copy">
+                <h3>Lives in your menu bar. Quiet until it isn't.</h3>
+                <p>Pixel‑accurate Clyde silhouette plus a colour‑coded capsule for the dominant state — purple = working, green = ready, blue = needs attention. When nothing is happening, the icon goes monochrome and stays out of your way.</p>
+                <ul class="showcase-bullets">
+                  <li>Template icon — adapts to light &amp; dark menu bars</li>
+                  <li>Click for a full session dropdown</li>
+                  <li>Snooze with one click for deep‑work sessions</li>
+                </ul>
+              </div>
+              <div class="showcase-image showcase-image-menubar">
+                <img src="img/screenshots/menubar.png" alt="Clyde's menu bar item showing the Clyde silhouette next to a purple-and-green status capsule" loading="lazy">
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

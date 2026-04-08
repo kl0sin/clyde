@@ -91,6 +91,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var expandedDragState: ExpandedDragState?
     private static let dragActivationDistance: CGFloat = 3
 
+    /// Token returned by `NotificationCenter.addObserver(forName:…)`. We
+    /// hold it explicitly so `deinit` can remove it; the older
+    /// selector-based observer leaked across the app's lifetime.
+    private var widgetMoveObserver: NSObjectProtocol?
+
+    deinit {
+        // Resources held outside SwiftUI's automatic cleanup. AppDelegate
+        // is normally app-lifetime, but tests instantiate and discard it,
+        // and leaking event monitors / notification observers across
+        // those instances corrupts subsequent test runs.
+        if let token = widgetMoveObserver {
+            NotificationCenter.default.removeObserver(token)
+        }
+        if let monitor = globalHotKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let monitor = localHotKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let monitor = expandedDragMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         appViewModel = AppViewModel()
         sessionViewModel = SessionListViewModel(
@@ -173,10 +197,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Window move on the WIDGET → snap to edges and update anchor.
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(windowDidMove),
-            name: NSWindow.didMoveNotification, object: panel
-        )
+        // Closure-based observer so we can remove it explicitly in
+        // `deinit` via the returned token.
+        widgetMoveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] note in
+            // The observer is delivered on .main queue, but the callback
+            // closure isn't statically @MainActor-isolated. Hop through
+            // a Task so we can call the @MainActor method without a
+            // concurrency warning. The hop is essentially free since we
+            // are already on the main thread.
+            Task { @MainActor in
+                self?.windowDidMove(note)
+            }
+        }
 
         appViewModel.$isCollapsed
             .dropFirst()
