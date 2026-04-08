@@ -25,12 +25,12 @@ struct ExpandedHeader: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(accentColor.opacity(0.16))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 56, height: 56)
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(accentColor.opacity(0.45), lineWidth: 0.75)
-                    .frame(width: 44, height: 44)
-                ClydeAnimationView(state: clydeState, pixelSize: 1.85)
-                    .frame(width: 30, height: 30)
+                    .frame(width: 56, height: 56)
+                ClydeAnimationView(state: clydeState, pixelSize: 2.625)
+                    .frame(width: 42, height: 42)
             }
             .shadow(color: accentColor.opacity(0.30), radius: 14, y: 0)
 
@@ -106,7 +106,7 @@ struct ExpandedHeader: View {
                     .foregroundStyle(Color(white: 0.5))
             }
         } else {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 ForEach(entries, id: \.label) { entry in
                     HStack(spacing: 5) {
                         Circle()
@@ -115,6 +115,8 @@ struct ExpandedHeader: View {
                         Text("\(entry.count) \(entry.label)")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(Color(white: 0.65))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
             }
