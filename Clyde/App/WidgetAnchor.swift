@@ -25,9 +25,15 @@ struct WidgetAnchor: Equatable {
         self.origin = origin
     }
 
-    /// Small visual gap between the widget edge and the expanded panel
-    /// edge so the two windows don't kiss each other.
-    static let panelGap: CGFloat = 6
+    /// Frame gap when the expanded panel sits BELOW the widget
+    /// (drop-down). Same as the pop-up gap — empirically the system
+    /// shadows on both sides of the gap end up eating about the
+    /// same amount, so symmetric frame gaps read symmetric on screen.
+    static let panelGapBelow: CGFloat = 6
+
+    /// Frame gap when the expanded panel sits ABOVE the widget
+    /// (pop-up).
+    static let panelGapAbove: CGFloat = 6
 
     /// Compute where the expanded view should appear, given its target
     /// size, the visible screen rect and the collapsed widget size.
@@ -68,31 +74,49 @@ struct WidgetAnchor: Equatable {
         if x + size.width > screen.maxX { x = rightAlignedX }
 
         // --- Vertical: prefer dropping DOWN from the widget bottom,
-        //     fall back to popping UP above the widget top. ---
+        //     fall back to popping UP above the widget top, never
+        //     overlap the widget. ---
         let widgetTopY = origin.y + collapsedSize.height
         let widgetBottomY = origin.y
 
-        // Drop down: expanded TOP edge sits at widgetBottomY - panelGap
-        // → expanded origin = widgetBottomY - panelGap - size.height.
-        let downY = widgetBottomY - Self.panelGap - size.height
+        // Drop down: expanded TOP edge sits at widgetBottomY - panelGapBelow
+        // → expanded origin = widgetBottomY - panelGapBelow - size.height.
+        let downY = widgetBottomY - Self.panelGapBelow - size.height
 
-        // Pop up: expanded BOTTOM edge sits at widgetTopY + panelGap
-        // → expanded origin = widgetTopY + panelGap.
-        let upY = widgetTopY + Self.panelGap
+        // Pop up: expanded BOTTOM edge sits at widgetTopY + panelGapAbove
+        // → expanded origin = widgetTopY + panelGapAbove. Larger gap
+        // here compensates for the expanded view's heavy bottom shadow.
+        let upY = widgetTopY + Self.panelGapAbove
+
+        // Available space in each direction (without the panel gap).
+        let spaceBelow = widgetBottomY - screen.minY
+        let spaceAbove = screen.maxY - widgetTopY
 
         var y: CGFloat
         if downY >= screen.minY {
-            y = downY                       // drops down within screen
+            // Cleanly drops down inside the visible area. Preferred.
+            y = downY
         } else if upY + size.height <= screen.maxY {
-            y = upY                         // pops up within screen
+            // Doesn't fit downward — pop up above the widget instead.
+            y = upY
         } else {
-            // Neither direction fits cleanly — clamp to visible bounds.
-            y = max(screen.minY, screen.maxY - size.height)
+            // Neither direction fits the full panel inside the visible
+            // area. Pick whichever side has MORE space and use the
+            // properly-gapped position for THAT direction. The expanded
+            // panel may extend beyond the screen edge, but it will
+            // never overlap the widget — the gap is preserved.
+            if spaceAbove >= spaceBelow {
+                y = upY     // pop up; may clip above screen
+            } else {
+                y = downY   // drop down; may clip below screen
+            }
         }
 
-        // --- Final clamp ---
+        // --- Final horizontal clamp (vertical is intentionally NOT
+        //     clamped because clamping could push the panel into the
+        //     widget area; we'd rather see the panel get clipped at
+        //     the screen edge than overlap the widget) ---
         x = max(screen.minX, min(x, screen.maxX - size.width))
-        y = max(screen.minY, min(y, screen.maxY - size.height))
 
         return NSPoint(x: x, y: y)
     }
