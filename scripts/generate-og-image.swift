@@ -48,13 +48,18 @@ let height: CGFloat = 630
 let workDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let outputPath = workDir.appendingPathComponent("site/img/og-preview.png")
 
-let bgTop    = NSColor(red: 0.040, green: 0.040, blue: 0.063, alpha: 1)   // #0a0a10 ish
-let bgBottom = NSColor(red: 0.075, green: 0.055, blue: 0.110, alpha: 1)   // slight purple bias
-let glow     = NSColor(red: 0.749, green: 0.353, blue: 0.949, alpha: 1)
-let purpleBright = NSColor(red: 0.851, green: 0.612, blue: 1.000, alpha: 1)
-let blueBright   = NSColor(red: 0.480, green: 0.722, blue: 1.000, alpha: 1)
-let textPrimary  = NSColor.white
-let textDim      = NSColor(red: 0.541, green: 0.541, blue: 0.600, alpha: 1)
+// Palette mirrors site/styles.css :root vars exactly so the OG card
+// reads as a screenshot of the hero. Near-black base, gentle purple
+// ellipse from the top, faint blue/green washes at the bottom corners.
+let bgBase       = NSColor(red: 10/255,  green: 10/255,  blue: 16/255,  alpha: 1) // --bg #0a0a10
+let purpleGlow   = NSColor(red: 191/255, green: 90/255,  blue: 242/255, alpha: 1) // --purple
+let blueGlow     = NSColor(red: 74/255,  green: 144/255, blue: 226/255, alpha: 1) // --blue
+let greenGlow    = NSColor(red: 52/255,  green: 199/255, blue: 89/255,  alpha: 1) // --green
+let purpleStart  = NSColor(red: 217/255, green: 156/255, blue: 255/255, alpha: 1) // --purple-bright
+let purpleMid    = NSColor(red: 191/255, green: 90/255,  blue: 242/255, alpha: 1) // --purple
+let blueEnd      = NSColor(red: 122/255, green: 184/255, blue: 255/255, alpha: 1) // --blue-bright
+let textPrimary  = NSColor(red: 240/255, green: 240/255, blue: 245/255, alpha: 1) // --text
+let textDim      = NSColor(red: 138/255, green: 138/255, blue: 153/255, alpha: 1) // --text-dim
 
 // Use an explicit NSBitmapImageRep so the output is exactly 1200×630
 // pixels regardless of the host Mac's backing scale (otherwise Retina
@@ -83,32 +88,90 @@ guard let ctx = NSGraphicsContext(bitmapImageRep: rep) else {
 }
 NSGraphicsContext.current = ctx
 
-// 1. Flat dark base — single solid colour, no banding.
+// MARK: - Background
+//
+// Reproduces the hero-bg layer from site/styles.css:
+//   radial-gradient(ellipse 800x600 at 50% 0%,  rgba(191,90,242,0.18))
+//   radial-gradient(ellipse 600x400 at 20% 80%, rgba(74,144,226,0.10))
+//   radial-gradient(ellipse 600x400 at 80% 80%, rgba(52,199,89,0.06))
+// over a flat #0a0a10 base. CSS uses top-anchored ellipses (Y=0), so
+// the bright spot is at the canvas's top edge, not its centre.
+
 let bgRect = NSRect(x: 0, y: 0, width: width, height: height)
-NSColor(red: 0.055, green: 0.045, blue: 0.085, alpha: 1).setFill()
+bgBase.setFill()
 bgRect.fill()
 
-// 2. ONE huge soft purple radial that spans the entire canvas. The
-//    glow rect is intentionally larger than the canvas so the falloff
-//    edges fall outside the visible area — no hard ring, no band, just
-//    smooth atmosphere from the centre outward.
-if let radial = NSGradient(colors: [
-    glow.withAlphaComponent(0.32),
-    glow.withAlphaComponent(0.18),
-    glow.withAlphaComponent(0.06),
-    glow.withAlphaComponent(0.0),
-]) {
-    let glowRect = NSRect(x: -600, y: -600, width: 2400, height: 1830)
-    // Hot spot slightly left of canvas centre + slightly above the
-    // sprite vertical centre. Soft, no directional artefacts.
-    radial.draw(in: glowRect, relativeCenterPosition: NSPoint(x: -0.15, y: -0.05))
+// Helper: draw an ellipse-shaped radial wash centred on (cx, cy) in
+// canvas pixels, with the given semi-axes and peak alpha. We achieve
+// the elliptical falloff by scaling the CTM around the centre, then
+// drawing a circular gradient in the scaled space.
+func drawRadial(
+    centerX: CGFloat,
+    centerY: CGFloat,
+    radiusX: CGFloat,
+    radiusY: CGFloat,
+    color: NSColor,
+    peakAlpha: CGFloat
+) {
+    guard let cg = NSGraphicsContext.current?.cgContext else { return }
+    cg.saveGState()
+    cg.translateBy(x: centerX, y: centerY)
+    cg.scaleBy(x: radiusX / radiusY, y: 1.0)
+    let colors = [
+        color.withAlphaComponent(peakAlpha).cgColor,
+        color.withAlphaComponent(0).cgColor,
+    ] as CFArray
+    if let gradient = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colors: colors,
+        locations: [0.0, 1.0]
+    ) {
+        cg.drawRadialGradient(
+            gradient,
+            startCenter: .zero, startRadius: 0,
+            endCenter: .zero, endRadius: radiusY,
+            options: []
+        )
+    }
+    cg.restoreGState()
 }
 
-// 3. Clyde sprite — centred vertically in the left half.
-let spriteSize: CGFloat = 360
-let spriteOriginX: CGFloat = 130
-let spriteOriginY: CGFloat = (height - spriteSize) / 2
+// Cocoa origin is bottom-left, CSS origin is top-left. So CSS "y=0"
+// (top of canvas) maps to Cocoa y=height, and "y=80%" maps to y≈height*0.2.
+drawRadial(
+    centerX: width / 2,
+    centerY: height,
+    radiusX: 800,
+    radiusY: 600,
+    color: purpleGlow,
+    peakAlpha: 0.18
+)
+drawRadial(
+    centerX: width * 0.20,
+    centerY: height * 0.20,
+    radiusX: 600,
+    radiusY: 400,
+    color: blueGlow,
+    peakAlpha: 0.10
+)
+drawRadial(
+    centerX: width * 0.80,
+    centerY: height * 0.20,
+    radiusX: 600,
+    radiusY: 400,
+    color: greenGlow,
+    peakAlpha: 0.06
+)
+
+// Sprite layout: centred horizontally, upper portion of the canvas.
+let spriteSize: CGFloat = 220
+let spriteCenterX = width / 2
+let spriteCenterY = height * 0.70
+let spriteOriginX = spriteCenterX - spriteSize / 2
+let spriteOriginY = spriteCenterY - spriteSize / 2
 let pixelSize = spriteSize / 16
+
+// MARK: - Sprite
 
 for row in 0..<16 {
     for col in 0..<16 {
@@ -124,68 +187,126 @@ for row in 0..<16 {
     }
 }
 
-// MARK: - Right-side text block (centered horizontally + vertically)
+// MARK: - Wordmark + tagline (centred, stacked under the sprite)
 //
-// The right "column" starts where the sprite ends and runs to the
-// canvas edge. We draw each text element centred horizontally inside
-// that column, stacked vertically with a fixed gap, and then offset
-// the whole stack so its bounding box is centred on height/2.
+// We render BOTH "Meet" and "Clyde" via Core Text glyph paths so they
+// share identical baseline metrics — drawing one with NSString.draw(in:)
+// and the other via a CT clip path produced visibly different baselines.
+// "Meet " is filled flat white; "Clyde" is filled with the same 135°
+// purple→purple→blue gradient as the .gradient-text class on the site.
 
-let columnX: CGFloat = spriteOriginX + spriteSize  // start right after sprite
-let columnWidth: CGFloat = width - columnX
+let titleFont = NSFont.systemFont(ofSize: 130, weight: .heavy)
+let taglineFont = NSFont.systemFont(ofSize: 34, weight: .semibold)
+let subFont = NSFont.systemFont(ofSize: 22, weight: .medium)
 
+/// Build a CGPath of an entire string's glyphs, with origin at the
+/// text's baseline. Returns the path plus its advance width.
+func glyphPath(for string: String, font: NSFont, kern: CGFloat) -> (CGPath, CGFloat) {
+    let attr = NSAttributedString(string: string, attributes: [
+        .font: font,
+        .kern: kern,
+    ])
+    let line = CTLineCreateWithAttributedString(attr)
+    let path = CGMutablePath()
+    let runs = CTLineGetGlyphRuns(line) as! [CTRun]
+    for run in runs {
+        let runFont = unsafeBitCast(
+            CFDictionaryGetValue(
+                CTRunGetAttributes(run),
+                Unmanaged.passUnretained(kCTFontAttributeName).toOpaque()
+            ),
+            to: CTFont.self
+        )
+        let glyphCount = CTRunGetGlyphCount(run)
+        var glyphs = [CGGlyph](repeating: 0, count: glyphCount)
+        var positions = [CGPoint](repeating: .zero, count: glyphCount)
+        CTRunGetGlyphs(run, CFRangeMake(0, glyphCount), &glyphs)
+        CTRunGetPositions(run, CFRangeMake(0, glyphCount), &positions)
+        for i in 0..<glyphCount {
+            if let g = CTFontCreatePathForGlyph(runFont, glyphs[i], nil) {
+                let t = CGAffineTransform(translationX: positions[i].x, y: positions[i].y)
+                path.addPath(g, transform: t)
+            }
+        }
+    }
+    let advance = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+    return (path, advance)
+}
+
+let titleKern: CGFloat = -3
+
+let (meetPath, meetAdvance) = glyphPath(for: "Meet ", font: titleFont, kern: titleKern)
+let (clydePath, clydeAdvance) = glyphPath(for: "Clyde", font: titleFont, kern: titleKern)
+
+let titleTotalWidth = meetAdvance + clydeAdvance
+let titleStartX = (width - titleTotalWidth) / 2
+
+// Position the baseline so the wordmark sits a comfortable gap below
+// the sprite.
+let titleBaselineY = spriteOriginY - 110
+
+if let cg = NSGraphicsContext.current?.cgContext {
+    // --- "Meet " in flat white ---
+    cg.saveGState()
+    cg.translateBy(x: titleStartX, y: titleBaselineY)
+    cg.addPath(meetPath)
+    cg.setFillColor(textPrimary.cgColor)
+    cg.fillPath()
+    cg.restoreGState()
+
+    // --- "Clyde" with the 135° purple→purple→blue gradient ---
+    cg.saveGState()
+    cg.translateBy(x: titleStartX + meetAdvance, y: titleBaselineY)
+    cg.addPath(clydePath)
+    cg.clip()
+
+    let bbox = clydePath.boundingBoxOfPath
+    let colors = [
+        purpleStart.cgColor,
+        purpleMid.cgColor,
+        blueEnd.cgColor,
+    ] as CFArray
+    if let gradient = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colors: colors,
+        locations: [0.0, 0.5, 1.0]
+    ) {
+        // CSS linear-gradient(135deg, ...) goes from top-left to
+        // bottom-right of the box. In Cocoa's bottom-up coords that's
+        // (minX, maxY) → (maxX, minY).
+        cg.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: bbox.minX, y: bbox.maxY),
+            end: CGPoint(x: bbox.maxX, y: bbox.minY),
+            options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+        )
+    }
+    cg.restoreGState()
+}
+
+// Tagline + sub-tagline (centred, white & dim, mirroring the hero copy).
 let centeredParagraph = NSMutableParagraphStyle()
 centeredParagraph.alignment = .center
 
-let labelFont = NSFont.systemFont(ofSize: 22, weight: .heavy)
-let labelAttrs: [NSAttributedString.Key: Any] = [
-    .font: labelFont,
-    .foregroundColor: purpleBright,
-    .kern: 3,
-    .paragraphStyle: centeredParagraph,
-]
-
-let titleFont = NSFont.systemFont(ofSize: 130, weight: .heavy)
-let titleAttrs: [NSAttributedString.Key: Any] = [
-    .font: titleFont,
-    .foregroundColor: textPrimary,
-    .kern: -3,
-    .paragraphStyle: centeredParagraph,
-]
-
-let taglineFont = NSFont.systemFont(ofSize: 32, weight: .medium)
 let taglineAttrs: [NSAttributedString.Key: Any] = [
     .font: taglineFont,
+    .foregroundColor: textPrimary,
+    .paragraphStyle: centeredParagraph,
+]
+let taglineY = titleBaselineY - 90
+let taglineRect = NSRect(x: 0, y: taglineY, width: width, height: 60)
+("Know what Claude is doing — without alt-tabbing." as NSString)
+    .draw(in: taglineRect, withAttributes: taglineAttrs)
+
+let subAttrs: [NSAttributedString.Key: Any] = [
+    .font: subFont,
     .foregroundColor: textDim,
     .paragraphStyle: centeredParagraph,
 ]
-
-// Heights of each block (approximate — system font ascent + descent).
-let labelHeight: CGFloat = 28
-let labelGap: CGFloat = 22
-let titleHeight: CGFloat = 130
-let titleGap: CGFloat = 24
-let taglineLineHeight: CGFloat = 42
-let taglineHeight: CGFloat = taglineLineHeight * 2
-
-let totalBlockHeight = labelHeight + labelGap + titleHeight + titleGap + taglineHeight
-// Center the block vertically. Cocoa origin is bottom-left so
-// blockTop is the y of the top edge of the block.
-let blockTop = (height + totalBlockHeight) / 2
-
-// Layout (top → bottom): label, title, tagline.
-var cursorY = blockTop - labelHeight
-let labelRect = NSRect(x: columnX, y: cursorY, width: columnWidth, height: labelHeight)
-("CLAUDE CODE COMPANION" as NSString).draw(in: labelRect, withAttributes: labelAttrs)
-
-cursorY -= (labelGap + titleHeight)
-let titleRect = NSRect(x: columnX, y: cursorY, width: columnWidth, height: titleHeight + 20)
-("Clyde" as NSString).draw(in: titleRect, withAttributes: titleAttrs)
-
-cursorY -= (titleGap + taglineHeight)
-let taglineRect = NSRect(x: columnX, y: cursorY, width: columnWidth, height: taglineHeight + 8)
-("Know what Claude is doing —\nwithout alt-tabbing." as NSString)
-    .draw(in: taglineRect, withAttributes: taglineAttrs)
+let subY = taglineY - 44
+let subRect = NSRect(x: 0, y: subY, width: width, height: 36)
+("A friendly menu bar companion for Claude Code on macOS." as NSString)
+    .draw(in: subRect, withAttributes: subAttrs)
 
 NSGraphicsContext.restoreGraphicsState()
 
