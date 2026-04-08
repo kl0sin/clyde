@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import Darwin
+import Darwin.libproc
 
 protocol ShellExecutor {
     func run(_ command: String) async throws -> String
@@ -272,6 +273,18 @@ final class ProcessMonitor: ObservableObject {
     /// session arrivals/departures so we can kick the main poll immediately.
     private var lastInfoFilenames: Set<String> = []
 
+    /// True iff `pid` is alive AND its process short-name is "claude".
+    /// Used as the sole liveness signal for sticky -busy markers, so a
+    /// recycled PID (now belonging to some other binary) cannot keep a
+    /// stale marker alive. `proc_name` is a thin libproc syscall — no
+    /// shell, no allocation, ~µs.
+    private func isLiveClaudeProcess(pid: pid_t) -> Bool {
+        var nameBuf = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)
+        let n = proc_name(pid, &nameBuf, UInt32(nameBuf.count))
+        guard n > 0 else { return false }
+        return String(cString: nameBuf) == "claude"
+    }
+
     /// Reads -busy markers from disk into `hookBusyPIDs`. Pure side-effect on
     /// `hookBusyPIDs` — doesn't kick a poll. Safe to call from poll() itself.
     @discardableResult
@@ -296,7 +309,7 @@ final class ProcessMonitor: ObservableObject {
                 try? FileManager.default.removeItem(at: file)
                 continue
             }
-            if kill(pid, 0) != 0 && errno == ESRCH {
+            if !isLiveClaudeProcess(pid: pid) {
                 try? FileManager.default.removeItem(at: file)
                 continue
             }
