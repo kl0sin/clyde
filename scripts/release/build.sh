@@ -50,12 +50,27 @@ fi
 # Sparkle ships its XPC + Autoupdate helpers as a framework. They have to
 # live in Contents/Frameworks/Sparkle.framework with the right structure
 # or auto-update silently breaks.
-SPARKLE_FRAMEWORK="$(find "$PROJECT_ROOT/.build" -type d -name 'Sparkle.framework' -path '*/release/*' | head -n 1)"
-if [[ -n "$SPARKLE_FRAMEWORK" ]]; then
+#
+# SPM extracts Sparkle as an XCFramework under
+# .build/artifacts/sparkle/Sparkle/Sparkle.xcframework/. We pick the
+# universal macos-arm64_x86_64 slice which matches our universal binary.
+SPARKLE_FRAMEWORK="$PROJECT_ROOT/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
     mkdir -p "$APP_BUNDLE/Contents/Frameworks"
     cp -R "$SPARKLE_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
+    echo "==> Embedded Sparkle.framework from XCFramework"
+
+    # SPM links the binary with rpath @executable_path/../lib only.
+    # Apple's convention puts frameworks in Contents/Frameworks, so we
+    # add a second rpath pointing there. Without this dyld can't find
+    # Sparkle at launch.
+    install_name_tool -add_rpath "@executable_path/../Frameworks" \
+        "$APP_BUNDLE/Contents/MacOS/Clyde" 2>/dev/null || true
+    echo "==> Added @executable_path/../Frameworks to runtime search path"
 else
-    echo "WARNING: Sparkle.framework not found — auto-updates will not work"
+    echo "ERROR: Sparkle.framework not found at $SPARKLE_FRAMEWORK"
+    echo "       Run 'swift build' first so SPM extracts the XCFramework."
+    exit 1
 fi
 
 echo "==> Done: $APP_BUNDLE"
