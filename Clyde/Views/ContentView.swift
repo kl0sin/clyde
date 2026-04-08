@@ -9,17 +9,22 @@ struct ContentView: View {
             Group {
                 if appViewModel.isCollapsed {
                     WidgetView(viewModel: appViewModel)
+                        .transition(.opacity)
                 } else if appViewModel.showSettings {
                     SettingsView(appViewModel: appViewModel)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .transition(.opacity)
                 } else {
                     ExpandedView(
                         appViewModel: appViewModel,
                         sessionViewModel: sessionViewModel
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.40), value: appViewModel.isCollapsed)
+            .animation(.easeInOut(duration: 0.30), value: appViewModel.showSettings)
 
             // Error banner overlay
             if !appViewModel.isCollapsed, let error = appViewModel.lastError {

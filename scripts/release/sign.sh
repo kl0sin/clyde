@@ -19,8 +19,10 @@ if [[ ! -d "$APP_BUNDLE" ]]; then
 fi
 
 if [[ -z "${DEVELOPER_ID_APPLICATION:-}" ]]; then
-    echo "ERROR: DEVELOPER_ID_APPLICATION env var not set"
-    exit 1
+    echo "==> DEVELOPER_ID_APPLICATION not set — skipping codesign (unsigned build)"
+    echo "    Users will see a Gatekeeper warning on first launch and need"
+    echo "    to right-click → Open. Set up Apple Developer Program to fix."
+    exit 0
 fi
 
 echo "==> Signing nested frameworks (Sparkle + helpers)"

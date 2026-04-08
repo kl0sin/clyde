@@ -20,8 +20,8 @@ fi
 
 for var in APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD; do
     if [[ -z "${!var:-}" ]]; then
-        echo "ERROR: $var env var not set"
-        exit 1
+        echo "==> $var not set — skipping notarization (unsigned/preview build)"
+        exit 0
     fi
 done
 

@@ -51,9 +51,18 @@ enum AppConstants {
     /// How long a hook-signalled attention event remains valid
     static let attentionEventTimeout: TimeInterval = 60.0
 
-    /// How long a busy marker file remains valid before we fall back to pgrep detection.
-    /// Protects against orphan busy markers if Claude crashes without firing Stop.
-    static let busyMarkerTimeout: TimeInterval = 600.0
+    /// How long a busy marker file remains "fresh" before Clyde considers it
+    /// stale and stops counting the session as busy. The hook script touches
+    /// the marker on every PreToolUse event, so an actively-working session
+    /// keeps refreshing it. The timeout only kicks in when something abnormal
+    /// happens (Claude crashes, user Ctrl+C interrupt, network hang, etc.) —
+    /// without it those scenarios would leave a session stuck in "working"
+    /// forever because Claude Code doesn't fire `Stop` on interrupt.
+    ///
+    /// 120s gives ~2 minutes of grace for pure-text generation phases where
+    /// no tool hooks fire. Long tool-using turns refresh the marker more
+    /// frequently than that and stay correctly busy.
+    static let busyMarkerTimeout: TimeInterval = 120.0
 
     /// After a Claude session ends, keep the row visible as a ghost for this long.
     static let endedSessionLinger: TimeInterval = 300.0  // 5 minutes

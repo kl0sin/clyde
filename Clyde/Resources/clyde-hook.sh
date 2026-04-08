@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 9
+# clyde-hook-version: 11
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -10,12 +10,14 @@
 # Writes are atomic (mktemp + mv) so concurrent hooks can't corrupt files.
 #
 # Handled events:
-#   SessionStart      → state/<session_id>-info (alive marker)
-#   SessionEnd        → removes info + busy + event for that session
-#   UserPromptSubmit  → state/<session_id>-busy marker (+ backfill -info)
-#   Stop              → removes busy + event marker
-#   PermissionRequest → events/<session_id>.json (attention flag)
-#   PreToolUse        → clears event file (permission resolved)
+#   SessionStart        → state/<session_id>-info (alive marker)
+#   SessionEnd          → removes info + busy + event for that session
+#   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info)
+#   Stop                → removes busy + event marker
+#   StopFailure         → removes busy marker (abnormal turn termination)
+#   PermissionRequest   → events/<session_id>.json (attention flag)
+#   PreToolUse          → clears event file + refreshes busy marker mtime
+#   PostToolUseFailure  → removes busy marker IF is_interrupt=true (user Ctrl+C)
 
 set -e
 EVENTS_DIR="$HOME/.clyde/events"
@@ -126,10 +128,38 @@ case "$HOOK_EVENT" in
         # request inside that turn has been resolved by the user.
         rm -f "$STATE_DIR/$KEY-busy" "$EVENTS_DIR/$KEY.json"
         ;;
+    StopFailure)
+        # Turn ended abnormally (API error, internal failure, ...). The
+        # turn is over even though Stop didn't fire — drop the busy
+        # marker so Clyde doesn't show the session stuck in "working".
+        rm -f "$STATE_DIR/$KEY-busy"
+        ;;
+    PostToolUseFailure)
+        # A tool execution failed. The most important sub-case is the
+        # user pressing Ctrl+C to interrupt — Claude Code reports that
+        # via `is_interrupt: true` in the payload. When that flag is
+        # set, the turn is effectively done and we drop the busy marker
+        # immediately so Clyde reflects reality without waiting for the
+        # mtime-staleness fallback (~2 min).
+        #
+        # For non-interrupt failures (command exited non-zero, etc.)
+        # Claude usually keeps working and tries to recover, so we
+        # leave the busy marker alone in that case.
+        if printf '%s' "$INPUT" | grep -q '"is_interrupt"[[:space:]]*:[[:space:]]*true'; then
+            rm -f "$STATE_DIR/$KEY-busy"
+        fi
+        ;;
     PreToolUse)
         # Tools can only run after permission was granted, so clear any
         # pending attention flag. The session stays busy via its marker.
         rm -f "$EVENTS_DIR/$KEY.json"
+        # Refresh the busy marker's mtime so Clyde's staleness check
+        # doesn't expire it mid-turn. Without this, long tool-using runs
+        # would briefly drop to "ready" until the next user interaction.
+        # Combined with Clyde's reduced busyMarkerTimeout, this also
+        # ensures interrupted sessions (Ctrl+C) without a tool-failure
+        # event still clear within ~2 minutes.
+        [ -f "$STATE_DIR/$KEY-busy" ] && touch "$STATE_DIR/$KEY-busy"
         ;;
 esac
 

@@ -25,7 +25,7 @@ enum HookInstaller {
     ///
     /// MUST stay in sync with the `clyde-hook-version` line at the top of
     /// `Clyde/Resources/clyde-hook.sh`.
-    static let currentScriptVersion = 9
+    static let currentScriptVersion = 11
 
     /// Loads the hook script source from the bundled resource. The script
     /// itself lives in `Clyde/Resources/clyde-hook.sh` so it can be edited
@@ -48,16 +48,21 @@ enum HookInstaller {
     /// - `SessionEnd`:   a Claude session exits → drop info + busy markers
     /// - `UserPromptSubmit`: user sent a new prompt → busy start
     /// - `Stop`: Claude finished responding → busy end
+    /// - `StopFailure`: turn ended due to API error → busy end (abnormal)
     /// - `PermissionRequest`: Claude needs user approval → attention
     /// - `PreToolUse`: Claude is about to run a tool → permission was resolved,
-    ///                 so clear any pending attention flag
+    ///                 plus refresh busy marker mtime so it doesn't go stale
+    /// - `PostToolUseFailure`: tool failed; if `is_interrupt: true` (user
+    ///                 Ctrl+C), drop the busy marker immediately
     static let registeredHookEvents = [
         "SessionStart",
         "SessionEnd",
         "UserPromptSubmit",
         "Stop",
+        "StopFailure",
         "PermissionRequest",
         "PreToolUse",
+        "PostToolUseFailure",
     ]
 
     static var isInstalled: Bool {
