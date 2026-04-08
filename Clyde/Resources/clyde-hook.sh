@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 11
+# clyde-hook-version: 13
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -14,15 +14,31 @@
 #   SessionEnd          → removes info + busy + event for that session
 #   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info)
 #   Stop                → removes busy + event marker
-#   StopFailure         → removes busy marker (abnormal turn termination)
+#   StopFailure         → no-op (Claude Code retries internally; the
+#                         turn is NOT actually over, so removing the
+#                         busy marker here causes mid-turn flips to
+#                         "ready" while Claude is still working)
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PreToolUse          → clears event file + refreshes busy marker mtime
 #   PostToolUseFailure  → removes busy marker IF is_interrupt=true (user Ctrl+C)
+#
+# This script is purely advisory — Clyde uses it as a one-way signal
+# bus. It must NEVER block or fail noisily, otherwise Claude Code
+# raises "Stop hook error: Failed with non-blocking status code" in
+# the user's session every turn. We deliberately do NOT use `set -e`;
+# instead any unexpected failure is logged and the script always
+# exits 0.
 
-set -e
 EVENTS_DIR="$HOME/.clyde/events"
 STATE_DIR="$HOME/.clyde/state"
-mkdir -p "$EVENTS_DIR" "$STATE_DIR"
+LOG_DIR="$HOME/.clyde/logs"
+HOOK_LOG="$LOG_DIR/hook.log"
+mkdir -p "$EVENTS_DIR" "$STATE_DIR" "$LOG_DIR" 2>/dev/null || true
+
+# Catch any unexpected error so it lands in the log instead of
+# bubbling out as a non-zero exit. Claude treats non-zero exits as
+# hook errors and surfaces them to the user every turn.
+trap 'rc=$?; printf "[%s] clyde-hook line %s exited %s (event=%s)\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$LINENO" "$rc" "${HOOK_EVENT:-?}" >>"$HOOK_LOG" 2>/dev/null; exit 0' ERR
 
 INPUT=$(cat 2>/dev/null || echo "{}")
 
@@ -63,6 +79,28 @@ SESSION_ID=$(extract_field session_id)
 CWD=$(extract_field cwd)
 [ -z "$HOOK_EVENT" ] && HOOK_EVENT="unknown"
 
+# Always-on event log. One line per invocation. Used to confirm that
+# Claude is actually calling us for the events we care about — without
+# this, "no -busy markers" is indistinguishable from "hook never ran".
+# Cheap (single append, no fsync) and self-rotating below.
+log_event() {
+    printf "[%s] event=%-22s sid=%s ppid=%s pid=%s cwd=%s\n" \
+        "$(date "+%Y-%m-%d %H:%M:%S")" \
+        "$HOOK_EVENT" \
+        "${SESSION_ID:--}" \
+        "$PPID" \
+        "${CLAUDE_PID:--}" \
+        "${CWD:--}" >>"$HOOK_LOG" 2>/dev/null || true
+}
+# Rotate the log if it's grown beyond ~512 KiB. Keeps the file small
+# enough to tail comfortably while preserving recent history.
+if [ -f "$HOOK_LOG" ]; then
+    log_size=$(wc -c <"$HOOK_LOG" 2>/dev/null | tr -d ' ')
+    if [ -n "$log_size" ] && [ "$log_size" -gt 524288 ] 2>/dev/null; then
+        mv -f "$HOOK_LOG" "$HOOK_LOG.1" 2>/dev/null || true
+    fi
+fi
+
 find_claude_pid() {
     local pid=$PPID
     local depth=0
@@ -79,7 +117,13 @@ find_claude_pid() {
 }
 
 CLAUDE_PID=$(find_claude_pid || echo "")
-[ -z "$CLAUDE_PID" ] && exit 0
+log_event
+if [ -z "$CLAUDE_PID" ]; then
+    printf "[%s] WARN no claude ancestor for event=%s ppid=%s\n" \
+        "$(date "+%Y-%m-%d %H:%M:%S")" "$HOOK_EVENT" "$PPID" \
+        >>"$HOOK_LOG" 2>/dev/null || true
+    exit 0
+fi
 
 # Fall back to PID-based key if Claude didn't supply session_id.
 KEY="${SESSION_ID:-$CLAUDE_PID}"
@@ -129,10 +173,13 @@ case "$HOOK_EVENT" in
         rm -f "$STATE_DIR/$KEY-busy" "$EVENTS_DIR/$KEY.json"
         ;;
     StopFailure)
-        # Turn ended abnormally (API error, internal failure, ...). The
-        # turn is over even though Stop didn't fire — drop the busy
-        # marker so Clyde doesn't show the session stuck in "working".
-        rm -f "$STATE_DIR/$KEY-busy"
+        # No-op. StopFailure fires on transient Stop-hook failures and
+        # API hiccups; Claude Code retries internally and the turn is
+        # NOT actually over. Removing the busy marker here caused
+        # mid-turn flips to "ready" while Claude was still mid-tool —
+        # the very bug we got reports about. Trust Stop / SessionEnd /
+        # process death to clean up instead.
+        :
         ;;
     PostToolUseFailure)
         # A tool execution failed. The most important sub-case is the
