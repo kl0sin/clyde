@@ -273,16 +273,59 @@ final class ProcessMonitor: ObservableObject {
     /// session arrivals/departures so we can kick the main poll immediately.
     private var lastInfoFilenames: Set<String> = []
 
-    /// True iff `pid` is alive AND its process short-name is "claude".
-    /// Used as the sole liveness signal for sticky -busy markers, so a
-    /// recycled PID (now belonging to some other binary) cannot keep a
-    /// stale marker alive. `proc_name` is a thin libproc syscall — no
-    /// shell, no allocation, ~µs.
+    /// True iff `pid` is alive AND looks like a Claude Code process.
+    ///
+    /// History: this used to compare `proc_name(pid)` against the literal
+    /// "claude", on the assumption that the kernel's exec image short name
+    /// matches the binary name on disk. That broke for the real Claude Code
+    /// CLI because the binary lives at `.../claude/<version>/cli.js` (or
+    /// similar), so `proc_name` returns the *version directory* (e.g.
+    /// "2.1.96"), not "claude". Every live Claude session was therefore
+    /// classified as not-a-claude, every -busy marker was nuked from disk
+    /// the instant the hook wrote it, and the UI never saw "in progress".
+    ///
+    /// New rule: a marker is valid iff
+    ///   1. the PID is still alive (`kill(pid, 0) == 0`), AND
+    ///   2. its argv[0] basename matches "claude" (via `ps -o comm=`,
+    ///      which on macOS reports argv[0], not the exec image name).
+    ///
+    /// Falling back to `ps` is fine here — this only runs on hook events
+    /// or the 1 s state-watch tick, so it's a few invocations per session
+    /// per second worst case. We still need *some* identity check to
+    /// defend against the PID-recycling case (the recycled PID belonging
+    /// to a long-lived non-Claude binary that outlives the hook's Stop).
     private func isLiveClaudeProcess(pid: pid_t) -> Bool {
-        var nameBuf = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)
-        let n = proc_name(pid, &nameBuf, UInt32(nameBuf.count))
-        guard n > 0 else { return false }
-        return String(cString: nameBuf) == "claude"
+        // Cheap liveness gate first — `kill(pid, 0)` is a single syscall.
+        guard kill(pid, 0) == 0 else { return false }
+
+        // Identity check via argv[0]. We deliberately do NOT use
+        // `proc_name` here (see history above). `ps -o comm=` returns
+        // the argv[0] basename, which is "claude" for the real CLI
+        // regardless of where the binary lives on disk.
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/ps")
+        task.arguments = ["-p", "\(pid)", "-o", "comm="]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            // ps unavailable / blocked → trust the liveness check above
+            // rather than nuking the marker. False negatives here cause
+            // visible UI breakage; false positives are essentially
+            // harmless (the marker self-cleans on next Stop / death).
+            return true
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let raw = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // `ps -o comm=` on macOS prints the absolute path of argv[0]
+        // (or just the basename, depending on how the process was
+        // launched). Match on the trailing path component.
+        let basename = (raw as NSString).lastPathComponent
+        return basename == "claude"
     }
 
     /// Reads -busy markers from disk into `hookBusyPIDs`. Pure side-effect on
