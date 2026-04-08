@@ -3,9 +3,23 @@ import Foundation
 /// Central registry of filesystem paths used by Clyde.
 /// All paths are relative to the user's home directory.
 enum AppPaths {
+    /// Test override for the home directory root. When non-nil, all
+    /// `~/.claude` and `~/.clyde` paths derive from this URL instead of
+    /// `FileManager.homeDirectoryForCurrentUser`.
+    ///
+    /// This exists exclusively so the test suite can redirect every
+    /// hook / state / settings access to a throwaway tempdir, instead
+    /// of stomping all over the user's real `~/.claude/` install (the
+    /// previous behaviour, which routinely deleted production hook
+    /// scripts during `swift test`). Production code never sets this.
+    nonisolated(unsafe) static var homeOverride: URL?
+
+    private static var homeRoot: URL {
+        homeOverride ?? FileManager.default.homeDirectoryForCurrentUser
+    }
+
     static var clydeDir: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".clyde")
+        homeRoot.appendingPathComponent(".clyde")
     }
 
     static var eventsDir: URL {
@@ -27,8 +41,7 @@ enum AppPaths {
     }
 
     static var claudeDir: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude")
+        homeRoot.appendingPathComponent(".claude")
     }
 
     static var claudeHooksDir: URL {

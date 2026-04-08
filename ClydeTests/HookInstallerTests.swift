@@ -1,29 +1,30 @@
 import XCTest
 @testable import Clyde
 
-/// Tests for HookInstaller. Since HookInstaller uses hardcoded paths via AppPaths,
-/// these tests back up and restore the user's actual ~/.claude directory.
-/// They are skipped if ~/.claude already has significant content to avoid destruction.
+/// Tests for HookInstaller.
+///
+/// Each test runs against a throwaway temp home directory injected via
+/// `AppPaths.homeOverride`, so nothing under the developer's real
+/// `~/.claude/` is ever touched. The previous design backed up only
+/// `settings.json` and called `HookInstaller.uninstall()` on the user's
+/// actual install, which silently deleted the production hook script
+/// every time the suite ran.
 final class HookInstallerTests: XCTestCase {
-    private var backupURL: URL?
-    private var originalSettingsData: Data?
+    private var tempHome: URL!
 
     override func setUp() async throws {
-        // Backup existing settings.json if present
-        if FileManager.default.fileExists(atPath: AppPaths.claudeSettingsFile.path) {
-            originalSettingsData = try? Data(contentsOf: AppPaths.claudeSettingsFile)
-        }
+        tempHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-hookinstaller-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
+        AppPaths.homeOverride = tempHome
     }
 
     override func tearDown() async throws {
-        // Always uninstall after each test
-        try? HookInstaller.uninstall()
-
-        // Restore original settings.json
-        if let data = originalSettingsData {
-            try? data.write(to: AppPaths.claudeSettingsFile)
+        AppPaths.homeOverride = nil
+        if let tempHome {
+            try? FileManager.default.removeItem(at: tempHome)
         }
-        originalSettingsData = nil
+        tempHome = nil
     }
 
     func testInstallCreatesHookScript() throws {
