@@ -95,13 +95,19 @@ final class SessionListViewModel: ObservableObject {
         loadPersistedNames()
         loadPersistedOrder()
 
-        // Recompute the cached `sessions` array whenever underlying state
-        // changes. We sink on the typed publishers (not objectWillChange)
-        // so we get the *new* value and can diff it inside recomputeSessions().
+        // Recompute the cached `sessions` array whenever the underlying
+        // state changes. `@Published` fires its publisher in `willSet`,
+        // BEFORE the property has actually been updated, so a sink that
+        // re-reads `processMonitor.sessions` synchronously sees the
+        // STALE value. Hopping through the main runloop defers the
+        // recompute until after the property assignment commits, so
+        // recomputeSessions() reads the fresh data.
         processMonitor.$sessions
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.recomputeSessions() }
             .store(in: &cancellables)
         attentionMonitor?.$attentionPIDs
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.recomputeSessions() }
             .store(in: &cancellables)
 

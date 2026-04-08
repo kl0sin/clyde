@@ -29,20 +29,20 @@ let _d: NSColor? = NSColor(red: 0.353, green: 0.353, blue: 0.416, alpha: 1) // a
 let sprite: [[NSColor?]] = [
     //0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
     [_e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e], // 0
-    [_e, _e, _e, _e, _e, _e, _G, _g, _g, _G, _e, _e, _e, _e, _e, _e], // 1  antenna tip + halo
-    [_e, _e, _e, _e, _e, _e, _e, _d, _d, _e, _e, _e, _e, _e, _e, _e], // 2  stem
-    [_e, _e, _e, _e, _b, _b, _b, _b, _b, _b, _b, _b, _e, _e, _e, _e], // 3  top border
-    [_e, _e, _e, _b, _w, _h, _h, _h, _h, _h, _h, _w, _s, _b, _e, _e], // 4  forehead shine
-    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 5
-    [_e, _e, _b, _w, _w, _w, _b, _w, _w, _w, _b, _w, _w, _s, _b, _e], // 6  eye top + sparkle
-    [_e, _e, _b, _w, _w, _b, _b, _w, _w, _b, _b, _w, _w, _s, _b, _e], // 7  eye bottom
-    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 8
+    [_e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e], // 1
+    [_e, _e, _e, _e, _e, _e, _G, _g, _g, _G, _e, _e, _e, _e, _e, _e], // 2  antenna tip + halo
+    [_e, _e, _e, _e, _e, _e, _e, _d, _d, _e, _e, _e, _e, _e, _e, _e], // 3  stem
+    [_e, _e, _e, _e, _b, _b, _b, _b, _b, _b, _b, _b, _e, _e, _e, _e], // 4  top border
+    [_e, _e, _e, _b, _w, _h, _h, _h, _h, _h, _h, _w, _s, _b, _e, _e], // 5  forehead shine
+    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 6
+    [_e, _e, _b, _w, _w, _w, _b, _w, _w, _w, _b, _w, _w, _s, _b, _e], // 7  eye top + sparkle
+    [_e, _e, _b, _w, _w, _b, _b, _w, _w, _b, _b, _w, _w, _s, _b, _e], // 8  eye bottom
     [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 9
-    [_e, _e, _b, _w, _w, _w, _w, _b, _b, _w, _w, _w, _w, _s, _b, _e], // 10 closed grin
-    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 11
-    [_e, _e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e, _e], // 12
-    [_e, _e, _e, _e, _b, _b, _b, _b, _b, _b, _b, _b, _e, _e, _e, _e], // 13 bottom border
-    [_e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e], // 14
+    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 10
+    [_e, _e, _b, _w, _w, _w, _w, _b, _b, _w, _w, _w, _w, _s, _b, _e], // 11 closed grin
+    [_e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e], // 12
+    [_e, _e, _e, _b, _w, _w, _w, _w, _w, _w, _w, _w, _s, _b, _e, _e], // 13
+    [_e, _e, _e, _e, _b, _b, _b, _b, _b, _b, _b, _b, _e, _e, _e, _e], // 14 bottom border
     [_e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e, _e], // 15
 ]
 

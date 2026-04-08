@@ -31,20 +31,20 @@ struct ClydeSprite {
         return [
             //0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
             [e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e], // 0
-            [e, e, e, e, e, e, G, g, g, G, e, e, e, e, e, e], // 1  antenna tip + halo
-            [e, e, e, e, e, e, e, d, d, e, e, e, e, e, e, e], // 2  stem
-            [e, e, e, e, b, b, b, b, b, b, b, b, e, e, e, e], // 3  top border
-            [e, e, e, b, w, h, h, h, h, h, h, w, s, b, e, e], // 4  forehead shine
-            [e, e, b, w, w, w, w, w, w, w, w, w, w, s, b, e], // 5
-            [e, e, b, w, w, w, b, w, w, w, b, w, w, s, b, e], // 6  eye top + sparkle
-            [e, e, b, w, w, b, b, w, w, b, b, w, w, s, b, e], // 7  eye bottom
-            [e, e, b, w, w, w, w, w, w, w, w, w, w, s, b, e], // 8
+            [e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e], // 1
+            [e, e, e, e, e, e, G, g, g, G, e, e, e, e, e, e], // 2  antenna tip + halo
+            [e, e, e, e, e, e, e, d, d, e, e, e, e, e, e, e], // 3  stem
+            [e, e, e, e, b, b, b, b, b, b, b, b, e, e, e, e], // 4  top border
+            [e, e, e, b, w, h, h, h, h, h, h, w, s, b, e, e], // 5  forehead shine
+            [e, e, b, w, w, w, w, w, w, w, w, w, w, s, b, e], // 6
+            [e, e, b, w, w, w, b, w, w, w, b, w, w, s, b, e], // 7  eye top + sparkle
+            [e, e, b, w, w, b, b, w, w, b, b, w, w, s, b, e], // 8  eye bottom
             [e, e, b, w, w, w, w, w, w, w, w, w, w, s, b, e], // 9
-            [e, e, b, w, w, w, w, b, b, w, w, w, w, s, b, e], // 10 closed grin
-            [e, e, b, w, w, w, w, w, w, w, w, w, w, s, b, e], // 11
-            [e, e, e, b, w, w, w, w, w, w, w, w, s, b, e, e], // 12
-            [e, e, e, e, b, b, b, b, b, b, b, b, e, e, e, e], // 13 bottom border
-            [e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e], // 14
+            [e, e, b, w, w, w, w, w, w, w, w, w, w, s, b, e], // 10
+            [e, e, b, w, w, w, w, b, b, w, w, w, w, s, b, e], // 11 closed grin
+            [e, e, b, w, w, w, w, w, w, w, w, w, w, s, b, e], // 12
+            [e, e, e, b, w, w, w, w, w, w, w, w, s, b, e, e], // 13
+            [e, e, e, e, b, b, b, b, b, b, b, b, e, e, e, e], // 14 bottom border
             [e, e, e, e, e, e, e, e, e, e, e, e, e, e, e, e], // 15
         ]
     }()
