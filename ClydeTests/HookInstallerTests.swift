@@ -194,4 +194,164 @@ final class HookInstallerTests: XCTestCase {
             XCTFail("Expected .missingEvents health issue")
         }
     }
+
+    // MARK: - Regression tests for the matcher / rename / coexistence bugs
+    //
+    // Each of these covers a real-world failure mode we hit by hand and
+    // lost hours to. They exist so the same bugs cannot regress silently.
+
+    /// Regression: Claude Code requires a `matcher` field on
+    /// PreToolUse / PostToolUse* entries. Without it the entry is
+    /// malformed, every tool call emits "<event>:<tool> hook error",
+    /// and the script is never invoked. Other events MUST NOT have a
+    /// matcher (it's specific to tool events).
+    func testInstallEmitsMatcherForToolEvents() throws {
+        try HookInstaller.install()
+
+        let data = try Data(contentsOf: AppPaths.claudeSettingsFile)
+        let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let hooks = settings["hooks"] as! [String: Any]
+
+        let toolEvents = ["PreToolUse", "PostToolUseFailure"]
+        for event in toolEvents {
+            let entries = hooks[event] as? [[String: Any]] ?? []
+            XCTAssertFalse(entries.isEmpty, "\(event) must have at least one entry")
+            // Find the entry with our hook command.
+            let ours = entries.first { entry in
+                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
+                return inner.contains { ($0["command"] as? String) == AppPaths.clydeHookScript.path }
+            }
+            XCTAssertNotNil(ours, "\(event) must contain Clyde's hook entry")
+            XCTAssertNotNil(ours?["matcher"], "\(event) entry must have a `matcher` field — Claude treats it as malformed otherwise")
+        }
+
+        let nonToolEvents = ["UserPromptSubmit", "SessionStart", "Stop"]
+        for event in nonToolEvents {
+            let entries = hooks[event] as? [[String: Any]] ?? []
+            let ours = entries.first { entry in
+                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
+                return inner.contains { ($0["command"] as? String) == AppPaths.clydeHookScript.path }
+            }
+            XCTAssertNotNil(ours, "\(event) must contain Clyde's hook entry")
+            XCTAssertNil(ours?["matcher"], "\(event) entry MUST NOT have a `matcher` field")
+        }
+    }
+
+    /// Regression: an existing matcher-less PreToolUse entry should
+    /// be detected by `healthCheck` as missing, so auto-repair fires
+    /// even though the registration "exists".
+    func testHealthCheckDetectsMissingMatcher() throws {
+        try HookInstaller.install()
+
+        // Mutate settings.json: strip the matcher field from PreToolUse.
+        let data = try Data(contentsOf: AppPaths.claudeSettingsFile)
+        var settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        var hooks = settings["hooks"] as! [String: Any]
+        var preToolUse = hooks["PreToolUse"] as! [[String: Any]]
+        preToolUse = preToolUse.map { entry in
+            var copy = entry
+            copy.removeValue(forKey: "matcher")
+            return copy
+        }
+        hooks["PreToolUse"] = preToolUse
+        settings["hooks"] = hooks
+        let newData = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
+        try newData.write(to: AppPaths.claudeSettingsFile)
+
+        if case .missingEvents(let names) = HookInstaller.healthCheck() {
+            XCTAssertTrue(names.contains("PreToolUse"),
+                          "Health check must flag matcher-less PreToolUse as missing")
+        } else {
+            XCTFail("Expected .missingEvents for matcher-less PreToolUse, got \(String(describing: HookInstaller.healthCheck()))")
+        }
+    }
+
+    /// Regression: when a legacy `clyde-notify.sh` is on disk from an
+    /// older Clyde install, `migrateLegacyHookIfNeeded()` must rewrite
+    /// the canonical `clyde-hook.sh`, register it in settings.json, and
+    /// delete the legacy file. Skipping this leaves the user with a
+    /// half-broken install whose hook is named one thing on disk but
+    /// referenced under another in settings.
+    func testMigrateLegacyHookReinstallsCanonicalName() throws {
+        // Plant a legacy script the way an older Clyde would have.
+        try FileManager.default.createDirectory(at: AppPaths.claudeHooksDir, withIntermediateDirectories: true)
+        try "#!/bin/bash\n# clyde-hook-version: 1\nexit 0\n"
+            .write(to: AppPaths.legacyClydeHookScript, atomically: true, encoding: .utf8)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: AppPaths.legacyClydeHookScript.path))
+
+        HookInstaller.migrateLegacyHookIfNeeded()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: AppPaths.legacyClydeHookScript.path),
+                       "Legacy clyde-notify.sh must be deleted after migration")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: AppPaths.clydeHookScript.path),
+                      "Canonical clyde-hook.sh must be installed")
+        XCTAssertNil(HookInstaller.healthCheck(),
+                     "Post-migration install must be fully healthy")
+    }
+
+    /// Regression: claude-visual (and other tools) own their own hooks
+    /// in `settings.json`. Clyde's install MUST coexist with them — it
+    /// can append to the same event's array, but must not delete or
+    /// overwrite their entries. Earlier installer logic detected our
+    /// hook by literal-string match, which would have started false-
+    /// positively merging on any rename and could clobber other tools.
+    func testInstallCoexistsWithThirdPartyHooks() throws {
+        // Seed settings.json with hooks owned by another tool, on every
+        // event we register for plus a couple we don't.
+        let foreignCommand = "curl -s http://localhost:9999/event"
+        let foreignBlock: [String: Any] = ["hooks": [["type": "command", "command": foreignCommand]]]
+        let foreignBlockWithMatcher: [String: Any] = [
+            "matcher": "Bash",
+            "hooks": [["type": "command", "command": foreignCommand]],
+        ]
+        let preExistingHooks: [String: Any] = [
+            "PreToolUse": [foreignBlockWithMatcher],
+            "Stop": [foreignBlock],
+            "UserPromptSubmit": [foreignBlock],
+            "Notification": [foreignBlock], // event we don't register for
+        ]
+        try FileManager.default.createDirectory(at: AppPaths.claudeDir, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: ["hooks": preExistingHooks])
+            .write(to: AppPaths.claudeSettingsFile)
+
+        try HookInstaller.install()
+
+        // After install, every foreign entry must still be there.
+        let data = try Data(contentsOf: AppPaths.claudeSettingsFile)
+        let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let hooks = settings["hooks"] as! [String: Any]
+
+        for event in ["PreToolUse", "Stop", "UserPromptSubmit", "Notification"] {
+            let entries = hooks[event] as? [[String: Any]] ?? []
+            let foreignSurvived = entries.contains { entry in
+                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
+                return inner.contains { ($0["command"] as? String) == foreignCommand }
+            }
+            XCTAssertTrue(foreignSurvived, "Foreign hook on \(event) was clobbered by Clyde install")
+        }
+
+        // And our entries must be present where expected.
+        for event in ["PreToolUse", "Stop", "UserPromptSubmit", "SessionStart"] {
+            let entries = hooks[event] as? [[String: Any]] ?? []
+            let weAreThere = entries.contains { entry in
+                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
+                return inner.contains { ($0["command"] as? String) == AppPaths.clydeHookScript.path }
+            }
+            XCTAssertTrue(weAreThere, "Clyde's hook missing from \(event) after coexistence install")
+        }
+
+        // Subsequent install() calls must remain idempotent — no dupes.
+        try HookInstaller.install()
+        let data2 = try Data(contentsOf: AppPaths.claudeSettingsFile)
+        let settings2 = try JSONSerialization.jsonObject(with: data2) as! [String: Any]
+        let hooks2 = settings2["hooks"] as! [String: Any]
+        for event in HookInstaller.registeredHookEvents {
+            let entries = (hooks2[event] as? [[String: Any]]) ?? []
+            let ourCount = entries.filter { entry in
+                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
+                return inner.contains { ($0["command"] as? String) == AppPaths.clydeHookScript.path }
+            }.count
+            XCTAssertEqual(ourCount, 1, "Duplicate Clyde entry for \(event) after second install()")
+        }
+    }
 }

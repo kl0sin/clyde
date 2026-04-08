@@ -155,4 +155,54 @@ final class ProcessMonitorTests: XCTestCase {
         await monitor.poll()
         XCTAssertEqual(monitor.clydeState, .sleeping)
     }
+
+    /// Regression: when `isLiveClaudeProcess` falsely reports a live
+    /// Claude PID as not-claude (the original `proc_name` bug — kernel
+    /// returned the version directory name instead of "claude"),
+    /// `refreshHookBusyPIDs` deleted every busy marker from disk and
+    /// the UI never saw a session as busy. This test pins the contract:
+    /// as long as the identity check returns true and a busy marker
+    /// exists, the marker file must survive `poll()` and the session
+    /// must classify as busy.
+    func testBusyMarkerSurvivesPollWhenIdentityCheckPasses() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        writeBusyFile(in: dir, sessionId: sid, pid: pid)
+        let busyURL = dir.appendingPathComponent("\(sid)-busy")
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: busyURL.path),
+                      "Busy marker must NOT be deleted when identity check passes (proc_name regression)")
+        XCTAssertEqual(monitor.sessions.first?.status, .busy)
+    }
+
+    /// Regression for the inverse: when the identity check rejects a
+    /// PID (e.g. PID got recycled to a non-claude binary), the marker
+    /// MUST be cleaned up so we don't keep a stale "busy" forever.
+    func testBusyMarkerRemovedWhenIdentityCheckFails() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        writeBusyFile(in: dir, sessionId: sid, pid: pid)
+        let busyURL = dir.appendingPathComponent("\(sid)-busy")
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in false }
+        )
+        await monitor.poll()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: busyURL.path),
+                       "Busy marker must be cleaned up when identity check fails")
+    }
 }
