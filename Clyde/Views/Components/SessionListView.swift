@@ -96,6 +96,14 @@ struct SessionListView: View {
 
     /// Per-row metadata: disambiguation suffix when names collide, plus the
     /// 1-based slot index for idle (non-active, non-ghost) sessions.
+    ///
+    /// The slot index is the session's stable position in the full list,
+    /// NOT a separate idle-only counter. Numbering by an idle counter
+    /// looked correct on a fully-idle list but caused visible
+    /// renumbering as soon as one row flipped to busy (the busy row
+    /// loses its number, and every idle row below shifts up by one).
+    /// Using the absolute position keeps row 02 always row 02 regardless
+    /// of which rows are currently active.
     private var disambiguated: [(session: Session, suffix: String?, idleIndex: Int?)] {
         var counts: [String: Int] = [:]
         var indices: [String: Int] = [:]
@@ -104,8 +112,7 @@ struct SessionListView: View {
             counts[s.displayName, default: 0] += 1
         }
 
-        var nextIdleSlot = 1
-        return sessions.map { session in
+        return sessions.enumerated().map { offset, session in
             let name = session.displayName
             var suffix: String? = nil
             if (counts[name] ?? 0) > 1 {
@@ -115,11 +122,9 @@ struct SessionListView: View {
             }
 
             let isActive = !session.isGhost && (session.needsAttention || session.status == .busy)
-            var idleIndex: Int? = nil
-            if !isActive && !session.isGhost {
-                idleIndex = nextIdleSlot
-                nextIdleSlot += 1
-            }
+            // Active rows render a status badge instead of a number, so
+            // pass nil for them. Ghosts also have no number.
+            let idleIndex: Int? = (isActive || session.isGhost) ? nil : offset + 1
             return (session, suffix, idleIndex)
         }
     }
