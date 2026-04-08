@@ -33,6 +33,13 @@ final class ProcessMonitor: ObservableObject {
     private let stateDir: URL
     private(set) var pollingInterval: TimeInterval
 
+    /// Identity check used by `isLiveClaudeProcess` to confirm that a
+    /// PID belongs to the Claude Code CLI. Injectable so tests can
+    /// substitute a stub instead of having `ps` actually run against
+    /// the test process. Default implementation lives in
+    /// `defaultIsLiveClaudeProcess`.
+    private let isLiveClaudeProcessCheck: @Sendable (pid_t) -> Bool
+
     /// Fired once per session when it transitions from busy to idle.
     var onSessionBecameIdle: ((Session) -> Void)?
 
@@ -49,11 +56,13 @@ final class ProcessMonitor: ObservableObject {
     init(
         shell: ShellExecutor = RealShellExecutor(),
         pollingInterval: TimeInterval = AppConstants.defaultPollingInterval,
-        stateDir: URL = AppPaths.stateDir
+        stateDir: URL = AppPaths.stateDir,
+        isLiveClaudeProcessCheck: @escaping @Sendable (pid_t) -> Bool = ProcessMonitor.defaultIsLiveClaudeProcess
     ) {
         self.shell = shell
         self.pollingInterval = pollingInterval
         self.stateDir = stateDir
+        self.isLiveClaudeProcessCheck = isLiveClaudeProcessCheck
     }
 
     deinit {
@@ -274,6 +283,13 @@ final class ProcessMonitor: ObservableObject {
     private var lastInfoFilenames: Set<String> = []
 
     /// True iff `pid` is alive AND looks like a Claude Code process.
+    /// Delegates to the injected `isLiveClaudeProcessCheck` so tests
+    /// can stub it out without `ps` actually running.
+    private func isLiveClaudeProcess(pid: pid_t) -> Bool {
+        isLiveClaudeProcessCheck(pid)
+    }
+
+    /// Default identity check, used outside tests.
     ///
     /// History: this used to compare `proc_name(pid)` against the literal
     /// "claude", on the assumption that the kernel's exec image short name
@@ -294,7 +310,8 @@ final class ProcessMonitor: ObservableObject {
     /// per second worst case. We still need *some* identity check to
     /// defend against the PID-recycling case (the recycled PID belonging
     /// to a long-lived non-Claude binary that outlives the hook's Stop).
-    private func isLiveClaudeProcess(pid: pid_t) -> Bool {
+    @Sendable
+    nonisolated static func defaultIsLiveClaudeProcess(pid: pid_t) -> Bool {
         // Cheap liveness gate first — `kill(pid, 0)` is a single syscall.
         guard kill(pid, 0) == 0 else { return false }
 

@@ -19,7 +19,7 @@ final class SessionListViewModelTests: XCTestCase {
 
         let shell = MockShellExecutor()
         shell.responses["pgrep"] = ""
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: tempDir)
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: tempDir, isLiveClaudeProcessCheck: { _ in true })
         let vm = SessionListViewModel(processMonitor: monitor)
         await monitor.poll()
 

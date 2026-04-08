@@ -36,7 +36,7 @@ final class IntegrationTests: XCTestCase {
         // claude processes running on the host.
         let shell = MockShellExecutor()
         shell.responses["pgrep"] = ""
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir)
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
         let appVM = AppViewModel(processMonitor: monitor)
         let sessionVM = SessionListViewModel(processMonitor: monitor)
 
@@ -69,7 +69,7 @@ final class IntegrationTests: XCTestCase {
 
         let shell = MockShellExecutor()
         shell.responses["pgrep"] = ""
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir)
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
 
         var notifiedSession: Session?
         monitor.onSessionBecameIdle = { session in

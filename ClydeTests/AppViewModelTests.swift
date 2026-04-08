@@ -29,7 +29,17 @@ final class AppViewModelTests: XCTestCase {
 
         let shell = MockShellExecutor()
         shell.responses["pgrep"] = ""
-        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: tempDir)
+        // Stub the claude-identity check: in a unit test the PID we
+        // wrote into the busy marker is the test process itself, which
+        // is obviously not "claude". The real check would (correctly)
+        // reject it and ProcessMonitor would delete the marker before
+        // we got to assert anything.
+        let monitor = ProcessMonitor(
+            shell: shell,
+            pollingInterval: 1,
+            stateDir: tempDir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
         let vm = AppViewModel(processMonitor: monitor)
         await monitor.poll()
 

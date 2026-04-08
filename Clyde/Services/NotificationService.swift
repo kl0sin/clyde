@@ -79,6 +79,15 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         // hot-reload, etc.), failing to clear the delegate would leak
         // this instance and its Combine subscribers. Cheap to do, so
         // we do it.
+        //
+        // Skip in non-app contexts (xctest, `swift run`, command-line):
+        // UNUserNotificationCenter.current() raises
+        // NSInternalInconsistencyException ("bundleProxyForCurrentProcess
+        // is nil") when the running process is not packaged as a .app
+        // bundle. Bundle.main.bundleIdentifier is unfortunately NOT
+        // sufficient to detect this — SwiftPM's xctest harness sets
+        // it to something non-nil — so check the bundle path suffix.
+        guard Bundle.main.bundlePath.hasSuffix(".app") else { return }
         if UNUserNotificationCenter.current().delegate === self {
             UNUserNotificationCenter.current().delegate = nil
         }

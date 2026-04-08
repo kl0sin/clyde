@@ -57,13 +57,13 @@ final class ProcessMonitorTests: XCTestCase {
         let sid = UUID().uuidString
         let pid = writeInfoFile(in: dir, sessionId: sid)
 
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
         let pids = await monitor.discoverPIDs()
         XCTAssertEqual(pids, [pid])
     }
 
     func testDiscoverPIDsReturnsEmptyWhenNoInfoFiles() async {
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: tempStateDir())
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: tempStateDir(), isLiveClaudeProcessCheck: { _ in true })
         let pids = await monitor.discoverPIDs()
         XCTAssertEqual(pids, [])
     }
@@ -75,7 +75,7 @@ final class ProcessMonitorTests: XCTestCase {
         let body = #"{"session_id":"dead","pid":\#(deadPID),"cwd":"/tmp","started_at":0}"#
         try? body.write(to: dir.appendingPathComponent("dead-info"), atomically: true, encoding: .utf8)
 
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
         _ = await monitor.discoverPIDs()
         // Dead -info file should have been removed.
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("dead-info").path))
@@ -87,7 +87,7 @@ final class ProcessMonitorTests: XCTestCase {
         let pid = writeInfoFile(in: dir, sessionId: sid)
         writeBusyFile(in: dir, sessionId: sid, pid: pid)
 
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
         await monitor.poll()
         XCTAssertEqual(monitor.sessions.first?.status, .busy)
     }
@@ -97,7 +97,7 @@ final class ProcessMonitorTests: XCTestCase {
         let sid = UUID().uuidString
         _ = writeInfoFile(in: dir, sessionId: sid)
 
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
         await monitor.poll()
         XCTAssertEqual(monitor.sessions.first?.status, .idle)
     }
@@ -108,7 +108,7 @@ final class ProcessMonitorTests: XCTestCase {
         let pid = writeInfoFile(in: dir, sessionId: sid, cwd: "/Users/me/Projects/shipyard")
         writeBusyFile(in: dir, sessionId: sid, pid: pid, cwd: "/Users/me/Projects/shipyard")
 
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
         await monitor.poll()
 
         XCTAssertEqual(monitor.sessions.count, 1)
@@ -122,7 +122,7 @@ final class ProcessMonitorTests: XCTestCase {
         let sid = UUID().uuidString
         _ = writeInfoFile(in: dir, sessionId: sid)
 
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
         await monitor.poll()
         XCTAssertEqual(monitor.sessions.count, 1)
         XCTAssertFalse(monitor.sessions.first?.isGhost ?? true)
@@ -145,13 +145,13 @@ final class ProcessMonitorTests: XCTestCase {
         let pid = writeInfoFile(in: dir, sessionId: sid)
         writeBusyFile(in: dir, sessionId: sid, pid: pid)
 
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
         await monitor.poll()
         XCTAssertEqual(monitor.clydeState, .busy)
     }
 
     func testClydeStateIsSleepingWhenNoSessions() async {
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: tempStateDir())
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: tempStateDir(), isLiveClaudeProcessCheck: { _ in true })
         await monitor.poll()
         XCTAssertEqual(monitor.clydeState, .sleeping)
     }
