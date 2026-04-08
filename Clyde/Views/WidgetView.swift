@@ -13,15 +13,6 @@ struct WidgetView: View {
                 )
                 .frame(width: 28, height: 28)
 
-                Text("Clyde")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(white: 0.55))
-                    .fixedSize()
-
-                RoundedRectangle(cornerRadius: 0.5)
-                    .fill(Color.white.opacity(0.12))
-                    .frame(width: 1, height: 14)
-
                 CompactStatusView(viewModel: viewModel)
             }
             Spacer(minLength: 0)

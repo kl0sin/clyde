@@ -25,22 +25,35 @@ struct WidgetAnchor: Equatable {
         self.origin = origin
     }
 
+    /// Small visual gap between the widget edge and the expanded panel
+    /// edge so the two windows don't kiss each other.
+    static let panelGap: CGFloat = 6
+
     /// Compute where the expanded view should appear, given its target
     /// size, the visible screen rect and the collapsed widget size.
     ///
+    /// In the dual-panel architecture the expanded view is a sibling
+    /// window, never the same window as the widget. So unlike the old
+    /// single-panel design, the two must NOT overlap.
+    ///
     /// Strategy:
-    ///   1. Pick horizontal anchor (left vs right edge of widget) based
-    ///      on which screen half the widget centre is in.
-    ///   2. Try to expand UP from the widget (default macOS pattern).
-    ///   3. If the upward expansion would go above the screen, expand
-    ///      DOWN from the widget bottom instead.
-    ///   4. Clamp to visible bounds in case neither direction fits.
+    ///   1. Pick a horizontal alignment: align the expanded panel's
+    ///      LEFT edge with the widget's LEFT edge when the widget is on
+    ///      the left half of the screen, otherwise align RIGHT edges.
+    ///      If the chosen side would push the expanded panel off the
+    ///      opposite screen edge, swap to the other alignment.
+    ///   2. Try to drop the expanded view DOWN from the widget bottom
+    ///      (the natural macOS dropdown pattern). If the panel wouldn't
+    ///      fit between the widget bottom and the screen bottom, pop
+    ///      it UP above the widget instead.
+    ///   3. Clamp to visible bounds in case neither direction fits.
     func expandedOrigin(
         for size: NSSize,
         in screen: NSRect,
         collapsedSize: NSSize
     ) -> NSPoint {
-        // --- Horizontal: pick anchor side ---
+        // --- Horizontal: pick the alignment that touches the screen
+        //     edge nearest the widget, so the panel grows inward. ---
         let widgetCenterX = origin.x + collapsedSize.width / 2
         let preferRight = widgetCenterX > screen.midX
 
@@ -54,24 +67,24 @@ struct WidgetAnchor: Equatable {
         if x < screen.minX { x = leftAlignedX }
         if x + size.width > screen.maxX { x = rightAlignedX }
 
-        // --- Vertical: pick direction ---
+        // --- Vertical: prefer dropping DOWN from the widget bottom,
+        //     fall back to popping UP above the widget top. ---
         let widgetTopY = origin.y + collapsedSize.height
         let widgetBottomY = origin.y
 
-        // Default: expand upward from the widget's top edge.
-        // The expanded view's TOP edge sits at widgetTopY, so its origin
-        // (bottom-left in AppKit coords) is widgetTopY - size.height.
-        let upY = widgetTopY - size.height
-        // Alternative: expand downward from the widget's bottom edge.
-        // The expanded view's TOP edge sits at widgetBottomY, so its
-        // origin is widgetBottomY - size.height.
-        let downwardOriginY = widgetBottomY - size.height
+        // Drop down: expanded TOP edge sits at widgetBottomY - panelGap
+        // → expanded origin = widgetBottomY - panelGap - size.height.
+        let downY = widgetBottomY - Self.panelGap - size.height
+
+        // Pop up: expanded BOTTOM edge sits at widgetTopY + panelGap
+        // → expanded origin = widgetTopY + panelGap.
+        let upY = widgetTopY + Self.panelGap
 
         var y: CGFloat
-        if upY >= screen.minY {
-            y = upY                  // upward fits, prefer it
-        } else if downwardOriginY + size.height <= screen.maxY {
-            y = downwardOriginY      // upward doesn't fit, downward does
+        if downY >= screen.minY {
+            y = downY                       // drops down within screen
+        } else if upY + size.height <= screen.maxY {
+            y = upY                         // pops up within screen
         } else {
             // Neither direction fits cleanly — clamp to visible bounds.
             y = max(screen.minY, screen.maxY - size.height)

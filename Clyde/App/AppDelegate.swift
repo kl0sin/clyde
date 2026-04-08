@@ -50,35 +50,37 @@ enum ScreenEdge {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// The widget panel — small, fixed size, always at its anchor.
+    /// Hosts only `WidgetView`. Never resizes.
     var panel: FloatingPanel!
+    /// The expanded panel — larger, hosts the session list / settings.
+    /// Sibling of `panel`. Shown / hidden via fade + small slide on
+    /// `appViewModel.isCollapsed` toggling. Positioned next to the
+    /// widget anchor through `WidgetAnchor.expandedOrigin`.
+    var expandedPanel: ExpandedPanel!
     var appViewModel: AppViewModel!
     var sessionViewModel: SessionListViewModel!
     var statusItem: NSStatusItem?
 
-    private let collapsedSize = NSSize(width: 186, height: 40)
-    private let defaultExpandedSize = NSSize(width: 400, height: 420)
-    private var lastExpandedSize: NSSize?
+    private let widgetSize = NSSize(width: 130, height: 40)
+    private let expandedSize = NSSize(width: 400, height: 420)
     /// Single source of truth for the widget's preferred position. See
-    /// `WidgetAnchor.swift` for the rationale — this replaces the older
-    /// `savedWidgetOrigin: NSPoint?` which was updated from too many
-    /// async paths and could race with the open/close transition.
+    /// `WidgetAnchor.swift` for the rationale.
     private var widgetAnchor: WidgetAnchor!
-    private var isAnimating = false
     private var isProgrammaticMove = false
     private var cancellables = Set<AnyCancellable>()
     private let snapMargin = AppConstants.edgeSnapMargin
     private let snapThreshold = AppConstants.edgeSnapThreshold
 
-    /// Monitor for left-mouse-dragged events used to make the expanded
-    /// view draggable from its title bar area. Set up in
+    /// Monitor for left-mouse events used to make the expanded panel
+    /// draggable from its header strip. Set up in
     /// `installExpandedDragMonitor`, removed at deinit.
     private var expandedDragMonitor: Any?
-    /// State for an in-progress expanded-view drag. `nil` when the user
-    /// isn't currently dragging the expanded panel by its title bar.
+    /// State for an in-progress expanded-panel drag. `nil` when the user
+    /// isn't currently dragging the expanded panel by its header.
     /// `hasMoved` distinguishes a real drag from a plain click (e.g. on
-    /// the collapse button). Without that distinction, mouseUp would
-    /// interpret a button click as the end of a zero-distance drag and
-    /// overwrite `widgetAnchor` mid-collapse animation.
+    /// the collapse button) — without that distinction, mouseUp would
+    /// interpret a button click as the end of a zero-distance drag.
     private struct ExpandedDragState {
         let initialFrameOrigin: NSPoint
         let initialMouseLocation: NSPoint
@@ -94,27 +96,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             attentionMonitor: appViewModel.attentionMonitor
         )
 
-        let contentView = ContentView(
+        let screenFrame = NSScreen.main?.visibleFrame ?? .zero
+        let initialOrigin = NSPoint(
+            x: screenFrame.maxX - widgetSize.width - snapMargin,
+            y: screenFrame.maxY - widgetSize.height - snapMargin
+        )
+        widgetAnchor = WidgetAnchor(origin: initialOrigin)
+
+        // --- Widget panel ---
+        // Always at fixed widget size. Hosts WidgetView only. Never
+        // resizes — that was the source of half our previous bugs.
+        panel = FloatingPanel(contentRect: NSRect(origin: initialOrigin, size: widgetSize))
+        panel.minSize = widgetSize
+        panel.maxSize = widgetSize
+
+        let widgetRoot = WidgetView(viewModel: appViewModel)
+        let widgetHostingView = NSHostingView(rootView: widgetRoot)
+        widgetHostingView.frame = NSRect(origin: .zero, size: widgetSize)
+        panel.contentView = widgetHostingView
+        panel.orderFront(nil)
+
+        // --- Expanded panel ---
+        // Created up-front but kept hidden (orderOut + alpha 0) until
+        // the user expands. Position is recomputed every show.
+        let expandedOrigin = widgetAnchor.expandedOrigin(
+            for: expandedSize,
+            in: screenFrame,
+            collapsedSize: widgetSize
+        )
+        expandedPanel = ExpandedPanel(
+            contentRect: NSRect(origin: expandedOrigin, size: expandedSize)
+        )
+        expandedPanel.minSize = expandedSize
+        expandedPanel.maxSize = expandedSize
+
+        let expandedRoot = ExpandedRootView(
             appViewModel: appViewModel,
             sessionViewModel: sessionViewModel
         )
+        let expandedHostingView = NSHostingView(rootView: expandedRoot)
+        expandedHostingView.frame = NSRect(origin: .zero, size: expandedSize)
+        expandedPanel.contentView = expandedHostingView
+        expandedPanel.alphaValue = 0
+        // Don't orderFront yet — it stays hidden until the user opens it.
 
-        let screenFrame = NSScreen.main?.visibleFrame ?? .zero
-        let initialOrigin = NSPoint(
-            x: screenFrame.maxX - collapsedSize.width - snapMargin,
-            y: screenFrame.maxY - collapsedSize.height - snapMargin
-        )
-
-        panel = FloatingPanel(contentRect: NSRect(origin: initialOrigin, size: collapsedSize))
-        panel.minSize = collapsedSize
-        panel.maxSize = collapsedSize
-        widgetAnchor = WidgetAnchor(origin: initialOrigin)
-
-        let hostingView = NSHostingView(rootView: contentView)
-        hostingView.frame = NSRect(origin: .zero, size: collapsedSize)
-        panel.contentView = hostingView
-
-        panel.orderFront(nil)
         setupMenuBarIcon()
         appViewModel.start()
         registerGlobalHotKey()
@@ -125,7 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.showOnboardingIfNeeded()
         }
 
-        // Window move → snap to edges
+        // Window move on the WIDGET → snap to edges and update anchor.
         NotificationCenter.default.addObserver(
             self, selector: #selector(windowDidMove),
             name: NSWindow.didMoveNotification, object: panel
@@ -135,13 +160,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] isCollapsed in
-                self?.performTransition(collapsed: isCollapsed)
+                if isCollapsed {
+                    self?.hideExpandedPanel()
+                } else {
+                    self?.showExpandedPanel()
+                }
             }
             .store(in: &cancellables)
 
         // React to "show floating widget" toggle: when the user turns the
-        // widget off we hide the panel whenever it's in collapsed mode and
-        // rely on the menu bar item as the only entry point.
+        // widget off, hide the widget panel. The expanded panel remains
+        // available via the menu bar entry point.
         appViewModel.$widgetVisible
             .receive(on: RunLoop.main)
             .sink { [weak self] visible in
@@ -149,27 +178,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        // Honour the saved preference at launch.
         applyWidgetVisibility(appViewModel.widgetVisible)
     }
 
-    /// Show or hide the panel based on `widgetVisible` and the current
-    /// expanded/collapsed mode. The panel is always shown when expanded
-    /// (so the user can interact with the session list); it's hidden in
-    /// collapsed mode only when the user opted out of the floating widget.
+    /// Show or hide the WIDGET panel based on the user preference.
+    /// The expanded panel is unaffected — even when the widget is
+    /// hidden, the user can still open the expanded view from the menu
+    /// bar item.
     @MainActor private func applyWidgetVisibility(_ visible: Bool) {
         if visible {
-            // Always present in either mode.
             panel.orderFront(nil)
-            return
-        }
-        // Hidden floating widget — only show the panel while the
-        // expanded view is up.
-        if appViewModel.isCollapsed {
-            panel.orderOut(nil)
         } else {
-            panel.orderFront(nil)
+            panel.orderOut(nil)
         }
+    }
+
+    // MARK: - Expanded panel show / hide
+
+    /// Position + animate-in the expanded panel next to the widget.
+    @MainActor private func showExpandedPanel() {
+        let screen = NSScreen.main?.visibleFrame ?? .zero
+        let targetOrigin = widgetAnchor.expandedOrigin(
+            for: expandedSize,
+            in: screen,
+            collapsedSize: widgetSize
+        )
+
+        // Pre-position 8pt below the final spot so the appearance
+        // looks like a small slide + fade-in instead of a hard pop.
+        let startOrigin = NSPoint(x: targetOrigin.x, y: targetOrigin.y - 8)
+        expandedPanel.setFrameOrigin(startOrigin)
+        expandedPanel.alphaValue = 0
+        expandedPanel.orderFront(nil)
+        expandedPanel.makeKeyAndOrderFront(nil)
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.28
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            expandedPanel.animator().setFrameOrigin(targetOrigin)
+            expandedPanel.animator().alphaValue = 1
+        })
+    }
+
+    /// Animate the expanded panel out and order it offscreen.
+    @MainActor private func hideExpandedPanel() {
+        let currentOrigin = expandedPanel.frame.origin
+        let endOrigin = NSPoint(x: currentOrigin.x, y: currentOrigin.y - 8)
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.22
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            expandedPanel.animator().alphaValue = 0
+            expandedPanel.animator().setFrameOrigin(endOrigin)
+        }, completionHandler: { [weak self] in
+            self?.expandedPanel.orderOut(nil)
+        })
     }
 
     // MARK: - Menu Bar Icon
@@ -449,116 +512,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
     }
 
-    // MARK: - Expand/Collapse Animation
-
-    @MainActor private func performTransition(collapsed: Bool) {
-        // Don't early-return when an animation is already in flight.
-        // Doing so would leave SwiftUI's content state out of sync with
-        // the panel frame (the user already toggled `isCollapsed` and
-        // SwiftUI updated; bailing here means the panel never resizes
-        // to match). Instead we just kick off a new animation that
-        // overrides the in-flight one — NSAnimationContext + the
-        // `animator()` proxy handle interruption gracefully.
-        isAnimating = true
-
-        // Cancel any pending snap-debounce work item from a recent drag.
-        // Without this, a debounced snap could fire DURING the open/close
-        // animation, mutate the widget anchor mid-flight, and leave the
-        // widget in a different spot than the user expects.
-        snapDebounceWork?.cancel()
-        snapDebounceWork = nil
-
-        let screenFrame = NSScreen.main?.visibleFrame ?? .zero
-
-        if collapsed {
-            // Save the expanded size for next open so the panel remembers
-            // the user's last expanded dimensions.
-            lastExpandedSize = panel.frame.size
-        }
-
-        let targetSize = collapsed ? collapsedSize : (lastExpandedSize ?? defaultExpandedSize)
-
-        // The widget anchor is the single source of truth for positioning.
-        // Both expand and collapse derive their target frame from it, so a
-        // round-trip (expand → collapse) always lands the widget back at
-        // the exact same spot.
-        let newOrigin: NSPoint
-        if collapsed {
-            newOrigin = widgetAnchor.origin
-        } else {
-            newOrigin = widgetAnchor.expandedOrigin(
-                for: targetSize,
-                in: screenFrame,
-                collapsedSize: collapsedSize
-            )
-        }
-
-        let targetFrame = NSRect(origin: newOrigin, size: targetSize)
-
-        // Relax size constraints so animation can change the frame
-        panel.minSize = NSSize(width: 1, height: 1)
-        panel.maxSize = NSSize(width: 10000, height: 10000)
-
-        // Collapsed widget can be dragged from anywhere; expanded view
-        // disables background-drag so SessionListView's onDrag/onDrop works.
-        panel.isMovableByWindowBackground = collapsed
-
-        let hideWhenCollapsed = !appViewModel.widgetVisible
-        if !collapsed && hideWhenCollapsed {
-            panel.orderFront(nil)
-        }
-
-        // Single-phase animation tuned to match the SwiftUI content
-        // crossfade in ContentView. A two-phase (horizontal-then-vertical)
-        // version was tried earlier — it amplified the visual jank around
-        // the content swap because the inner SwiftUI layout was being
-        // recomputed at every intermediate size, so the title bar
-        // rendered into a 40pt-tall box at the start of phase 2 and
-        // popped into place mid-animation. Keeping it simple looks
-        // calmer.
-        animateFrame(to: targetFrame, duration: 0.40) { [weak self] in
-            guard let self else { return }
-            self.panel.minSize = targetSize
-            self.panel.maxSize = targetSize
-            self.isAnimating = false
-
-            if collapsed && hideWhenCollapsed {
-                self.panel.orderOut(nil)
-            }
-        }
-    }
-
-    private func animateFrame(to target: NSRect, duration: TimeInterval, completion: @escaping () -> Void) {
-        // Native AppKit animation — handles cancellation, system motion
-        // settings, and frame interpolation properly. Replaces a hand-rolled
-        // 120Hz Timer that drove `setFrame` manually.
-        isProgrammaticMove = true
-
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = duration
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            ctx.allowsImplicitAnimation = true
-            self.panel.animator().setFrame(target, display: true)
-        }, completionHandler: { [weak self] in
-            guard let self else { return }
-            self.panel.setFrame(target, display: true)
-            // Keep isProgrammaticMove=true a touch longer to absorb any
-            // lingering didMove notifications dispatched after the animation.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                self?.isProgrammaticMove = false
-            }
-            completion()
-        })
-    }
-
     // MARK: - Edge Snapping
 
     @MainActor @objc private func windowDidMove(_ notification: Notification) {
-        guard !isAnimating, !isProgrammaticMove else { return }
-        // Only track drags when in collapsed widget mode. Expanded-view
-        // drags are handled separately by `installExpandedDragMonitor`,
-        // which updates the anchor on mouseUp.
-        guard appViewModel.isCollapsed else { return }
+        guard !isProgrammaticMove else { return }
         // Debounce — snap after user stops dragging (no move for 0.15s).
         snapDebounceWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -645,45 +602,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Expanded-view drag
+    // MARK: - Expanded-panel drag
 
     /// Allow the user to drag the expanded panel by clicking-and-dragging
-    /// inside its title bar area. We can't enable
-    /// `isMovableByWindowBackground` while expanded because that would
-    /// fight with `SessionListView`'s drag-to-reorder gestures, so
-    /// instead we install a low-level `NSEvent` monitor that tracks the
-    /// mouse manually and only acts when the click started in the top
-    /// title bar strip.
+    /// inside its header strip. The panel has
+    /// `isMovableByWindowBackground = false` because SessionListView
+    /// uses SwiftUI onDrag/onDrop for row reordering, so we install a
+    /// low-level NSEvent monitor that tracks the mouse manually and
+    /// only acts when the click started in the top header strip.
     @MainActor private func installExpandedDragMonitor() {
-        // Title bar strip height in points — must match TitleBar's
-        // visual height (icon + padding ≈ 58pt). A small fudge avoids
-        // grabbing clicks on the row immediately below it.
-        let titleBarHeight: CGFloat = 58
+        // Header strip height — matches ExpandedHeader's visual height
+        // (sprite tile 44 + vertical padding 14*2 ≈ 72pt). Slight fudge.
+        let headerHeight: CGFloat = 72
 
         expandedDragMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
         ) { [weak self] event in
             guard let self,
-                  event.window === self.panel,
-                  !self.appViewModel.isCollapsed,
-                  !self.isAnimating else {
+                  event.window === self.expandedPanel else {
                 return event
             }
 
             switch event.type {
             case .leftMouseDown:
                 let local = event.locationInWindow
-                // Only treat clicks in the top strip of the panel as a
-                // potential drag start. Anything below the title bar
-                // (session list, activity timeline, summary bar) keeps
-                // its normal click behaviour.
-                let inTitleBar = local.y >= self.panel.frame.height - titleBarHeight
-                guard inTitleBar else {
+                let inHeader = local.y >= self.expandedPanel.frame.height - headerHeight
+                guard inHeader else {
                     self.expandedDragState = nil
                     return event
                 }
                 self.expandedDragState = ExpandedDragState(
-                    initialFrameOrigin: self.panel.frame.origin,
+                    initialFrameOrigin: self.expandedPanel.frame.origin,
                     initialMouseLocation: NSEvent.mouseLocation,
                     hasMoved: false
                 )
@@ -695,11 +644,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let dx = current.x - drag.initialMouseLocation.x
                 let dy = current.y - drag.initialMouseLocation.y
                 if !drag.hasMoved {
-                    // Wait until the mouse has actually moved past the
-                    // activation threshold before treating this as a
-                    // drag. Otherwise a small jitter while clicking the
-                    // collapse / settings buttons would be interpreted
-                    // as a window move.
                     let distance = (dx * dx + dy * dy).squareRoot()
                     guard distance >= Self.dragActivationDistance else {
                         return event
@@ -707,8 +651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     drag.hasMoved = true
                     self.expandedDragState = drag
                 }
-                self.isProgrammaticMove = true
-                self.panel.setFrameOrigin(NSPoint(
+                self.expandedPanel.setFrameOrigin(NSPoint(
                     x: drag.initialFrameOrigin.x + dx,
                     y: drag.initialFrameOrigin.y + dy
                 ))
@@ -717,19 +660,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .leftMouseUp:
                 guard let drag = self.expandedDragState else { return event }
                 self.expandedDragState = nil
-                // Only commit a new anchor if a real drag took place.
-                // Plain clicks (collapse, settings) leave the panel
-                // exactly where it was and must NOT touch the anchor.
                 guard drag.hasMoved else { return event }
+                // Recompute the widget anchor from the new expanded
+                // frame so that on the next collapse the widget snaps
+                // to a sensible spot adjacent to where the user dropped
+                // the expanded panel.
                 if let screen = NSScreen.main?.visibleFrame {
                     self.widgetAnchor = WidgetAnchor.from(
-                        expandedFrame: self.panel.frame,
+                        expandedFrame: self.expandedPanel.frame,
                         in: screen,
-                        collapsedSize: self.collapsedSize
+                        collapsedSize: self.widgetSize
                     )
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                    self?.isProgrammaticMove = false
+                    // And actually move the widget panel to the new
+                    // anchor so the two stay co-located visually.
+                    self.isProgrammaticMove = true
+                    NSAnimationContext.runAnimationGroup({ ctx in
+                        ctx.duration = 0.18
+                        ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                        self.panel.animator().setFrameOrigin(self.widgetAnchor.origin)
+                    }, completionHandler: { [weak self] in
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            self?.isProgrammaticMove = false
+                        }
+                    })
                 }
                 return event
 

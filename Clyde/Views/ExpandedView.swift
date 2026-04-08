@@ -9,8 +9,19 @@ struct ExpandedView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TitleBar(
+            ExpandedHeader(
                 clydeState: appViewModel.clydeState,
+                attentionCount: sessionViewModel.attentionCount,
+                workingCount: sessionViewModel.busyCount,
+                readyCount: sessionViewModel.idleCount,
+                isSnoozed: appViewModel.notificationService.isSnoozed,
+                onSnooze: {
+                    if appViewModel.notificationService.isSnoozed {
+                        appViewModel.notificationService.clearSnooze()
+                    } else {
+                        appViewModel.notificationService.snooze(minutes: 30)
+                    }
+                },
                 onSettings: { appViewModel.showSettings = true },
                 onCollapse: { appViewModel.toggleExpanded() }
             )
