@@ -1,9 +1,48 @@
 import Foundation
 
 /// Installs the Clyde notification hook into Claude's settings.
-/// Creates the hook script at ~/.claude/hooks/clyde-notify.sh and
+/// Creates the hook script at ~/.claude/hooks/clyde-hook.sh and
 /// merges the hook configuration into ~/.claude/settings.json.
 enum HookInstaller {
+    /// Timestamp of our most recent successful write to settings.json.
+    /// Consumed by the AppViewModel settings.json watcher to suppress
+    /// the FSEvents echo from our own writes — without this, every
+    /// install() would re-fire ensureHookHealthy() in a tight loop.
+    nonisolated(unsafe) static var lastSelfWriteAt: Date?
+
+    /// Returns true if `cmd` is a `command` string in settings.json that
+    /// belongs to Clyde. Recognizes the canonical absolute path, the
+    /// current short name, and the legacy `clyde-notify.sh` short name.
+    /// Used everywhere we need to dedupe / locate / remove our entries
+    /// — keeping this in one place avoids the literal-string-mismatch
+    /// trap (e.g. renaming the script and forgetting to update one of
+    /// the three call sites).
+    static func isClydeHookCommand(_ cmd: String) -> Bool {
+        if cmd.contains(AppPaths.clydeHookScript.path) { return true }
+        if cmd.contains(AppPaths.legacyClydeHookScript.path) { return true }
+        if cmd.contains("clyde-hook.sh") { return true }
+        if cmd.contains("clyde-notify.sh") { return true }
+        return false
+    }
+
+    /// One-shot migration: if a legacy `clyde-notify.sh` script is
+    /// sitting in `~/.claude/hooks/`, force a clean reinstall under the
+    /// new name and delete the old file. Idempotent — safe to call on
+    /// every launch. Runs unconditionally (ignores opt-out) because the
+    /// presence of the legacy file is itself proof that the user
+    /// previously chose to install.
+    static func migrateLegacyHookIfNeeded() {
+        let legacy = AppPaths.legacyClydeHookScript
+        guard FileManager.default.fileExists(atPath: legacy.path) else { return }
+        ClydeLog.hooks.info("Migrating legacy clyde-notify.sh → clyde-hook.sh")
+        do {
+            try install()
+            try? FileManager.default.removeItem(at: legacy)
+        } catch {
+            ClydeLog.hooks.error("Legacy hook migration failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     enum InstallError: LocalizedError {
         case writeFailed(String)
         case parseFailed
@@ -155,6 +194,15 @@ enum HookInstaller {
         return nil
     }
 
+    /// Events that REQUIRE a `matcher` field in their settings.json
+    /// block. Without it Claude Code emits "<event>:<tool> hook error"
+    /// for every tool invocation and never runs the script.
+    private static let toolMatcherEvents: Set<String> = [
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+    ]
+
     private static func isRegisteredInSettings(eventName: String) -> Bool {
         guard let data = try? Data(contentsOf: AppPaths.claudeSettingsFile),
               let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -162,14 +210,20 @@ enum HookInstaller {
               let events = hooks[eventName] as? [[String: Any]] else {
             return false
         }
+        let needsMatcher = toolMatcherEvents.contains(eventName)
         for entry in events {
-            if let inner = entry["hooks"] as? [[String: Any]] {
-                for h in inner {
-                    if let cmd = h["command"] as? String, cmd.contains("clyde-notify.sh") {
-                        return true
-                    }
-                }
+            guard let inner = entry["hooks"] as? [[String: Any]] else { continue }
+            let hasOurCommand = inner.contains { h in
+                (h["command"] as? String).map(isClydeHookCommand) ?? false
             }
+            guard hasOurCommand else { continue }
+            // For tool-matcher events, an entry without a `matcher` key
+            // is structurally invalid — Claude treats the whole entry
+            // as malformed. Force a reinstall by reporting it missing.
+            if needsMatcher && entry["matcher"] == nil {
+                return false
+            }
+            return true
         }
         return false
     }
@@ -208,10 +262,37 @@ enum HookInstaller {
             "type": "command",
             "command": AppPaths.clydeHookScript.path
         ]
-        let hookBlock: [String: Any] = ["hooks": [hookCommand]]
+        // PreToolUse / PostToolUse* in Claude Code REQUIRE a `matcher`
+        // field — without it Claude rejects the entry as malformed and
+        // emits "PreToolUse:<Tool> hook error" for every tool call,
+        // never actually invoking the script. Other events
+        // (UserPromptSubmit, Stop, SessionStart, ...) take a plain
+        // block with no matcher. We build per-event so each kind gets
+        // the shape Claude expects.
+        let toolMatcherEvents: Set<String> = [
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+        ]
+        func block(for eventName: String) -> [String: Any] {
+            if toolMatcherEvents.contains(eventName) {
+                // Empty-string matcher = match all tools.
+                return ["matcher": "", "hooks": [hookCommand]]
+            }
+            return ["hooks": [hookCommand]]
+        }
 
+        // Wipe any prior Clyde entries (current OR legacy path) before
+        // re-adding so the canonical path always wins. Without this, a
+        // legacy `clyde-notify.sh` entry would be detected as "already
+        // present" by mergeHookBlock and the new path would never get
+        // registered.
+        let legacyEvents = ["Notification"]
+        for eventName in Self.registeredHookEvents + legacyEvents {
+            removeClydeHook(&hooks, eventName: eventName)
+        }
         for eventName in Self.registeredHookEvents {
-            mergeHookBlock(&hooks, eventName: eventName, block: hookBlock)
+            mergeHookBlock(&hooks, eventName: eventName, block: block(for: eventName))
         }
         settings["hooks"] = hooks
 
@@ -221,6 +302,7 @@ enum HookInstaller {
                 options: [.prettyPrinted, .sortedKeys]
             )
             try data.write(to: AppPaths.claudeSettingsFile)
+            Self.lastSelfWriteAt = Date()
             ClydeLog.hooks.info("Hook installed successfully")
         } catch {
             ClydeLog.hooks.error("Failed to write settings.json: \(error.localizedDescription, privacy: .public)")
@@ -253,6 +335,7 @@ enum HookInstaller {
                     options: [.prettyPrinted, .sortedKeys]
                 )
                 try newData.write(to: AppPaths.claudeSettingsFile)
+                Self.lastSelfWriteAt = Date()
             } catch {
                 ClydeLog.hooks.error("Failed to write cleaned settings: \(error.localizedDescription, privacy: .public)")
                 throw InstallError.writeFailed(error.localizedDescription)
@@ -273,7 +356,10 @@ enum HookInstaller {
         let alreadyPresent = existing.contains { entry in
             if let innerHooks = entry["hooks"] as? [[String: Any]] {
                 return innerHooks.contains { h in
-                    (h["command"] as? String)?.contains("clyde-notify.sh") == true
+                    if let cmd = h["command"] as? String {
+                        return Self.isClydeHookCommand(cmd)
+                    }
+                    return false
                 }
             }
             return false
@@ -290,7 +376,10 @@ enum HookInstaller {
         existing.removeAll { entry in
             if let innerHooks = entry["hooks"] as? [[String: Any]] {
                 return innerHooks.contains { h in
-                    (h["command"] as? String)?.contains("clyde-notify.sh") == true
+                    if let cmd = h["command"] as? String {
+                        return Self.isClydeHookCommand(cmd)
+                    }
+                    return false
                 }
             }
             return false

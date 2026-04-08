@@ -40,6 +40,14 @@ enum AppPaths {
     }
 
     static var clydeHookScript: URL {
+        claudeHooksDir.appendingPathComponent("clyde-hook.sh")
+    }
+
+    /// Legacy filename used by older Clyde builds. Kept here so the
+    /// installer can migrate existing installs (delete the old file,
+    /// remove the old settings.json entries) without leaving the user
+    /// in a half-broken state.
+    static var legacyClydeHookScript: URL {
         claudeHooksDir.appendingPathComponent("clyde-notify.sh")
     }
 }
