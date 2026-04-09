@@ -81,12 +81,32 @@ final class SessionListViewModel: ObservableObject {
 
     /// Counters reflect *live* sessions only — ghost rows (sessions that
     /// have ended but are still visible for ~5 min) don't contribute.
+    ///
+    /// The three counters (`attentionCount`, `busyCount`, `idleCount`)
+    /// are mutually exclusive and together always sum to `sessionCount`.
+    /// Attention takes priority over busy / idle, so a session that's
+    /// both busy AND waiting for permission contributes ONLY to
+    /// attentionCount — counting it in busyCount as well used to
+    /// produce header rows like "1 attention · 1 working · 4 ready"
+    /// for what was actually 5 distinct sessions.
     var sessionCount: Int { processMonitor.sessions.filter { !$0.isGhost }.count }
-    var busyCount: Int { processMonitor.sessions.filter { !$0.isGhost && $0.status == .busy }.count }
-    var idleCount: Int { processMonitor.sessions.filter { !$0.isGhost && $0.status == .idle }.count }
+    var busyCount: Int {
+        let attentionPIDs = attentionMonitor?.attentionPIDs ?? []
+        return processMonitor.sessions.filter {
+            !$0.isGhost && $0.status == .busy && !attentionPIDs.contains($0.pid)
+        }.count
+    }
+    var idleCount: Int {
+        let attentionPIDs = attentionMonitor?.attentionPIDs ?? []
+        return processMonitor.sessions.filter {
+            !$0.isGhost && $0.status == .idle && !attentionPIDs.contains($0.pid)
+        }.count
+    }
     var attentionCount: Int {
-        guard let ids = attentionMonitor?.attentionPIDs else { return 0 }
-        return ids.count
+        let attentionPIDs = attentionMonitor?.attentionPIDs ?? []
+        return processMonitor.sessions.filter {
+            !$0.isGhost && attentionPIDs.contains($0.pid)
+        }.count
     }
 
     init(processMonitor: ProcessMonitor, attentionMonitor: AttentionMonitor? = nil) {

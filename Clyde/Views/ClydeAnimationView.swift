@@ -66,18 +66,52 @@ struct ClydeSprite {
     }()
 }
 
+/// Identifier for a single (row, col) cell of the 16×16 sprite, used by
+/// the ambient idle animation system to override individual pixels for
+/// brief moments (blink, smirk) without rebuilding the whole sprite.
+private struct CellKey: Hashable {
+    let row: Int
+    let col: Int
+}
+
 struct ClydeAnimationView: View {
     let state: ClydeState
     let pixelSize: CGFloat
+    /// When false, the ambient animation (blink + glance) is
+    /// suppressed entirely. Mini sprites in the session list pass false
+    /// here so the row indicators stay perfectly still — only the
+    /// header / widget mascots breathe.
+    ///
+    /// (Historical name kept for source-compat. The animation runs in
+    /// every non-sleeping state, not only `.idle`, so the user sees
+    /// Clyde "alive" while sessions are working or waiting on
+    /// permission too.)
+    let ambientIdleEnabled: Bool
 
     @State private var animationTick: Int = 0
     @State private var antennaGlow: Bool = false
     @State private var zzzOffset: CGFloat = 0
     @State private var zzzOpacity: Double = 1
 
-    init(state: ClydeState, pixelSize: CGFloat = 3) {
+    /// Per-cell colour overrides applied for the duration of an ambient
+    /// idle action (blink, smirk). Empty in the steady state. When
+    /// non-empty, the Canvas falls off the cached `bodyCells` fast path
+    /// and walks the full 16×16 grid so it can apply per-cell mutations.
+    @State private var idleOverrides: [CellKey: Color] = [:]
+
+    /// Long-running Task that drives the ambient idle loop. Cancelled
+    /// whenever `state` leaves `.idle` or the view disappears.
+    @State private var ambientTask: Task<Void, Never>?
+
+    /// Outline / mouth colour, hoisted out of `ClydeSprite.body` so the
+    /// ambient overrides can reuse the exact same dark tone for new
+    /// mouth pixels.
+    private static let outlineColor = Color(red: 0.100, green: 0.100, blue: 0.140)
+
+    init(state: ClydeState, pixelSize: CGFloat = 3, ambientIdleEnabled: Bool = true) {
         self.state = state
         self.pixelSize = pixelSize
+        self.ambientIdleEnabled = ambientIdleEnabled
     }
 
     private var gridWidth: CGFloat { 16 * pixelSize }
@@ -90,14 +124,14 @@ struct ClydeAnimationView: View {
                 let tipCols: ClosedRange<Int> = 6...9
                 let tipRow = 1
 
-                for cell in ClydeSprite.bodyCells {
-                    let row = cell.row
-                    let col = cell.col
-                    var color = cell.color
-
-                    // State-driven antenna colour. The base sprite stores the
-                    // tip in green; for busy/attention we recolour the same
-                    // pixels so the antenna pulses in the dominant colour.
+                /// Resolve the colour for a single cell, applying the
+                /// state-driven antenna recolour and the ambient idle
+                /// overrides. Pulled out so both the fast path
+                /// (cached `bodyCells`) and the slow path (full 16×16
+                /// grid, used while ambient overrides are active) can
+                /// share the exact same logic.
+                func resolvedColor(row: Int, col: Int, base: Color) -> Color {
+                    var color = base
                     if row == tipRow && tipCols.contains(col) {
                         switch state {
                         case .busy:
@@ -111,10 +145,13 @@ struct ClydeAnimationView: View {
                         case .sleeping:
                             color = Color(white: 0.35)
                         case .idle:
-                            break // keep original green tip + halo
+                            break
                         }
                     }
+                    return color
+                }
 
+                func drawCell(row: Int, col: Int, color: Color) {
                     let rect = CGRect(
                         x: CGFloat(col) * pixelSize,
                         y: CGFloat(row) * pixelSize,
@@ -122,6 +159,36 @@ struct ClydeAnimationView: View {
                         height: pixelSize
                     )
                     context.fill(Path(rect), with: .color(color))
+                }
+
+                if idleOverrides.isEmpty {
+                    // Fast path — iterate the cached non-transparent cells.
+                    // ~50 entries instead of 256.
+                    for cell in ClydeSprite.bodyCells {
+                        let color = resolvedColor(row: cell.row, col: cell.col, base: cell.color)
+                        drawCell(row: cell.row, col: cell.col, color: color)
+                    }
+                } else {
+                    // Slow path — walk the full 16×16 grid so we can apply
+                    // per-cell overrides (including pixels that are
+                    // transparent in the base sprite, e.g. the smirk's
+                    // extra mouth pixel). Only runs during the ~150–700 ms
+                    // window of an active ambient action, so the cost is
+                    // negligible.
+                    for row in 0..<16 {
+                        for col in 0..<16 {
+                            let key = CellKey(row: row, col: col)
+                            let base: Color?
+                            if let override = idleOverrides[key] {
+                                base = override
+                            } else {
+                                base = ClydeSprite.body[row][col]
+                            }
+                            guard let baseColor = base else { continue }
+                            let color = resolvedColor(row: row, col: col, base: baseColor)
+                            drawCell(row: row, col: col, color: color)
+                        }
+                    }
                 }
 
                 // "!" mark above head for attention state — bobs gently.
@@ -158,12 +225,144 @@ struct ClydeAnimationView: View {
                 updateAnimations()
             }
         }
-        .onAppear { updateAnimations() }
-        .onChange(of: state) { _ in
+        .onAppear {
+            updateAnimations()
+            if ambientIdleEnabled && state != .sleeping {
+                startAmbientLoop()
+            }
+        }
+        .onDisappear {
+            stopAmbientLoop()
+        }
+        .onChange(of: state) { newState in
             animationTick = 0
             updateAnimations()
+            // Run the ambient blink/glance loop in every non-sleeping
+            // state. Earlier versions gated it strictly on `.idle`,
+            // which left the busy and attention mascots visually
+            // frozen — users reported it as "Clyde isn't animated
+            // anymore". Sleeping is still excluded because the snore
+            // animation owns the sprite then.
+            if ambientIdleEnabled && newState != .sleeping {
+                startAmbientLoop()
+            } else {
+                stopAmbientLoop()
+            }
         }
     }
+
+    // MARK: - Ambient idle animation
+    //
+    // While the mascot is in `.idle`, a long-running Task alternates
+    // between two micro-actions to make the sprite feel alive without
+    // ever being distracting:
+    //
+    //   • Blink  — both eyes briefly squeeze shut for ~140 ms
+    //   • Glance — pupils slide one column to one side and back
+    //
+    // Actions strictly alternate (blink → glance → blink → glance …) and
+    // are spaced by a randomised 5–7 s gap so the rhythm doesn't read
+    // as a metronome. The first action is offset by 0.8–2.4 s so the
+    // expanded-header mascot and the widget mascot don't fire in
+    // perfect sync. The Task is cancelled the moment `state` leaves
+    // `.idle` (working / attention have their own, louder animations
+    // that would clash) and on `.onDisappear`.
+
+    private func startAmbientLoop() {
+        ambientTask?.cancel()
+        ambientTask = Task { @MainActor in
+            // Initial desync so multiple ClydeAnimationViews on screen
+            // don't blink in lockstep.
+            try? await Task.sleep(for: .milliseconds(Int.random(in: 800...2400)))
+            if Task.isCancelled { return }
+
+            var nextIsBlink = Bool.random()
+            while !Task.isCancelled {
+                if nextIsBlink {
+                    await playBlink()
+                } else {
+                    await playGlance()
+                }
+                if Task.isCancelled { break }
+                nextIsBlink.toggle()
+
+                let wait = Double.random(in: 5.0...7.0)
+                try? await Task.sleep(for: .seconds(wait))
+            }
+        }
+    }
+
+    private func stopAmbientLoop() {
+        ambientTask?.cancel()
+        ambientTask = nil
+        if !idleOverrides.isEmpty {
+            idleOverrides = [:]
+        }
+    }
+
+    /// Both eyes squeeze closed for ~140 ms by whitening the top
+    /// dark pupil pixels (rows 7 col 6 / col 10). The bottom row of
+    /// the pupil stays dark, which reads as a thin closed-eye line at
+    /// every render size from the 24 px session indicator up to the
+    /// 56 px expanded header.
+    private func playBlink() async {
+        idleOverrides = [
+            CellKey(row: 7, col: 6):  .white,
+            CellKey(row: 7, col: 10): .white,
+        ]
+        try? await Task.sleep(for: .milliseconds(140))
+        if Task.isCancelled { return }
+        idleOverrides = [:]
+    }
+
+    /// Both pupils slide one column to one side, hold for ~480 ms, and
+    /// return to centre. Direction is randomised per invocation so the
+    /// animation reads as a casual glance rather than a fixed tic.
+    ///
+    /// The base sprite encodes each pupil as an L-shape:
+    ///   left  pupil = {(7,6), (8,5), (8,6)}  with a sparkle at (7,5)
+    ///   right pupil = {(7,10), (8,9), (8,10)} with a sparkle at (7,11)
+    ///
+    /// Shifting the L-shape by ±1 column requires darkening the new
+    /// position cells and whitening the cells the pupil left behind.
+    private func playGlance() async {
+        idleOverrides = Bool.random() ? Self.lookLeftOverrides : Self.lookRightOverrides
+        try? await Task.sleep(for: .milliseconds(480))
+        if Task.isCancelled { return }
+
+        idleOverrides = [:]
+    }
+
+    /// Override map that shifts both pupils one column to the left.
+    /// Cached as a static so each invocation skips re-allocation.
+    private static let lookLeftOverrides: [CellKey: Color] = [
+        // LEFT eye: pupil L-shape {(7,6),(8,5),(8,6)} → {(7,5),(8,4),(8,5)}
+        CellKey(row: 7, col: 5):  outlineColor, // new pupil top
+        CellKey(row: 8, col: 4):  outlineColor, // new pupil bottom-left
+        CellKey(row: 7, col: 6):  .white,       // old pupil top → blank
+        CellKey(row: 8, col: 6):  .white,       // old pupil bottom-right → blank
+
+        // RIGHT eye: pupil L-shape {(7,10),(8,9),(8,10)} → {(7,9),(8,8),(8,9)}
+        CellKey(row: 7, col: 9):  outlineColor,
+        CellKey(row: 8, col: 8):  outlineColor,
+        CellKey(row: 7, col: 10): .white,
+        CellKey(row: 8, col: 10): .white,
+    ]
+
+    /// Override map that shifts both pupils one column to the right.
+    private static let lookRightOverrides: [CellKey: Color] = [
+        // LEFT eye: pupil L-shape {(7,6),(8,5),(8,6)} → {(7,7),(8,6),(8,7)}
+        CellKey(row: 7, col: 7):  outlineColor,
+        CellKey(row: 8, col: 7):  outlineColor,
+        CellKey(row: 7, col: 6):  .white,
+        CellKey(row: 8, col: 5):  .white,
+
+        // RIGHT eye: pupil L-shape {(7,10),(8,9),(8,10)} → {(7,11),(8,10),(8,11)}
+        CellKey(row: 7, col: 11): outlineColor,
+        CellKey(row: 8, col: 11): outlineColor,
+        CellKey(row: 7, col: 10): .white,
+        CellKey(row: 8, col: 9):  .white,
+    ]
 
     private func updateAnimations() {
         switch state {
