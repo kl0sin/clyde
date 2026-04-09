@@ -36,7 +36,32 @@ jobs:
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           fi
 
+      # Detect whether we have the Apple Developer ID credentials needed
+      # to sign and notarize. When the secrets are missing (e.g. early
+      # releases before the pipeline is wired up), we still build + pack
+      # a DMG, just unsigned. Downstream steps gate on `signed.outputs.*`.
+      - name: Check signing availability
+        id: signed
+        env:
+          CERT_P12: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 }}
+          SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [[ -n "$CERT_P12" ]]; then
+            echo "signing=true" >> "$GITHUB_OUTPUT"
+            echo "==> Apple signing credentials present — will sign + notarize"
+          else
+            echo "signing=false" >> "$GITHUB_OUTPUT"
+            echo "==> No signing credentials — building UNSIGNED DMG (pre-release)"
+          fi
+          if [[ -n "$SPARKLE_KEY" ]]; then
+            echo "sparkle=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sparkle=false" >> "$GITHUB_OUTPUT"
+            echo "==> No Sparkle EdDSA key — skipping appcast update"
+          fi
+
       - name: Import signing certificate
+        if: steps.signed.outputs.signing == 'true'
         env:
           DEVELOPER_ID_CERT_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 }}
           DEVELOPER_ID_CERT_PASSWORD:   ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
@@ -74,23 +99,31 @@ jobs:
         run: scripts/release/build.sh
 
       - name: Sign
+        if: steps.signed.outputs.signing == 'true'
         env:
           DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
         run: scripts/release/sign.sh
 
       - name: Notarize
+        if: steps.signed.outputs.signing == 'true'
         env:
           APPLE_ID:           ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID:      ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: scripts/release/notarize.sh
 
+      # make-dmg.sh packs Clyde.app into a DMG regardless of signing.
+      # When DEVELOPER_ID_APPLICATION is set it signs the DMG too;
+      # when it's empty the DMG is left unsigned (still a valid DMG,
+      # Gatekeeper just warns on first launch). Same script, both
+      # paths — no dedicated unsigned packaging step needed.
       - name: Make DMG
         env:
           DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
         run: scripts/release/make-dmg.sh
 
       - name: Update appcast
+        if: steps.signed.outputs.signing == 'true' && steps.signed.outputs.sparkle == 'true'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           GITHUB_REPO:         ${{ github.repository }}
@@ -98,6 +131,7 @@ jobs:
           scripts/release/update-appcast.sh "build/release/Clyde-${{ steps.version.outputs.version }}.dmg"
 
       - name: Commit appcast back to main
+        if: steps.signed.outputs.signing == 'true' && steps.signed.outputs.sparkle == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -107,11 +141,33 @@ jobs:
           git commit -m "chore(release): appcast for v${{ steps.version.outputs.version }}" || true
           git push origin main
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (signed)
+        if: steps.signed.outputs.signing == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: Clyde ${{ steps.version.outputs.version }}
           generate_release_notes: true
+          files: |
+            build/release/Clyde-${{ steps.version.outputs.version }}.dmg
+
+      - name: Create GitHub Release (unsigned pre-release)
+        if: steps.signed.outputs.signing != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Clyde ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          prerelease: true
+          body: |
+            > ⚠️ **Unsigned build.** This release is not code-signed or
+            > notarized yet. On first launch macOS Gatekeeper will say
+            > the app is "from an unidentified developer". Right-click
+            > `Clyde.app` → **Open** → confirm in the dialog. macOS
+            > remembers the exception so subsequent launches are clean.
+            >
+            > Proper signed + notarized releases will ship in a later
+            > version once the Apple Developer credentials are wired
+            > into the release pipeline.
           files: |
             build/release/Clyde-${{ steps.version.outputs.version }}.dmg

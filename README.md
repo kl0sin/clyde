@@ -51,33 +51,27 @@ It connects to Claude Code's native hook events, so updates are
 
 ## Install
 
-### Download (recommended)
-
-Grab the latest signed `.dmg` from
-[Releases](https://github.com/kl0sin/clyde/releases/latest), drag
-`Clyde.app` to your Applications folder, and launch it.
+Grab the latest `.dmg` from
+[Releases](https://github.com/kl0sin/clyde/releases/latest), open it,
+drag `Clyde.app` into your Applications folder, and launch it.
 
 On first run Clyde offers to install its Claude Code hook automatically —
 accept and you're done.
 
-### Homebrew
-
-```bash
-brew tap kl0sin/tap
-brew install --cask clyde
-```
-
-> The cask is published from [`Casks/clyde.rb`](Casks/clyde.rb) into a
-> dedicated tap. You only need to `brew tap kl0sin/tap` once per machine.
+> **Early releases are not yet code-signed or notarized.** On first
+> launch macOS Gatekeeper will say the app is "from an unidentified
+> developer". Right-click `Clyde.app` → **Open** → confirm in the
+> dialog. macOS remembers the exception, so subsequent launches are
+> clean. Signing and notarization are on the roadmap and will land in
+> a later release.
 
 ### Updates
 
-Clyde uses [Sparkle](https://sparkle-project.org/) to auto-update. New
-versions are downloaded and verified in the background; you'll see an
-"Update available" prompt with release notes.
-
-You can also trigger an update check manually from **Settings → Check
-for updates…** or from the menu bar dropdown.
+Clyde ships with [Sparkle](https://sparkle-project.org/) built in for
+in-app auto-updates. The update channel is dormant until signed
+releases start publishing to the appcast — until then, grab new
+versions from
+[Releases](https://github.com/kl0sin/clyde/releases) directly.
 
 ## How it works
 
@@ -166,9 +160,10 @@ docs/                   Pre-launch checklist + release process docs
 swift test
 ```
 
-Some tests touch the user's real `~/.claude/settings.json`. They pass on
-a clean machine and fail in a "polluted" dev environment where Clyde is
-already installed — that's expected. CI runs them on a fresh runner.
+The suite is hermetic — `HookInstallerTests` redirects every path
+through a throwaway temp home via `AppPaths.homeOverride`, so nothing
+under your real `~/.claude/` is ever touched. Runs deterministically
+across reruns on dev machines and CI alike.
 
 ## Contributing
 
