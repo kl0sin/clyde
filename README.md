@@ -175,6 +175,17 @@ already installed — that's expected. CI runs them on a fresh runner.
 Bug reports and PRs welcome. For non-trivial changes please open an
 issue first so we can discuss the approach.
 
+## Support development
+
+Clyde is free and MIT-licensed. If it's saving you time and you'd
+like to chip in, there are two ways:
+
+- ❤️  [Sponsor on GitHub](https://github.com/sponsors/kl0sin) — recurring or one-time, processed by GitHub.
+- ☕ [Buy me a coffee](https://www.buymeacoffee.com/kl0sin) — one-off tip, no account needed.
+
+Both are entirely optional and there's no paid tier — Clyde stays
+fully featured for everyone.
+
 ## License
 
 [MIT](LICENSE) — use it, fork it, sell it, do whatever.

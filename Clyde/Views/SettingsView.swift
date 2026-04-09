@@ -44,6 +44,7 @@ struct SettingsView: View {
                     SettingsSection(title: "Claude Integration") { ClaudeHooksRow(appViewModel: appViewModel) }
                     maintenanceSection
                     aboutSection
+                    supportSection
                 }
                 .padding(16)
             }
@@ -416,6 +417,65 @@ struct SettingsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private var supportSection: some View {
+        SettingsSection(title: "Support development") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Clyde is free and MIT-licensed. If it's saving you time, you can chip in — it's entirely optional and there's no paid tier.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(white: 0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(action: {
+                    if let url = URL(string: "https://github.com/sponsors/kl0sin") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.pink)
+                        Text("Sponsor on GitHub")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.5))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(white: 0.18))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {
+                    if let url = URL(string: "https://www.buymeacoffee.com/kl0sin") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "cup.and.saucer.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.3))
+                        Text("Buy me a coffee")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.5))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(white: 0.18))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }

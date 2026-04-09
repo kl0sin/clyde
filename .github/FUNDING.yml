@@ -1,0 +1,6 @@
+# Renders the "Sponsor" button on the repo + author profile.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+
+github: kl0sin
+custom:
+  - https://www.buymeacoffee.com/kl0sin
