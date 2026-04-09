@@ -195,8 +195,24 @@ final class ProcessMonitor: ObservableObject {
         var updatedSessions: [Session] = []
         updatedSessions.reserveCapacity(pids.count)
 
+        // Sessions identified by their stable session_id that we revived
+        // from a ghost row this tick. The linger loop below uses this set
+        // to skip carrying the now-stale ghost forward — without this, a
+        // `claude --resume` ends up showing two rows for the same session
+        // (the ghost from the old PID, plus the freshly-revived live row).
+        var revivedSessionIds: Set<String> = []
+
         for pid in pids {
             let newStatus = await classifyStatus(pid: pid)
+            // Detect revival BEFORE updatedSession runs, because
+            // updatedSession() returns the freshly-revived row and
+            // we lose the "was a ghost" signal once the row is live.
+            if let info = hookInfoByPID[pid],
+               !info.sessionId.isEmpty,
+               sessions.contains(where: { $0.sessionId == info.sessionId && $0.isGhost })
+            {
+                revivedSessionIds.insert(info.sessionId)
+            }
             let session = await updatedSession(pid: pid, newStatus: newStatus)
             updatedSessions.append(session)
         }
@@ -217,6 +233,12 @@ final class ProcessMonitor: ObservableObject {
 
         // Carry forward existing ghosts that are still within the linger window.
         for existingGhost in sessions where existingGhost.isGhost {
+            // Skip ghosts whose session_id was just revived by a resumed
+            // session. Otherwise the resumed live row and the stale ghost
+            // would coexist in the UI for the full linger window.
+            if let sid = existingGhost.sessionId, revivedSessionIds.contains(sid) {
+                continue
+            }
             if let endedAt = existingGhost.endedAt,
                now.timeIntervalSince(endedAt) < AppConstants.endedSessionLinger,
                !livePIDs.contains(existingGhost.pid) {
@@ -239,10 +261,22 @@ final class ProcessMonitor: ObservableObject {
     }
 
     /// Update an existing session or create a new one. Caches CWD detection.
+    ///
+    /// Lookup priority:
+    ///   1. Match by PID against a live row (the common case — same
+    ///      Claude process across polling ticks).
+    ///   2. Match by `sessionId` against any row including ghosts. This
+    ///      catches `claude --resume`: SessionEnd promoted the old PID
+    ///      to a ghost, SessionStart fires with the SAME session_id but
+    ///      a NEW PID. We must revive the ghost into the new live row
+    ///      instead of leaving the ghost lingering and creating a
+    ///      duplicate row for the new PID.
+    ///   3. Otherwise, create a brand-new session.
     private func updatedSession(pid: pid_t, newStatus: SessionStatus) async -> Session {
         let info = hookInfoByPID[pid]
 
-        if var existing = sessions.first(where: { $0.pid == pid }) {
+        // (1) PID match against live rows.
+        if var existing = sessions.first(where: { $0.pid == pid && !$0.isGhost }) {
             // Backfill metadata from the hook info if it became available.
             if existing.sessionId == nil, let info {
                 existing.sessionId = info.sessionId
@@ -263,15 +297,30 @@ final class ProcessMonitor: ObservableObject {
                 }
             }
             return existing
-        } else {
-            let cwd = info?.cwd.isEmpty == false ? info!.cwd : await detectCWD(pid: pid)
-            return Session(
-                pid: pid,
-                workingDirectory: cwd,
-                status: newStatus,
-                sessionId: info?.sessionId
-            )
         }
+
+        // (2) sessionId match — revival path for `claude --resume`.
+        if let sid = info?.sessionId, !sid.isEmpty,
+           var revived = sessions.first(where: { $0.sessionId == sid })
+        {
+            revived.pid = pid
+            revived.endedAt = nil
+            revived.status = newStatus
+            revived.statusChangedAt = Date()
+            if let info, !info.cwd.isEmpty {
+                revived.workingDirectory = info.cwd
+            }
+            return revived
+        }
+
+        // (3) Brand-new session.
+        let cwd = info?.cwd.isEmpty == false ? info!.cwd : await detectCWD(pid: pid)
+        return Session(
+            pid: pid,
+            workingDirectory: cwd,
+            status: newStatus,
+            sessionId: info?.sessionId
+        )
     }
 
     func updatePollingInterval(_ interval: TimeInterval) {

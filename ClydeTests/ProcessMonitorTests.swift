@@ -184,6 +184,63 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.sessions.first?.status, .busy)
     }
 
+    /// Regression: `claude --resume` reuses the same `session_id` but
+    /// the underlying claude binary is a brand-new process with a new
+    /// PID. The previous behaviour matched sessions purely by PID, so
+    /// SessionEnd promoted the old PID to a ghost and SessionStart for
+    /// the resumed session created a SECOND row for the new PID — the
+    /// user saw two rows ("Ended" + freshly live) for what is logically
+    /// one session. After the fix, the resumed session must REVIVE the
+    /// existing ghost (matched by session_id) instead of duplicating it.
+    func testResumeRevivesGhostInsteadOfDuplicating() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let firstPid = writeInfoFile(in: dir, sessionId: sid, cwd: "/tmp/proj")
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.count, 1)
+        XCTAssertFalse(monitor.sessions.first?.isGhost ?? true)
+
+        // Simulate SessionEnd: hook removes both files.
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-info"))
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.count, 1, "session should be a ghost after SessionEnd")
+        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false)
+
+        // Simulate `claude --resume`: SessionStart fires for the SAME
+        // sessionId but a different PID. We use init (pid 1) here
+        // because it's guaranteed alive on macOS and is reliably
+        // != getpid(), giving us a real "different PID, same sid"
+        // setup. The injected isLiveClaudeProcessCheck stub means we
+        // don't actually need pid 1 to be a Claude binary.
+        let secondPid: pid_t = 1
+        XCTAssertNotEqual(secondPid, firstPid)
+        let body = #"{"session_id":"\#(sid)","pid":\#(secondPid),"cwd":"/tmp/proj","started_at":0}"#
+        try? body.write(
+            to: dir.appendingPathComponent("\(sid)-info"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        await monitor.poll()
+
+        // EXACTLY one row, live, with the new PID. No leftover ghost.
+        XCTAssertEqual(monitor.sessions.count, 1,
+                       "expected 1 row after resume, got \(monitor.sessions.count)")
+        XCTAssertEqual(monitor.sessions.filter { $0.isGhost }.count, 0,
+                       "ghost must be replaced by the revived live row, not kept alongside")
+        XCTAssertEqual(monitor.sessions.first?.pid, secondPid,
+                       "revived row must carry the new PID")
+        XCTAssertEqual(monitor.sessions.first?.sessionId, sid,
+                       "session_id must be preserved across revival")
+    }
+
     /// Regression for the inverse: when the identity check rejects a
     /// PID (e.g. PID got recycled to a non-claude binary), the marker
     /// MUST be cleaned up so we don't keep a stale "busy" forever.

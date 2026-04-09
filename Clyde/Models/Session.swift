@@ -7,7 +7,10 @@ enum SessionStatus: Equatable {
 
 struct Session: Identifiable, Equatable {
     let id: UUID
-    let pid: pid_t
+    /// Mutable so a `claude --resume` can swap in the new Claude process
+    /// PID without our needing to throw away the row. The row's stable
+    /// identity comes from `id` (derived from `sessionId`), not from PID.
+    var pid: pid_t
     /// Stable identity from Claude Code's hook payload (UUID). Available for
     /// sessions discovered via SessionStart hook; nil for legacy / pgrep-only.
     var sessionId: String?
