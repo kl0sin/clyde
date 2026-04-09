@@ -40,6 +40,19 @@ critical bug demands one.
 - [ ] **Activate Sparkle appcast.** Workflow should auto-publish
   `site/appcast.xml` on release. Verify by running Clyde v0.1.0 and
   checking if "Update available" appears pointing at v0.1.1.
+- [ ] **Resolve the "Commit appcast back to main" step vs branch
+  protection ruleset.** The release workflow pushes `site/appcast.xml`
+  directly to main after a signed cut. Tier-1 branch protection on
+  main (enabled after v0.1.0 shipped) blocks direct pushes unless
+  the actor is in the ruleset bypass list, and the built-in
+  `github-actions[bot]` identity is **not** listable in the bypass
+  UI. Pick one of: (a) generate a PAT with `contents: write` +
+  `bypass rulesets`, store as `RELEASE_PUSH_TOKEN`, use it in that
+  step instead of `GITHUB_TOKEN`; (b) rewrite the step to open a
+  PR with the appcast update and merge it manually — extra gate
+  per release, ~15 lines of yaml; (c) deploy key + "Deploy keys"
+  bypass — heavyweight. Recommendation: **(b)**, because for solo
+  dev it doubles as a release review checkpoint.
 - [ ] **Publish Homebrew cask** to a dedicated tap repo
   (`kl0sin/homebrew-tap`). README's Homebrew section was removed for
   0.1.0 — add it back once `brew tap kl0sin/tap && brew install
