@@ -379,13 +379,13 @@ struct SessionStatusIndicator: View {
                         let t = context.date.timeIntervalSinceReferenceDate
                         let phase = (sin(t * .pi * 2 / 1.4) + 1) / 2  // 0…1, 1.4s cycle
                         let scale = 1.0 + phase * 0.12               // 1.0 … 1.12
-                        ClydeAnimationView(state: mascotState, pixelSize: 1.5)
+                        ClydeAnimationView(state: mascotState, pixelSize: 1.5, ambientIdleEnabled: false)
                             .frame(width: 24, height: 24)
                             .scaleEffect(scale, anchor: .center)
                     }
                     .frame(width: 24, height: 24)
                 } else {
-                    ClydeAnimationView(state: mascotState, pixelSize: 1.5)
+                    ClydeAnimationView(state: mascotState, pixelSize: 1.5, ambientIdleEnabled: false)
                         .frame(width: 24, height: 24)
                 }
 
