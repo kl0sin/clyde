@@ -69,7 +69,7 @@ manual verification.
 - [x] Hook reinstall / repair flow has unit + smoke coverage — `HookInstallerTests`, `docs/hook-smoke-test.md` scenarios 1–3
 - [x] Hook pipeline regression tests — `ProcessMonitorTests`, `HookInstallerTests` (matcher, migration, coexistence, identity check)
 - [x] Test suite is deterministic and hermetic — 55/55 passing, isolated via `AppPaths.homeOverride`
-- [ ] Manual run of `docs/hook-smoke-test.md` scenarios 1–6 against a fresh `claude` install
+- [x] Manual run of `docs/hook-smoke-test.md` scenarios 1–6 against a fresh `claude` install — all 6 passed on 2026-04-09, two regressions found and fixed along the way (`2f33ed8` resume ghost duplication, `0fa6275` pgrep-only defer flicker)
 - [ ] Test on minimum supported macOS version (currently 13.0 per `Info.plist`)
 - [ ] Test on Intel + Apple Silicon (universal binary)
 - [ ] Test with multiple Claude Code sessions across multiple terminals
