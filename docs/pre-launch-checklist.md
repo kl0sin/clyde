@@ -94,3 +94,31 @@ manual verification.
 - [x] Sparkle EdDSA keypair generated and `SUPublicEDKey` set in `Info.plist`
 - [ ] Tag → release flow tested end-to-end on a dry run
 - [ ] First release cut (`v0.1.0`) — gated on the manual smoke test pass
+
+## Hook pipeline followups
+
+Items surfaced during the manual smoke test that aren't blockers for
+v0.1.0 but should be triaged before / shortly after release.
+
+- [ ] Verify the `PermissionRequest → deny` path is intentional and
+  documented. Smoke test scenario #4 produced this trace:
+  ```
+  UserPromptSubmit → PreToolUse → PermissionRequest → Stop
+  ```
+  Note the absence of a second `PreToolUse` after the user's
+  decision. Confirm whether Claude Code emits a second `PreToolUse`
+  on approval (and only skips it on deny), or whether it never
+  re-fires `PreToolUse` for the same tool invocation. Either way
+  the `-busy` marker stays correct because `Stop` cleans it; the
+  question is just contract documentation in `clyde-hook.sh` and
+  `hook-smoke-test.md`.
+- [ ] Phantom `-info` files from recycled PIDs. `discoverPIDs` only
+  uses `kill(pid, 0)` to verify a session is alive, not the full
+  `isLiveClaudeProcess` identity check. If a Claude PID dies and the
+  kernel later recycles that PID to a non-Claude binary, the `-info`
+  file lingers and Clyde shows a phantom "idle" row in the UI for
+  that recycled process until it dies in turn. Cheap fix: route
+  `discoverPIDs` through the same identity check as
+  `refreshHookBusyPIDs`. Risk: a brief window during process startup
+  where `ps -o comm=` doesn't yet report "claude" could drop
+  legitimate sessions — needs verification.
