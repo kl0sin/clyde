@@ -287,7 +287,10 @@ final class AppViewModel: ObservableObject {
         // FSEvents misses something. Cheap, just a stat() call.
         hookHealTimer?.invalidate()
         hookHealTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.ensureHookHealthy() }
+            // Explicit `[weak self]` on the Task — Swift 6 strict
+            // concurrency won't let the outer weak ref cross the
+            // Task boundary implicitly.
+            Task { @MainActor [weak self] in self?.ensureHookHealthy() }
         }
     }
 

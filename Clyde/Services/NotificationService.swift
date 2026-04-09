@@ -125,7 +125,10 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         guard let deadline = snoozeUntil else { return }
         let interval = max(0.1, deadline.timeIntervalSinceNow)
         snoozeWakeTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.clearSnooze() }
+            // Explicit `[weak self]` on the Task — Swift 6 strict
+            // concurrency won't let the outer weak ref cross the
+            // Task boundary implicitly.
+            Task { @MainActor [weak self] in self?.clearSnooze() }
         }
     }
 

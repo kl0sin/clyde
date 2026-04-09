@@ -37,7 +37,12 @@ final class AttentionMonitor: ObservableObject {
         startDirectoryWatcher()
         // Backup periodic scan handles file expiry (no FS event for stale mtime).
         pollTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.scan() }
+            // `[weak self]` on the inner Task is required by Swift 6
+            // strict concurrency — otherwise `self` is captured as a
+            // var crossing the Task boundary and the compiler rejects
+            // it. Dropping the outer weak ref would keep the monitor
+            // alive past its owner, so we do both.
+            Task { @MainActor [weak self] in self?.scan() }
         }
         scan()
         ClydeLog.hooks.info("AttentionMonitor started, watching \(self.eventsDir.path, privacy: .public)")
