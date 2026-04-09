@@ -30,46 +30,84 @@
 
 * { box-sizing: border-box; }
 
+html {
+  /* Smooth scroll for in-page anchor links. Only set on the root
+   * element — applying it to `body` as well triggers Safari quirks
+   * where the smooth animation gets dropped on some anchor jumps. */
+  scroll-behavior: smooth;
+  /* Offset anchor scroll targets by the sticky nav height so a
+   * clicked section lands BELOW the nav instead of being hidden
+   * underneath it. Without this, the smooth scroll works but the
+   * section header ends up clipped under the sticky bar and the
+   * user perceives it as a broken jump. */
+  scroll-padding-top: 80px;
+  /* The base page background lives on `html`, not `body`, so the
+   * ambient light layer below can paint on top of it and still sit
+   * BEHIND everything in <body>. If the colour were on body
+   * instead, body's own paint would cover the ambient ::before.
+   */
+  background: var(--bg);
+}
+
+/* Page-level ambient light.
+ *
+ * Lives on `html::before` (not `body::before`) so it sits behind
+ * every descendant of <body> without any z-index gymnastics. Fixed
+ * position pins it to the viewport, so it stays visible as the
+ * user scrolls, giving the whole page a cohesive "mood lighting"
+ * feel that shows through every section with a transparent
+ * background (hero, showcase, how, support).
+ *
+ * Sections that use a solid `bg-alt` slab (features, install)
+ * intentionally cover this layer so they keep their distinct
+ * visual blocks, but their top/bottom edges fade into the ambient
+ * via a gradient mask so the transitions aren't hard cuts.
+ */
+html::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  /* Ambient gradients use `farthest-corner` sizing (the default for
+   * radial-gradient when no explicit shape/size is given) and scale
+   * automatically to the viewport, so they can't clip at the edges
+   * regardless of window size or aspect ratio.
+   *
+   * Two layers stacked:
+   *   1. Dominant purple halo from top-centre, which gives the page
+   *      its core mood-lighting feel and spotlights the hero mascot.
+   *   2. Three secondary accents (purple counter-glow top-right,
+   *      blue on the left mid, green bottom-right) that paint a
+   *      low-contrast aurora across the rest of the page so the
+   *      background reads as "alive" rather than flat.
+   *
+   * Opacities intentionally sit at the edge of perception — strong
+   * enough to give the page character, subtle enough not to compete
+   * with content. Earlier revisions undershot this and the page
+   * looked flat; revisions before that overshot and produced visible
+   * seams at the viewport edges.
+   */
+  background:
+    radial-gradient(at 50% 0%, rgba(191, 90, 242, 0.28) 0%, transparent 55%),
+    radial-gradient(at 85% 15%, rgba(156, 63, 224, 0.14) 0%, transparent 50%),
+    radial-gradient(at 20% 55%, rgba(74, 144, 226, 0.14) 0%, transparent 50%),
+    radial-gradient(at 75% 75%, rgba(52, 199, 89, 0.10) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", sans-serif;
   font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  scroll-behavior: smooth;
 }
 
-/* Page-level ambient light.
- *
- * Three very soft radial gradients pinned to the viewport (position:
- * fixed), not to any one section. This gives the whole page a
- * cohesive mood lighting that shows through every section with a
- * transparent background (hero, showcase, how, support) and softens
- * the edges where local section glows would otherwise be clipped by
- * per-section `overflow: hidden`. Sections that use a solid
- * `bg-alt` slab (features, install) intentionally cover this layer
- * so they keep their distinct visual blocks.
- *
- * `pointer-events: none` is required so the overlay doesn't eat
- * clicks on anything underneath. `z-index: 0` + `body > *
- * { position: relative; z-index: 1 }` puts content on top.
- */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 1400px 900px at 50% 10%, rgba(191, 90, 242, 0.14) 0%, transparent 65%),
-    radial-gradient(ellipse 1000px 700px at 12% 65%, rgba(74, 144, 226, 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 1000px 700px at 88% 80%, rgba(52, 199, 89, 0.05) 0%, transparent 60%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-body > * {
+body {
+  /* Transparent so `html::before`'s ambient layer can show through. */
+  background: transparent;
   position: relative;
   z-index: 1;
 }
@@ -158,11 +196,19 @@ a:hover { color: var(--purple-bright); }
 .hero-bg {
   position: absolute;
   inset: 0;
-  /* Only the focused top-centre mascot spotlight lives here now —
-   * the ambient bottom glows were moved to `body::before` so they
-   * aren't clipped by `.hero { overflow: hidden }`. */
+  /* Focused mascot spotlight. Two stacked layers:
+   *   1. A tight, bright halo (500 × 400) right over the mascot.
+   *   2. A wider, softer falloff (1000 × 700) to blend into the
+   *      surrounding ambient layer.
+   * Both centred at 50% 0% (hero top, midline) so the gradient
+   * radiates down around the pixel-art character without any
+   * visible cutoff. Hero's own `overflow: hidden` clips the
+   * bottom of the falloff, which is fine because the page-level
+   * `html::before` ambient takes over from there.
+   */
   background:
-    radial-gradient(ellipse 800px 600px at 50% 0%, rgba(191, 90, 242, 0.22) 0%, transparent 60%);
+    radial-gradient(ellipse 500px 400px at 50% 0%, rgba(217, 156, 255, 0.22) 0%, transparent 60%),
+    radial-gradient(ellipse 1000px 700px at 50% 0%, rgba(191, 90, 242, 0.18) 0%, transparent 65%);
   pointer-events: none;
 }
 
@@ -283,6 +329,12 @@ h1 {
 .cta-secondary {
   display: inline-flex;
   align-items: center;
+  /* Matches `.cta-primary` so icon + text buttons (e.g. "☕ Buy
+   * me a coffee" in the Support section) stay visually aligned
+   * with their primary counterparts. Text-only secondary buttons
+   * (e.g. "See how it works" in the hero) are unaffected — gap
+   * only applies between flex items. */
+  gap: 10px;
   padding: 14px 24px;
   border-radius: 12px;
   border: 1px solid var(--border-strong);
@@ -313,17 +365,15 @@ h1 {
   overflow: hidden;
 }
 
-.showcase::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  /* Toned down since `body::before` now provides the baseline ambient
-   * light — this layer just adds a localised purple accent in the
-   * top-right corner to match the section's content focus. */
-  background:
-    radial-gradient(ellipse 700px 500px at 80% 0%, rgba(191, 90, 242, 0.08) 0%, transparent 60%);
-  pointer-events: none;
-}
+/* Removed: `.showcase::before` used to layer a localised purple
+ * accent at 80% 0% (top-right of the section) on top of the global
+ * ambient. Because the ::before is scoped to the showcase's own box
+ * via `inset: 0` + parent's `overflow: hidden`, it produced a faint
+ * horizontal "onset line" on the right side of the page exactly at
+ * the hero/showcase boundary — where the local purple tint suddenly
+ * started. The global `html::before` ambient layer already provides
+ * the mood lighting the page needs, so there's no reason to keep a
+ * per-section duplicate. */
 
 .showcase .container { position: relative; }
 
@@ -535,9 +585,19 @@ h1 {
 
 .features {
   padding: 120px 0;
-  background: var(--bg-alt);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  /* Vertical gradient that fades in from transparent at top and
+   * out at bottom so the solid `bg-alt` slab blends into the
+   * surrounding ambient layer. Replaces the earlier hard
+   * `background: var(--bg-alt)` + top/bottom borders, which
+   * produced visible horizontal seams at the section boundaries
+   * once the page-level ambient layer was introduced. */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--bg-alt) 100px,
+    var(--bg-alt) calc(100% - 100px),
+    transparent 100%
+  );
 }
 
 .section-header {
@@ -725,8 +785,15 @@ kbd {
 
 .install {
   padding: 120px 0;
-  background: var(--bg-alt);
-  border-top: 1px solid var(--border);
+  /* Same fade-in/fade-out treatment as `.features` so the bg-alt
+   * slab blends into the ambient layer at both edges. */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--bg-alt) 100px,
+    var(--bg-alt) calc(100% - 100px),
+    transparent 100%
+  );
 }
 
 .install-card {
@@ -782,14 +849,30 @@ kbd {
    ============================================================ */
 
 .support {
-  padding: 80px 0;
+  padding: 120px 0;
+  /* Same fade-in/fade-out slab treatment as `.features` and
+   * `.install` so the section reads as a distinct block against
+   * the ambient layer instead of visually dissolving into it. */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--bg-alt) 100px,
+    var(--bg-alt) calc(100% - 100px),
+    transparent 100%
+  );
 }
 
 .support-card {
   max-width: 720px;
   margin: 0 auto;
   padding: 40px;
-  background: var(--surface);
+  /* Was `var(--surface)` which is not defined anywhere, so the
+   * card rendered with a transparent background and the contents
+   * floated directly on top of the section slab. Use the same
+   * `--bg-card` (#14141d) that `.install-card` and
+   * `.showcase-panel` use so every card on the page has matching
+   * body colour. */
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 16px;
   text-align: center;
