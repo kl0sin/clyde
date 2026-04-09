@@ -42,6 +42,38 @@ html, body {
   scroll-behavior: smooth;
 }
 
+/* Page-level ambient light.
+ *
+ * Three very soft radial gradients pinned to the viewport (position:
+ * fixed), not to any one section. This gives the whole page a
+ * cohesive mood lighting that shows through every section with a
+ * transparent background (hero, showcase, how, support) and softens
+ * the edges where local section glows would otherwise be clipped by
+ * per-section `overflow: hidden`. Sections that use a solid
+ * `bg-alt` slab (features, install) intentionally cover this layer
+ * so they keep their distinct visual blocks.
+ *
+ * `pointer-events: none` is required so the overlay doesn't eat
+ * clicks on anything underneath. `z-index: 0` + `body > *
+ * { position: relative; z-index: 1 }` puts content on top.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 1400px 900px at 50% 10%, rgba(191, 90, 242, 0.14) 0%, transparent 65%),
+    radial-gradient(ellipse 1000px 700px at 12% 65%, rgba(74, 144, 226, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 1000px 700px at 88% 80%, rgba(52, 199, 89, 0.05) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
 a { color: inherit; text-decoration: none; }
 a:hover { color: var(--purple-bright); }
 
@@ -126,10 +158,11 @@ a:hover { color: var(--purple-bright); }
 .hero-bg {
   position: absolute;
   inset: 0;
+  /* Only the focused top-centre mascot spotlight lives here now —
+   * the ambient bottom glows were moved to `body::before` so they
+   * aren't clipped by `.hero { overflow: hidden }`. */
   background:
-    radial-gradient(ellipse 800px 600px at 50% 0%, rgba(191, 90, 242, 0.18) 0%, transparent 60%),
-    radial-gradient(ellipse 600px 400px at 20% 80%, rgba(74, 144, 226, 0.10) 0%, transparent 60%),
-    radial-gradient(ellipse 600px 400px at 80% 80%, rgba(52, 199, 89, 0.06) 0%, transparent 60%);
+    radial-gradient(ellipse 800px 600px at 50% 0%, rgba(191, 90, 242, 0.22) 0%, transparent 60%);
   pointer-events: none;
 }
 
@@ -284,9 +317,11 @@ h1 {
   content: "";
   position: absolute;
   inset: 0;
+  /* Toned down since `body::before` now provides the baseline ambient
+   * light — this layer just adds a localised purple accent in the
+   * top-right corner to match the section's content focus. */
   background:
-    radial-gradient(ellipse 700px 500px at 80% 0%, rgba(191, 90, 242, 0.10) 0%, transparent 60%),
-    radial-gradient(ellipse 600px 400px at 10% 100%, rgba(74, 144, 226, 0.08) 0%, transparent 60%);
+    radial-gradient(ellipse 700px 500px at 80% 0%, rgba(191, 90, 242, 0.08) 0%, transparent 60%);
   pointer-events: none;
 }
 
