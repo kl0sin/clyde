@@ -112,6 +112,13 @@ v0.1.0 but should be triaged before / shortly after release.
   the `-busy` marker stays correct because `Stop` cleans it; the
   question is just contract documentation in `clyde-hook.sh` and
   `hook-smoke-test.md`.
+- [ ] Investigate `claude --resume` firing two `SessionStart` events
+  ~1 minute apart for the same session_id and same PID. Observed
+  during smoke test scenario #5: 13:04:51 first SessionStart right
+  after `--resume`, then 13:05:51 a second one with no other event
+  in between. Doesn't break Clyde (revival path is idempotent), but
+  worth understanding — may be a Claude Code "session reactivated"
+  signal we could surface in the UI, or a bug in their hook firing.
 - [ ] Phantom `-info` files from recycled PIDs. `discoverPIDs` only
   uses `kill(pid, 0)` to verify a session is alive, not the full
   `isLiveClaudeProcess` identity check. If a Claude PID dies and the
