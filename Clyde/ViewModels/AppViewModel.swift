@@ -311,6 +311,11 @@ final class AppViewModel: ObservableObject {
 
             let shouldAutoInstall: Bool
             switch issue {
+            case .claudeNotInstalled:
+                // Don't try to install a hook for a CLI that doesn't
+                // exist — the user needs to install Claude Code first.
+                // The banner will tell them.
+                shouldAutoInstall = false
             case .notInstalled:
                 shouldAutoInstall = !optedOut
             case .scriptMissing, .scriptNotExecutable, .outdated, .missingEvents:

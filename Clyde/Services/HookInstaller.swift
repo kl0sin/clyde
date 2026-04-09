@@ -110,6 +110,7 @@ enum HookInstaller {
 
     /// Result of the startup health check.
     enum HealthIssue: Equatable {
+        case claudeNotInstalled                 // Claude Code CLI is not on the system
         case notInstalled
         case scriptMissing                      // settings registers it but file is gone
         case scriptNotExecutable
@@ -119,6 +120,8 @@ enum HookInstaller {
 
         var bannerMessage: String {
             switch self {
+            case .claudeNotInstalled:
+                return "Claude Code isn't installed. Install it from claude.com/claude-code, then restart Clyde."
             case .notInstalled:
                 return "Claude hook not installed. Real-time tracking is disabled."
             case .scriptMissing:
@@ -135,9 +138,62 @@ enum HookInstaller {
         }
     }
 
+    /// Test override for `isClaudeCodeInstalled`. When non-nil, the
+    /// real detection is skipped and this value is returned. Production
+    /// code never sets this; tests use it to exercise both the
+    /// "Claude installed" and "not installed" branches of `healthCheck`
+    /// without having to fake a PATH or move the user's real
+    /// `~/.claude/` out of the way.
+    nonisolated(unsafe) static var claudeInstalledOverride: Bool?
+
+    /// True iff the Claude Code CLI looks installed on this machine.
+    /// Two signals, either of which is sufficient:
+    ///   1. `~/.claude/` exists. Claude Code creates this on first run
+    ///      and keeps settings + project state there. Its absence is
+    ///      strong evidence the CLI has never run.
+    ///   2. The `claude` binary is reachable via `/usr/bin/which`.
+    ///      Catches edge cases where the user moved their `~/.claude`
+    ///      to a different home but the binary is still installed.
+    ///
+    /// We deliberately do NOT shell out unless (1) fails — `which` adds
+    /// ~10 ms per healthCheck call, and the directory check covers the
+    /// 99% case. Production code never overrides the home root, so this
+    /// stays cheap.
+    static func isClaudeCodeInstalled() -> Bool {
+        if let override = claudeInstalledOverride {
+            return override
+        }
+
+        if FileManager.default.fileExists(atPath: AppPaths.claudeDir.path) {
+            return true
+        }
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        task.arguments = ["claude"]
+        task.standardOutput = Pipe()
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+            return task.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
     /// Inspect the installed hook on disk and the settings.json registration.
     /// Returns nil if everything looks healthy.
     static func healthCheck() -> HealthIssue? {
+        // Top-of-the-funnel: if Claude Code itself isn't installed,
+        // no amount of hook tinkering will help. Surface that as the
+        // dominant banner so the user fixes the root cause first
+        // instead of seeing the secondary "hook not installed"
+        // message and chasing the wrong rabbit hole.
+        if !isClaudeCodeInstalled() {
+            return .claudeNotInstalled
+        }
+
         let scriptPath = AppPaths.clydeHookScript.path
         let scriptExists = FileManager.default.fileExists(atPath: scriptPath)
 

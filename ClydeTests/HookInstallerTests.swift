@@ -17,10 +17,16 @@ final class HookInstallerTests: XCTestCase {
             .appendingPathComponent("clyde-hookinstaller-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
         AppPaths.homeOverride = tempHome
+        // Default to "Claude Code installed" so existing tests aren't
+        // forced to deal with the new claudeNotInstalled health check
+        // ahead of every assertion. Tests that exercise the missing-
+        // Claude path explicitly flip this back to false.
+        HookInstaller.claudeInstalledOverride = true
     }
 
     override func tearDown() async throws {
         AppPaths.homeOverride = nil
+        HookInstaller.claudeInstalledOverride = nil
         if let tempHome {
             try? FileManager.default.removeItem(at: tempHome)
         }
@@ -287,6 +293,26 @@ final class HookInstallerTests: XCTestCase {
                       "Canonical clyde-hook.sh must be installed")
         XCTAssertNil(HookInstaller.healthCheck(),
                      "Post-migration install must be fully healthy")
+    }
+
+    /// Regression: when Claude Code itself isn't installed, healthCheck
+    /// must return `.claudeNotInstalled` and short-circuit before any
+    /// hook-script-level checks. This is important because if a user
+    /// installs Clyde without Claude Code, the natural error chain
+    /// would be "hook script not installed" → "click to repair" →
+    /// repair fails (no Claude to register against) → confusing.
+    /// Surfacing claudeNotInstalled at the top of the funnel sends
+    /// the user to the actual root cause first.
+    func testHealthCheckReportsClaudeNotInstalledFirst() throws {
+        HookInstaller.claudeInstalledOverride = false
+
+        // Even if everything else is healthy, claudeNotInstalled wins.
+        try HookInstaller.install()
+        XCTAssertEqual(HookInstaller.healthCheck(), .claudeNotInstalled)
+
+        // Restore and confirm we go back to nil (or some other lower-priority issue).
+        HookInstaller.claudeInstalledOverride = true
+        XCTAssertNotEqual(HookInstaller.healthCheck(), .claudeNotInstalled)
     }
 
     /// Regression: claude-visual (and other tools) own their own hooks

@@ -231,6 +231,48 @@ struct SettingsView: View {
                 Divider().background(Color(white: 0.2))
 
                 VStack(alignment: .leading, spacing: 2) {
+                    Text("Reveal hook log")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white)
+                    Text("Selects ~/.clyde/logs/hook.log in Finder. Useful when reporting an issue — drag the file straight from there into a bug report.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(white: 0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button(action: {
+                    let logURL = AppPaths.clydeDir
+                        .appendingPathComponent("logs")
+                        .appendingPathComponent("hook.log")
+                    // Make sure the parent dir exists, then touch the
+                    // file if it doesn't, so Finder always has something
+                    // to select instead of silently no-op'ing.
+                    try? FileManager.default.createDirectory(
+                        at: logURL.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    if !FileManager.default.fileExists(atPath: logURL.path) {
+                        FileManager.default.createFile(atPath: logURL.path, contents: nil)
+                    }
+                    NSWorkspace.shared.activateFileViewerSelecting([logURL])
+                }) {
+                    HStack {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 11))
+                        Text("Reveal hook.log")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(Color(white: 0.8))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Color(white: 0.18))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+
+                Divider().background(Color(white: 0.2))
+
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Reset tracking state")
                         .font(.system(size: 12))
                         .foregroundStyle(.white)

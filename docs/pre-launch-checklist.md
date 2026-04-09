@@ -16,7 +16,7 @@ manual verification.
 - [x] Request notification permission with clear explanation of why — `NotificationService.requestPermission()` called from `AppViewModel.start()`
 - [x] Prompt to install the Claude Code hook (with opt-out) — `HookInstaller` + `hookOptOutKey` in `AppViewModel`
 - [x] Auto-install / auto-repair if hook is missing or corrupted — `ensureHookHealthy()` runs at start, on 60s tick, on FSEvents from `~/.claude/hooks/` and `~/.claude/settings.json`
-- [ ] Detect missing/uninstalled Claude Code and show a helpful message
+- [x] Detect missing/uninstalled Claude Code and show a helpful message — `HookInstaller.isClaudeCodeInstalled()` + `.claudeNotInstalled` health issue, surfaced via `HookHealthBanner` with copy "Install Claude Code from claude.com/claude-code"
 - [ ] Quick "how to use" tooltip or coachmarks on first expand
 
 ## Code Signing & Notarization
@@ -45,7 +45,7 @@ manual verification.
 - [x] Privacy-respecting defaults (telemetry OFF until explicitly enabled) — there is no telemetry at all today
 - [x] Log file rotation — `clyde-hook.sh` rotates `~/.clyde/logs/hook.log` at ~512 KiB; macOS unified logging handles app logs
 - [x] Diagnostic export — "Copy diagnostics" in `SettingsView`
-- [ ] "Reveal logs in Finder" button in Settings
+- [x] "Reveal logs in Finder" button in Settings — Maintenance section has "Reveal hook.log" which selects `~/.clyde/logs/hook.log` directly via `NSWorkspace.activateFileViewerSelecting`
 
 ## Marketing & Web Presence
 
@@ -60,7 +60,7 @@ manual verification.
 
 - [x] Privacy policy — `site/privacy.html`
 - [x] License chosen and added to repo — MIT, `LICENSE` file at root
-- [ ] Third-party licenses screen in About / Settings (Sparkle uses MIT, but it should be surfaced to the user)
+- [x] Third-party licenses screen in About / Settings — `AcknowledgementsSheet` in `SettingsView` with the verbatim Sparkle MIT license inline
 - [ ] Terms of use / EULA — likely unnecessary given MIT, decide explicitly
 - [ ] Trademark check on the name "Clyde"
 
