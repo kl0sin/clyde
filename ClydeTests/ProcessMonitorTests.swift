@@ -241,6 +241,117 @@ final class ProcessMonitorTests: XCTestCase {
                        "session_id must be preserved across revival")
     }
 
+    /// Regression: a `claude --resume` shows the new claude binary to
+    /// `pgrep -x claude` ~hundreds of ms before its `SessionStart` hook
+    /// fires and writes the `-info` file. The pgrep-only PID has no
+    /// `sessionId` yet, so the revival path can't fire — without the
+    /// deferral mitigation a brand-new pgrep-only row would appear
+    /// alongside the existing ghost and the user would briefly see two
+    /// rows for what is logically one session.
+    ///
+    /// Contract: the FIRST appearance of a pgrep-only PID while a
+    /// recent ghost exists is suppressed. Once `-info` arrives (or one
+    /// extra tick passes), the row is rendered normally.
+    func testPgrepOnlyPIDDeferredWhenRecentGhostExists() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+
+        // Tick 1: discover existing session via -info file.
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        let monitor = ProcessMonitor(
+            shell: shell,
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.count, 1)
+
+        // Tick 2: SessionEnd — remove the -info file. Session becomes ghost.
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-info"))
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.count, 1)
+        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false)
+
+        // Tick 3: Claude binary launches via `--resume`, but its
+        // SessionStart hook hasn't fired yet. pgrep finds the new PID,
+        // there's no -info, so hookInfoByPID stays empty for it. The
+        // mitigation must DEFER this PID for one tick.
+        //
+        // Use init (pid 1) as the resume pid because it's guaranteed
+        // alive on macOS and `kill(1, 0)` succeeds for any user, so
+        // discoverPIDs won't ESRCH-prune the -info file we'll write
+        // in tick 4. The injected isLiveClaudeProcessCheck stub means
+        // we don't actually need pid 1 to be a Claude binary.
+        let resumePID: pid_t = 1
+        shell.responses["pgrep"] = "\(resumePID)"
+        await monitor.poll()
+        // Only the ghost should still be visible — the pgrep-only PID
+        // is deferred, not added.
+        XCTAssertEqual(monitor.sessions.count, 1,
+                       "deferred pgrep-only PID must NOT appear alongside the ghost")
+        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false)
+
+        // Tick 4: SessionStart hook fired now → -info file written with
+        // the SAME sessionId and the new PID. The revival path should
+        // run cleanly: ghost is replaced by a single live row.
+        let body = #"{"session_id":"\#(sid)","pid":\#(resumePID),"cwd":"/tmp","started_at":0}"#
+        try? body.write(
+            to: dir.appendingPathComponent("\(sid)-info"),
+            atomically: true,
+            encoding: .utf8
+        )
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.count, 1, "expected exactly 1 row after revival")
+        XCTAssertEqual(monitor.sessions.filter { $0.isGhost }.count, 0,
+                       "ghost must not coexist with the revived live row")
+        XCTAssertEqual(monitor.sessions.first?.pid, resumePID)
+        XCTAssertEqual(monitor.sessions.first?.sessionId, sid)
+    }
+
+    /// Companion to the deferral test: the deferral is strictly ONE
+    /// tick per PID. If `SessionStart` never fires (e.g. genuinely
+    /// new session that just happens to coincide with a recent ghost),
+    /// the second appearance must render normally — we don't want to
+    /// hide a real session indefinitely.
+    func testPgrepOnlyPIDRendersOnSecondAppearance() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        let monitor = ProcessMonitor(
+            shell: shell,
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-info"))
+        await monitor.poll()
+        // Confirm we have a ghost.
+        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false)
+
+        // Brand-new (non-resume) pgrep-only PID arrives. Pid 1 again
+        // for the same kill(pid, 0) reason as the previous test.
+        let newPID: pid_t = 1
+        shell.responses["pgrep"] = "\(newPID)"
+
+        // First appearance — deferred.
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.count, 1)
+        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false)
+
+        // Second appearance — must render even though hookInfo never arrived.
+        await monitor.poll()
+        let live = monitor.sessions.filter { !$0.isGhost }
+        XCTAssertEqual(live.count, 1, "deferred PID must surface on second tick")
+        XCTAssertEqual(live.first?.pid, newPID)
+    }
+
     /// Regression for the inverse: when the identity check rejects a
     /// PID (e.g. PID got recycled to a non-claude binary), the marker
     /// MUST be cleaned up so we don't keep a stale "busy" forever.

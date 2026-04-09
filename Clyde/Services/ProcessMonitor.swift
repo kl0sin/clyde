@@ -53,6 +53,20 @@ final class ProcessMonitor: ObservableObject {
     /// decoupled from the heavier child-process poll.
     private var hookBusyPIDs: Set<pid_t> = []
 
+    /// Pgrep-only PIDs (no `-info` file yet, so no `sessionId`) that we
+    /// deferred for one poll tick to give the SessionStart hook a chance
+    /// to fire. Used by `poll()` to ensure each PID is deferred at most
+    /// once — second appearance is rendered normally even if the hook
+    /// hasn't shown up. See the "deferral" comment in `poll()` for the
+    /// race this closes.
+    private var deferredPgrepPIDs: Set<pid_t> = []
+
+    /// Window during which a recently-ended ghost row implies "the next
+    /// new pgrep PID is probably a resume of the same session". Anything
+    /// longer than this and we stop suspecting resume; anything shorter
+    /// and slow Claude startups would race past it.
+    private static let resumeDeferWindow: TimeInterval = 5
+
     init(
         shell: ShellExecutor = RealShellExecutor(),
         pollingInterval: TimeInterval = AppConstants.defaultPollingInterval,
@@ -202,12 +216,45 @@ final class ProcessMonitor: ObservableObject {
         // (the ghost from the old PID, plus the freshly-revived live row).
         var revivedSessionIds: Set<String> = []
 
+        // Resume-flicker mitigation. When `claude --resume` runs, the new
+        // claude binary is visible to `pgrep -x claude` ~hundreds of ms
+        // before its `SessionStart` hook fires and writes the `-info`
+        // file. During that window the new PID has no `hookInfoByPID`
+        // entry, so we don't know its `sessionId`, so the revival path
+        // can't fire — a brand-new pgrep-only row appears alongside the
+        // existing ghost and the user briefly sees two rows for what is
+        // logically one session.
+        //
+        // Mitigation: when a pgrep-only PID first shows up AND there's a
+        // recently-ended ghost on screen (within `resumeDeferWindow`),
+        // skip it for ONE tick. By the next poll the SessionStart hook
+        // has typically fired, hookInfoByPID has the session_id, and the
+        // revival path runs cleanly with no flash. The deferral is
+        // strictly one tick per PID — second appearance is always
+        // rendered, so a genuine non-resume new session is delayed by
+        // at most one polling interval.
+        let hasRecentGhost = sessions.contains { session in
+            guard session.isGhost, let endedAt = session.endedAt else { return false }
+            return now.timeIntervalSince(endedAt) < Self.resumeDeferWindow
+        }
+        var nextDeferred: Set<pid_t> = []
+
         for pid in pids {
+            let info = hookInfoByPID[pid]
+            let isPgrepOnly = info == nil
+
+            if isPgrepOnly && hasRecentGhost && !deferredPgrepPIDs.contains(pid) {
+                // First time we see this pgrep-only PID alongside a
+                // recent ghost — defer one tick.
+                nextDeferred.insert(pid)
+                continue
+            }
+
             let newStatus = await classifyStatus(pid: pid)
             // Detect revival BEFORE updatedSession runs, because
             // updatedSession() returns the freshly-revived row and
             // we lose the "was a ghost" signal once the row is live.
-            if let info = hookInfoByPID[pid],
+            if let info,
                !info.sessionId.isEmpty,
                sessions.contains(where: { $0.sessionId == info.sessionId && $0.isGhost })
             {
@@ -216,6 +263,8 @@ final class ProcessMonitor: ObservableObject {
             let session = await updatedSession(pid: pid, newStatus: newStatus)
             updatedSessions.append(session)
         }
+
+        deferredPgrepPIDs = nextDeferred
 
         // Promote sessions that vanished this cycle into ghosts. They keep
         // their last metadata so the row stays meaningful, just labelled
