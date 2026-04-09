@@ -92,7 +92,15 @@ manual verification.
 - [x] CHANGELOG.md exists at repo root
 - [x] Release script / GitHub Action that builds, signs, notarizes, uploads — `.github/workflows/release.yml` + `scripts/release/*`
 - [x] Sparkle EdDSA keypair generated and `SUPublicEDKey` set in `Info.plist`
-- [ ] Tag → release flow tested end-to-end on a dry run
+- [ ] Tag → release flow tested end-to-end on a dry run — deferred to
+  the actual `v0.1.0` cut. Running the full sign + notarize + DMG
+  pipeline locally requires the Apple Developer credentials and ~10 min
+  per attempt for notarization, and we'd rather front-load that work
+  on the real release than rehearse it ahead of time. Risk: the first
+  real cut might surface a config issue that a dry-run would have
+  caught earlier.
+- [ ] Gatekeeper accept on a clean Mac — depends on having a signed +
+  notarized DMG, so deferred with the dry-run above.
 - [ ] First release cut (`v0.1.0`) — gated on the manual smoke test pass
 
 ## Hook pipeline followups
