@@ -114,8 +114,9 @@ final class AppViewModel: ObservableObject {
         // working in that session again". That was wrong — permission
         // requests happen *while* Claude is still busy (Stop hasn't fired),
         // so clearing attention on busy immediately wiped every permission
-        // alert. Attention is now only cleared by explicit user action
-        // (focusSession), by the hook's SessionEnd, or by the scan timeout.
+        // alert. Attention is now only cleared by the hook script
+        // (PreToolUse = user answered, Stop = turn ended, SessionEnd =
+        // session closed) or by process death (scan sees kill fails).
         processMonitor.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
@@ -143,7 +144,15 @@ final class AppViewModel: ObservableObject {
     }
 
     func focusSession(_ session: Session) {
-        attentionMonitor.clearAttention(pid: session.pid)
+        // NOTE: we deliberately do NOT call clearAttention here.
+        // Clicking a row means "show me the terminal" — the user
+        // hasn't answered the permission prompt yet. The hook script
+        // handles the cleanup: PreToolUse fires once the user grants
+        // or denies, removing the event file, and the next
+        // AttentionMonitor scan tick drops the PID from attentionPIDs.
+        // Clearing attention eagerly on click caused "Needs Input" to
+        // vanish the instant the user tapped the row, even though the
+        // prompt was still sitting in the terminal unanswered.
         Task {
             do {
                 try await terminalLauncher.focusSession(session)
