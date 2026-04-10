@@ -73,7 +73,7 @@ manual verification.
 - [ ] Test on minimum supported macOS version (currently 13.0 per `Info.plist`)
 - [ ] Test on Intel + Apple Silicon (universal binary)
 - [ ] Test with multiple Claude Code sessions across multiple terminals
-- [ ] Test all supported terminal adapters (Terminal.app, Warp, Ghostty — see `TerminalLauncher.allAdapters`)
+- [ ] Test all supported terminal adapters (Terminal.app, iTerm2, Warp, Ghostty — see `TerminalLauncher.allAdapters`)
 - [ ] Test with no Claude Code installed
 - [ ] Test on a fresh user account (no `~/.claude`, no `~/.clyde`)
 - [ ] Memory leak / long-running session test (24h+)
