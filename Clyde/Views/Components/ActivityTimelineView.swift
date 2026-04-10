@@ -119,9 +119,14 @@ struct ActivityTimelineView: View {
     private func color(for kind: ActivityEvent.Kind) -> Color {
         switch kind {
         case .sessionStarted:      return SessionTheme.processingColor
+        case .sessionResumed:      return SessionTheme.processingColor
+        case .sessionCompacted:    return Color(white: 0.6)
         case .promptSubmitted:     return SessionTheme.processingColor
         case .permissionRequested: return SessionTheme.attentionColor
         case .permissionResolved:  return SessionTheme.processingColor
+        case .errorOccurred:       return SessionTheme.errorColor
+        case .subagentStarted:     return SessionTheme.processingColor
+        case .subagentStopped:     return SessionTheme.processingColor
         case .sessionReady:        return SessionTheme.readyColor
         case .sessionEnded:        return Color(white: 0.5)
         }

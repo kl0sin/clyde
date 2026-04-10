@@ -7,6 +7,7 @@ enum SessionTheme {
     /// signals AI processing; blue for attention; green for ready.
     static let processingColor = Color(red: 0.749, green: 0.353, blue: 0.949) // #bf5af2
     static let attentionColor = Color.blue
+    static let errorColor = Color.red
     static let readyColor = Color.green
     static let processingLabel = "Working"
     static let attentionLabel = "Needs input"

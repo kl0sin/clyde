@@ -265,6 +265,18 @@ struct SessionRow: View {
             .padding(.vertical, 3)
             .background(SessionTheme.attentionColor.opacity(0.15))
             .clipShape(Capsule())
+        } else if let errorText = session.errorDisplayText {
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 8))
+                Text(errorText)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(SessionTheme.errorColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(SessionTheme.errorColor.opacity(0.15))
+            .clipShape(Capsule())
         } else if session.status == .busy {
             HStack(spacing: 5) {
                 Circle()

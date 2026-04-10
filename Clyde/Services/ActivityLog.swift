@@ -19,6 +19,8 @@ final class ActivityLog: ObservableObject {
     private struct Snapshot {
         var status: SessionStatus
         var hadAttention: Bool
+        var hadError: String?
+        var hadSubagent: String?
         var displayName: String
     }
     private var snapshots: [pid_t: Snapshot] = [:]
@@ -41,6 +43,8 @@ final class ActivityLog: ObservableObject {
             snapshots[session.pid] = Snapshot(
                 status: session.status,
                 hadAttention: attentionMonitor.attentionPIDs.contains(session.pid),
+                hadError: session.errorReason,
+                hadSubagent: session.subagentType,
                 displayName: session.displayName
             )
         }
@@ -81,6 +85,8 @@ final class ActivityLog: ObservableObject {
             hasher.combine(s.pid)
             hasher.combine(s.status)
             hasher.combine(attentionPIDs.contains(s.pid))
+            hasher.combine(s.errorReason)
+            hasher.combine(s.subagentType)
         }
         let fingerprint = hasher.finalize()
         if fingerprint == lastReconcileFingerprint && snapshots.keys.allSatisfy(livePIDs.contains) {
@@ -88,11 +94,19 @@ final class ActivityLog: ObservableObject {
         }
         lastReconcileFingerprint = fingerprint
 
-        // Newly seen sessions
+        // Newly seen sessions — use hook source to distinguish
+        // startup vs resume vs compact.
         for session in live where snapshots[session.pid] == nil {
+            let source = processMonitor?.hookInfoByPID[session.pid]?.source ?? ""
+            let kind: ActivityEvent.Kind
+            switch source {
+            case "resume": kind = .sessionResumed
+            case "compact", "clear": kind = .sessionCompacted
+            default: kind = .sessionStarted
+            }
             append(.init(
                 timestamp: Date(),
-                kind: .sessionStarted,
+                kind: kind,
                 sessionDisplayName: session.displayName,
                 sessionPID: session.pid
             ))
@@ -137,11 +151,40 @@ final class ActivityLog: ObservableObject {
                         sessionPID: session.pid
                     ))
                 }
+
+                // Error appeared (StopFailure with reason)
+                if prev.hadError == nil, let reason = session.errorReason {
+                    append(.init(
+                        timestamp: Date(),
+                        kind: .errorOccurred(reason: session.errorDisplayText ?? reason),
+                        sessionDisplayName: session.displayName,
+                        sessionPID: session.pid
+                    ))
+                }
+
+                // Subagent lifecycle
+                if prev.hadSubagent == nil, let agentType = session.subagentType {
+                    append(.init(
+                        timestamp: Date(),
+                        kind: .subagentStarted(agentType: agentType),
+                        sessionDisplayName: session.displayName,
+                        sessionPID: session.pid
+                    ))
+                } else if prev.hadSubagent != nil && session.subagentType == nil {
+                    append(.init(
+                        timestamp: Date(),
+                        kind: .subagentStopped,
+                        sessionDisplayName: session.displayName,
+                        sessionPID: session.pid
+                    ))
+                }
             }
 
             snapshots[session.pid] = Snapshot(
                 status: session.status,
                 hadAttention: hadAttention,
+                hadError: session.errorReason,
+                hadSubagent: session.subagentType,
                 displayName: session.displayName
             )
         }

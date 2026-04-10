@@ -19,11 +19,32 @@ struct Session: Identifiable, Equatable {
     var customName: String?
     var statusChangedAt: Date
     var needsAttention: Bool = false
+    /// Non-nil when a StopFailure event reported an API/billing error.
+    /// Orthogonal to busy/idle — a session can be busy AND have an error
+    /// (Claude retrying internally). Cleared by the next Stop event.
+    var errorReason: String? = nil
+    /// Non-nil while a subagent is actively running inside this session.
+    var subagentType: String? = nil
     /// Set when the underlying Claude process has exited but we're keeping
     /// the row visible briefly. Nil for live sessions.
     var endedAt: Date? = nil
 
     var isGhost: Bool { endedAt != nil }
+
+    /// Human-readable label for the error badge. Returns nil if there
+    /// is no error, so the UI can gate the badge on this being non-nil.
+    var errorDisplayText: String? {
+        guard let reason = errorReason else { return nil }
+        switch reason {
+        case "rate_limit":              return "Rate limited"
+        case "billing_error":           return "Billing error"
+        case "server_error":            return "Server error"
+        case "max_output_tokens":       return "Output limit"
+        case "authentication_failed":   return "Auth failed"
+        case "invalid_request":         return "Invalid request"
+        default:                        return "Error"
+        }
+    }
 
     var displayName: String {
         if let customName, !customName.isEmpty {

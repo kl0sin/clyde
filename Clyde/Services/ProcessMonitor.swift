@@ -53,6 +53,15 @@ final class ProcessMonitor: ObservableObject {
     /// decoupled from the heavier child-process poll.
     private var hookBusyPIDs: Set<pid_t> = []
 
+    /// Error reason per PID, populated from `-error` marker files
+    /// written by the StopFailure hook. Keyed by PID, value is the
+    /// `stop_reason` string (e.g. "rate_limit", "server_error").
+    private var hookErrorByPID: [pid_t: String] = [:]
+
+    /// Active subagent type per PID, populated from `-subagent` marker
+    /// files written by SubagentStart. Cleared on SubagentStop / Stop.
+    private var hookSubagentByPID: [pid_t: String] = [:]
+
     /// Pgrep-only PIDs (no `-info` file yet, so no `sessionId`) that we
     /// deferred for one poll tick to give the SessionStart hook a chance
     /// to fire. Used by `poll()` to ensure each PID is deferred at most
@@ -97,6 +106,10 @@ final class ProcessMonitor: ObservableObject {
     struct HookInfo: Equatable {
         let sessionId: String
         let cwd: String
+        /// "startup", "resume", "clear", or "compact". Empty for
+        /// sessions discovered via pgrep or legacy -info files that
+        /// predate the source field (v15+).
+        let source: String
     }
 
     func discoverPIDs() async -> [pid_t] {
@@ -134,7 +147,7 @@ final class ProcessMonitor: ObservableObject {
                 }
                 pids.insert(info.pid)
                 if !info.sessionId.isEmpty {
-                    hookInfo[info.pid] = HookInfo(sessionId: info.sessionId, cwd: info.cwd)
+                    hookInfo[info.pid] = HookInfo(sessionId: info.sessionId, cwd: info.cwd, source: info.source)
                 }
             }
         }
@@ -156,6 +169,7 @@ final class ProcessMonitor: ObservableObject {
         let pid: pid_t
         let sessionId: String
         let cwd: String
+        let source: String
     }
 
     private func readInfoFile(file: URL) -> ParsedInfo? {
@@ -166,7 +180,8 @@ final class ProcessMonitor: ObservableObject {
         }
         let sessionId = (json["session_id"] as? String) ?? ""
         let cwd = (json["cwd"] as? String) ?? ""
-        return ParsedInfo(pid: pid_t(pidValue), sessionId: sessionId, cwd: cwd)
+        let source = (json["source"] as? String) ?? ""
+        return ParsedInfo(pid: pid_t(pidValue), sessionId: sessionId, cwd: cwd, source: source)
     }
 
     /// Classify a Claude session's state. Pure hook-driven — there's no
@@ -198,6 +213,8 @@ final class ProcessMonitor: ObservableObject {
         // having run first. This makes the function deterministic for tests
         // and removes any chance of a race on startup.
         refreshHookBusyPIDs()
+        refreshHookErrors()
+        refreshHookSubagents()
 
         let pids = await discoverPIDs()
         let now = Date()
@@ -330,12 +347,12 @@ final class ProcessMonitor: ObservableObject {
             if existing.sessionId == nil, let info {
                 existing.sessionId = info.sessionId
             }
-            if existing.workingDirectory.isEmpty {
-                if let info, !info.cwd.isEmpty {
-                    existing.workingDirectory = info.cwd
-                } else {
-                    existing.workingDirectory = await detectCWD(pid: pid)
-                }
+            // Always update cwd from hook info (not just when empty) so
+            // CwdChanged events propagate the new project name live.
+            if let info, !info.cwd.isEmpty {
+                existing.workingDirectory = info.cwd
+            } else if existing.workingDirectory.isEmpty {
+                existing.workingDirectory = await detectCWD(pid: pid)
             }
 
             if existing.status != newStatus {
@@ -345,6 +362,8 @@ final class ProcessMonitor: ObservableObject {
                     onSessionBecameIdle?(existing)
                 }
             }
+            existing.errorReason = hookErrorByPID[pid]
+            existing.subagentType = hookSubagentByPID[pid]
             return existing
         }
 
@@ -479,11 +498,76 @@ final class ProcessMonitor: ObservableObject {
         return changed
     }
 
+    /// Reads `-error` marker files written by the StopFailure hook.
+    /// Returns true if the set changed since last call.
+    @discardableResult
+    private func refreshHookErrors() -> Bool {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: stateDir, includingPropertiesForKeys: nil
+        ) else {
+            let changed = !hookErrorByPID.isEmpty
+            if changed { hookErrorByPID = [:] }
+            return changed
+        }
+        var errors: [pid_t: String] = [:]
+        for file in files where file.lastPathComponent.hasSuffix("-error") {
+            guard let data = try? Data(contentsOf: file),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let pidValue = json["pid"] as? Int,
+                  let reason = json["reason"] as? String else {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            let pid = pid_t(pidValue)
+            if kill(pid, 0) != 0 {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            errors[pid] = reason
+        }
+        let changed = errors != hookErrorByPID
+        if changed { hookErrorByPID = errors }
+        return changed
+    }
+
+    /// Reads `-subagent` marker files written by SubagentStart.
+    @discardableResult
+    private func refreshHookSubagents() -> Bool {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: stateDir, includingPropertiesForKeys: nil
+        ) else {
+            let changed = !hookSubagentByPID.isEmpty
+            if changed { hookSubagentByPID = [:] }
+            return changed
+        }
+        var agents: [pid_t: String] = [:]
+        for file in files where file.lastPathComponent.hasSuffix("-subagent") {
+            guard let data = try? Data(contentsOf: file),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let pidValue = json["pid"] as? Int else {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            let pid = pid_t(pidValue)
+            if kill(pid, 0) != 0 {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            let agentType = (json["agent_type"] as? String) ?? "unknown"
+            agents[pid] = agentType
+        }
+        let changed = agents != hookSubagentByPID
+        if changed { hookSubagentByPID = agents }
+        return changed
+    }
+
     /// Watches the state dir for changes via FSEvents and triggers a re-poll.
     /// Cheap (just dir listing + mtime reads) so it runs independently of the
     /// main classification cycle.
     private func pollHookState() {
         let busyChanged = refreshHookBusyPIDs()
+        let errorChanged = refreshHookErrors()
+        let subagentChanged = refreshHookSubagents()
 
         // Detect session arrivals/departures via -info file presence so a new
         // session is reflected in the UI immediately instead of waiting for
@@ -507,11 +591,11 @@ final class ProcessMonitor: ObservableObject {
         // This avoids waiting on the full `poll()` cycle (which shells
         // out to pgrep — ~50–200 ms of latency before the UI catches
         // up to the hook event).
-        if busyChanged {
+        if busyChanged || errorChanged || subagentChanged {
             applyBusyStateToSessions()
         }
 
-        if busyChanged || infoChanged {
+        if busyChanged || infoChanged || errorChanged || subagentChanged {
             Task { await self.poll() }
         }
     }
@@ -533,6 +617,17 @@ final class ProcessMonitor: ObservableObject {
                 if newStatus == .idle {
                     onSessionBecameIdle?(updated[index])
                 }
+            }
+            // Apply error + subagent state inline for fast UI feedback.
+            let newError = hookErrorByPID[pid]
+            if updated[index].errorReason != newError {
+                updated[index].errorReason = newError
+                changed = true
+            }
+            let newSubagent = hookSubagentByPID[pid]
+            if updated[index].subagentType != newSubagent {
+                updated[index].subagentType = newSubagent
+                changed = true
             }
         }
         if changed {
