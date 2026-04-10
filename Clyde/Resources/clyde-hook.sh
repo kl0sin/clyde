@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 14
+# clyde-hook-version: 15
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -10,18 +10,23 @@
 # Writes are atomic (mktemp + mv) so concurrent hooks can't corrupt files.
 #
 # Handled events:
-#   SessionStart        → state/<session_id>-info (alive marker)
-#   SessionEnd          → removes info + busy + event for that session
+#   SessionStart        → state/<session_id>-info (alive marker, includes source)
+#   SessionEnd          → removes info + busy + error + subagent + event
 #   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info)
-#   Stop                → removes busy + event marker
-#   StopFailure         → no-op (Claude Code retries internally; the
-#                         turn is NOT actually over, so removing the
-#                         busy marker here causes mid-turn flips to
-#                         "ready" while Claude is still working)
+#   Stop                → removes busy + error + subagent + event marker
+#   StopFailure         → writes state/<session_id>-error with stop_reason
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
 #   PreToolUse          → clears event file + refreshes busy marker mtime
 #   PostToolUseFailure  → removes busy marker IF is_interrupt=true (user Ctrl+C)
+#   CwdChanged          → rewrites state/<session_id>-info with new cwd
+#   Elicitation         → events/<session_id>.json (MCP tool input request)
+#   ElicitationResult   → clears event file (MCP input answered)
+#   SubagentStart       → state/<session_id>-subagent (agent type)
+#   SubagentStop        → removes subagent marker
+#   Notification        → log only (no state files)
+#   PreCompact          → log only (no state files)
+#   PostCompact         → log only (no state files)
 #
 # This script is purely advisory — Clyde uses it as a one-way signal
 # bus. It must NEVER block or fail noisily, otherwise Claude Code
@@ -146,11 +151,13 @@ atomic_write() {
 
 case "$HOOK_EVENT" in
     SessionStart)
+        SOURCE=$(extract_field source)
+        ESC_SOURCE=$(printf '%s' "$SOURCE" | sed 's/\\/\\\\/g; s/"/\\"/g')
         atomic_write "$STATE_DIR/$KEY-info" \
-            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP}"
+            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"}"
         ;;
     SessionEnd)
-        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$EVENTS_DIR/$KEY.json"
+        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$EVENTS_DIR/$KEY.json"
         ;;
     PermissionRequest)
         atomic_write "$EVENTS_DIR/$KEY.json" \
@@ -178,19 +185,22 @@ case "$HOOK_EVENT" in
         fi
         ;;
     Stop)
-        # Clear both the busy marker AND any pending attention event for
-        # this session. Stop means the turn is over — any permission
-        # request inside that turn has been resolved by the user.
-        rm -f "$STATE_DIR/$KEY-busy" "$EVENTS_DIR/$KEY.json"
+        # Clear busy, error, subagent, and attention markers. Stop means
+        # the turn is over — everything from that turn is resolved.
+        rm -f "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$EVENTS_DIR/$KEY.json"
         ;;
     StopFailure)
-        # No-op. StopFailure fires on transient Stop-hook failures and
-        # API hiccups; Claude Code retries internally and the turn is
-        # NOT actually over. Removing the busy marker here caused
-        # mid-turn flips to "ready" while Claude was still mid-tool —
-        # the very bug we got reports about. Trust Stop / SessionEnd /
-        # process death to clean up instead.
-        :
+        # API/billing/rate-limit error. Extract stop_reason so Clyde
+        # can surface it in the UI ("Rate limited", "Server error",
+        # etc.). The busy marker stays — Claude may retry internally
+        # — but we write an error file so the UI shows *why* the
+        # session is stuck.
+        STOP_REASON=$(extract_field stop_reason)
+        if [ -n "$STOP_REASON" ]; then
+            ESC_REASON=$(printf '%s' "$STOP_REASON" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            atomic_write "$STATE_DIR/$KEY-error" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"reason\": \"$ESC_REASON\", \"timestamp\": $TIMESTAMP}"
+        fi
         ;;
     PostToolUseFailure)
         # A tool execution failed. The most important sub-case is the
@@ -217,6 +227,42 @@ case "$HOOK_EVENT" in
         # the Claude process is alive — but keeping mtime current is
         # cheap and useful.
         [ -f "$STATE_DIR/$KEY-busy" ] && touch "$STATE_DIR/$KEY-busy"
+        ;;
+    CwdChanged)
+        # User changed directory mid-session. Rewrite -info with the
+        # new cwd so Clyde's project name display stays current.
+        if [ -f "$STATE_DIR/$KEY-info" ] && [ -n "$CWD" ]; then
+            atomic_write "$STATE_DIR/$KEY-info" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP}"
+        fi
+        ;;
+    Elicitation)
+        # MCP tool is requesting user input (form/dialog). Treat the
+        # same as PermissionRequest — write an attention event file.
+        atomic_write "$EVENTS_DIR/$KEY.json" \
+            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"event\": \"$HOOK_EVENT\", \"timestamp\": $TIMESTAMP}"
+        ;;
+    ElicitationResult)
+        # User answered the MCP input form. Clear attention, same as
+        # PermissionDenied does for permission prompts.
+        rm -f "$EVENTS_DIR/$KEY.json"
+        ;;
+    SubagentStart)
+        # Claude spawned a subagent. Write a marker so Clyde can
+        # surface "Working (subagent: Explore)" or similar.
+        AGENT_TYPE=$(extract_field agent_type)
+        ESC_AGENT=$(printf '%s' "$AGENT_TYPE" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        atomic_write "$STATE_DIR/$KEY-subagent" \
+            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"agent_type\": \"$ESC_AGENT\", \"timestamp\": $TIMESTAMP}"
+        ;;
+    SubagentStop)
+        rm -f "$STATE_DIR/$KEY-subagent"
+        ;;
+    Notification|PreCompact|PostCompact)
+        # Log-only events. The always-on event log at the top of this
+        # script captures them for diagnostics. Future versions may
+        # add state files for richer UI (e.g. "Compacting..." badge).
+        :
         ;;
 esac
 

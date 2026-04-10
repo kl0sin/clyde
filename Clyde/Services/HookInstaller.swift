@@ -64,7 +64,7 @@ enum HookInstaller {
     ///
     /// MUST stay in sync with the `clyde-hook-version` line at the top of
     /// `Clyde/Resources/clyde-hook.sh`.
-    static let currentScriptVersion = 14
+    static let currentScriptVersion = 15
 
     /// Loads the hook script source from the bundled resource. The script
     /// itself lives in `Clyde/Resources/clyde-hook.sh` so it can be edited
@@ -103,6 +103,15 @@ enum HookInstaller {
         "PermissionDenied",
         "PreToolUse",
         "PostToolUseFailure",
+        // v15 additions:
+        "CwdChanged",
+        "Elicitation",
+        "ElicitationResult",
+        "SubagentStart",
+        "SubagentStop",
+        "Notification",
+        "PreCompact",
+        "PostCompact",
     ]
 
     static var isInstalled: Bool {
@@ -258,6 +267,15 @@ enum HookInstaller {
         "PreToolUse",
         "PostToolUse",
         "PostToolUseFailure",
+        // v15: these also require a matcher field in settings.json
+        "StopFailure",
+        "Elicitation",
+        "ElicitationResult",
+        "SubagentStart",
+        "SubagentStop",
+        "Notification",
+        "PreCompact",
+        "PostCompact",
     ]
 
     private static func isRegisteredInSettings(eventName: String) -> Bool {
@@ -319,21 +337,13 @@ enum HookInstaller {
             "type": "command",
             "command": AppPaths.clydeHookScript.path
         ]
-        // PreToolUse / PostToolUse* in Claude Code REQUIRE a `matcher`
-        // field — without it Claude rejects the entry as malformed and
-        // emits "PreToolUse:<Tool> hook error" for every tool call,
-        // never actually invoking the script. Other events
-        // (UserPromptSubmit, Stop, SessionStart, ...) take a plain
-        // block with no matcher. We build per-event so each kind gets
-        // the shape Claude expects.
-        let toolMatcherEvents: Set<String> = [
-            "PreToolUse",
-            "PostToolUse",
-            "PostToolUseFailure",
-        ]
+        // Events listed in `toolMatcherEvents` REQUIRE a `matcher`
+        // field — without it Claude rejects the entry as malformed.
+        // We reference the static set (not a local copy) so the
+        // install and healthCheck paths always agree.
         func block(for eventName: String) -> [String: Any] {
-            if toolMatcherEvents.contains(eventName) {
-                // Empty-string matcher = match all tools.
+            if Self.toolMatcherEvents.contains(eventName) {
+                // Empty-string matcher = match all.
                 return ["matcher": "", "hooks": [hookCommand]]
             }
             return ["hooks": [hookCommand]]
@@ -344,8 +354,9 @@ enum HookInstaller {
         // legacy `clyde-notify.sh` entry would be detected as "already
         // present" by mergeHookBlock and the new path would never get
         // registered.
-        let legacyEvents = ["Notification"]
-        for eventName in Self.registeredHookEvents + legacyEvents {
+        // Notification moved from legacyEvents into registeredHookEvents
+        // in v15, so no extra legacy cleanup needed.
+        for eventName in Self.registeredHookEvents {
             removeClydeHook(&hooks, eventName: eventName)
         }
         for eventName in Self.registeredHookEvents {
@@ -377,10 +388,9 @@ enum HookInstaller {
            var settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
 
             if var hooks = settings["hooks"] as? [String: Any] {
-                // Clean up all currently registered events plus any legacy ones
-                // we may have used before.
-                let legacyEvents = ["Notification"]
-                for eventName in Self.registeredHookEvents + legacyEvents {
+                // Clean up all registered events (Notification moved from
+                // legacy into registeredHookEvents in v15).
+                for eventName in Self.registeredHookEvents {
                     removeClydeHook(&hooks, eventName: eventName)
                 }
                 settings["hooks"] = hooks
