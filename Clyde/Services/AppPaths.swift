@@ -69,8 +69,11 @@ enum AppConstants {
     /// How often to poll for Claude process state changes
     static let defaultPollingInterval: TimeInterval = 3.0
 
-    /// How long a hook-signalled attention event remains valid
-    static let attentionEventTimeout: TimeInterval = 60.0
+    // attentionEventTimeout removed — attention events are now valid
+    // for the lifetime of the owning Claude process (cleaned up when
+    // kill(pid, 0) fails). The old 60-second mtime-based expiry caused
+    // "Needs Input" to silently revert to "Working" if the user didn't
+    // respond to a permission prompt within a minute.
 
     /// Busy markers are sticky: a marker is considered valid as long as the
     /// owning Claude process is alive (`kill(pid, 0) == 0`). They are removed

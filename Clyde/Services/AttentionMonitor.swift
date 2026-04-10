@@ -15,11 +15,9 @@ final class AttentionMonitor: ObservableObject {
     private var dirSource: DispatchSourceFileSystemObject?
     private var dirFD: Int32 = -1
     private let eventsDir: URL
-    private let timeout: TimeInterval
 
-    init(eventsDir: URL = AppPaths.eventsDir, timeout: TimeInterval = AppConstants.attentionEventTimeout) {
+    init(eventsDir: URL = AppPaths.eventsDir) {
         self.eventsDir = eventsDir
-        self.timeout = timeout
         try? FileManager.default.createDirectory(at: eventsDir, withIntermediateDirectories: true)
     }
 
@@ -82,12 +80,11 @@ final class AttentionMonitor: ObservableObject {
     private func scan() {
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: eventsDir,
-            includingPropertiesForKeys: [.contentModificationDateKey]
+            includingPropertiesForKeys: nil
         ) else {
             return
         }
 
-        let now = Date()
         var activePIDs: Set<pid_t> = []
 
         for file in files where file.pathExtension == "json" {
@@ -98,9 +95,24 @@ final class AttentionMonitor: ObservableObject {
                 continue
             }
 
-            let attrs = try? file.resourceValues(forKeys: [.contentModificationDateKey])
-            if let mtime = attrs?.contentModificationDate,
-               now.timeIntervalSince(mtime) < timeout {
+            // An event file is valid for as long as its owning Claude
+            // process is alive. The hook script removes it on the next
+            // PreToolUse (permission was granted), on Stop (turn ended),
+            // or on SessionEnd (session closed). We only clean it up
+            // here when the PID is gone — otherwise a user who walks
+            // away from a permission prompt for a few minutes would see
+            // "Needs Input" silently flip back to "Working" (the old
+            // behaviour with a 60-second mtime-based timeout).
+            //
+            // The liveness check is the same bare `kill(pid, 0)` that
+            // `discoverPIDs` uses. We deliberately don't gate on the
+            // full `isLiveClaudeProcess` identity check here because
+            // that requires a `ps` shell-out per PID per scan tick, and
+            // scan ticks happen on every FSEvents delivery. If the PID
+            // was recycled to a non-Claude binary, the worst case is
+            // that a stale "Needs Input" badge lingers until the
+            // recycled process itself exits — harmless, and rare.
+            if kill(pid, 0) == 0 {
                 activePIDs.insert(pid)
             } else {
                 try? FileManager.default.removeItem(at: file)
