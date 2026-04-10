@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 13
+# clyde-hook-version: 14
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -19,6 +19,7 @@
 #                         busy marker here causes mid-turn flips to
 #                         "ready" while Claude is still working)
 #   PermissionRequest   → events/<session_id>.json (attention flag)
+#   PermissionDenied    → clears event file (user denied permission)
 #   PreToolUse          → clears event file + refreshes busy marker mtime
 #   PostToolUseFailure  → removes busy marker IF is_interrupt=true (user Ctrl+C)
 #
@@ -154,6 +155,16 @@ case "$HOOK_EVENT" in
     PermissionRequest)
         atomic_write "$EVENTS_DIR/$KEY.json" \
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"event\": \"$HOOK_EVENT\", \"timestamp\": $TIMESTAMP}"
+        ;;
+    PermissionDenied)
+        # User denied the permission prompt — the attention flag is no
+        # longer relevant for this tool call. Claude may try a different
+        # approach (which could fire another PermissionRequest), give up
+        # and respond with text, or end the turn. Either way, the
+        # current attention event is resolved and should drop from the
+        # Clyde UI immediately rather than lingering until the next
+        # PreToolUse or Stop.
+        rm -f "$EVENTS_DIR/$KEY.json"
         ;;
     UserPromptSubmit)
         atomic_write "$STATE_DIR/$KEY-busy" \
