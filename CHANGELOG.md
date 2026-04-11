@@ -10,6 +10,70 @@ yourself.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-11
+
+Expanded hook integration, attention reliability, and error visibility.
+
+### Attention & status fixes
+
+- **"Needs Input" no longer vanishes after 60 seconds.** The old
+  mtime-based timeout silently expired attention events even when the
+  permission prompt was still active in the terminal. Attention now
+  persists for as long as the owning Claude process is alive — cleaned
+  up only when the user actually responds (PreToolUse / Stop) or the
+  process dies.
+- **Clicking a session row no longer clears "Needs Input."** Previously,
+  `focusSession()` eagerly called `clearAttention()` on click — the
+  badge vanished the instant you tapped the row, even though the prompt
+  was still unanswered. Attention is now cleared exclusively by hook
+  events.
+- **Permission denial now clears attention instantly.** Registered the
+  `PermissionDenied` hook so denying a permission prompt drops the
+  "Needs Input" badge immediately instead of waiting for the next
+  `Stop` event.
+
+### Expanded hook integration (v15)
+
+Registered 9 new Claude Code hook events, bringing the total from 9
+to 18. Highlights:
+
+- **StopFailure error surfacing.** When Claude hits a rate limit,
+  billing error, server error, or output-token cap, the session now
+  shows a red "Rate limited" / "Server error" / "Error" badge instead
+  of silently sitting on "Working" forever. The error clears
+  automatically on the next successful `Stop`.
+- **CwdChanged live updates.** If the user `cd`s to a different
+  project mid-session, the project name in Clyde updates in real time
+  instead of staying stuck on the original `SessionStart` cwd.
+- **SessionStart source field.** The activity timeline now
+  distinguishes "Session started" from "Session resumed" and "Context
+  compacted" based on the `source` field in the hook payload.
+- **Elicitation as attention.** MCP tools that request user input
+  (forms, dialogs) now trigger the same "Needs Input" badge and
+  notification as permission prompts. Cleared on `ElicitationResult`.
+- **SubagentStart / SubagentStop tracking.** When Claude spawns a
+  subagent, the activity timeline logs "Subagent: Explore" (or
+  whichever agent type) and "Subagent finished".
+- **Notification, PreCompact, PostCompact** registered for
+  diagnostics (log-only, no UI yet).
+
+### Landing page
+
+- Global ambient lighting layer (`html::before`) replaces per-section
+  radial gradients that were clipped by `overflow: hidden`, eliminating
+  visible horizontal seams between sections.
+- Smooth scroll with `scroll-padding-top` so anchor links land below
+  the sticky nav.
+- Support card background fixed (`var(--surface)` → `var(--bg-card)`).
+- Button icon gap fixed on `.cta-secondary`.
+- Feature/install/support sections use gradient-fade slab backgrounds
+  instead of hard-border slabs.
+
+### Known limitations
+
+- Still **not code-signed or notarized** — same Gatekeeper workaround
+  as v0.1.0 (right-click → Open).
+
 ## [0.1.0] — 2026-04-09
 
 First public release of Clyde — a friendly menu bar companion that
