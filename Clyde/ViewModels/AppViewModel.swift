@@ -6,7 +6,6 @@ import Darwin
 @MainActor
 final class AppViewModel: ObservableObject {
     @Published var isCollapsed = true
-    @Published var showSettings = false
     @Published var lastError: String?
     @Published var hookHealthIssue: HookInstaller.HealthIssue?
     @Published var widgetVisible: Bool {
@@ -18,6 +17,7 @@ final class AppViewModel: ObservableObject {
     let notificationService: NotificationService
     let attentionMonitor: AttentionMonitor
     let activityLog: ActivityLog
+    let pushService: PushService
 
     var clydeState: ClydeState {
         // Attention takes priority over busy — if any session is waiting for
@@ -65,7 +65,8 @@ final class AppViewModel: ObservableObject {
             processMonitor: ProcessMonitor(),
             terminalLauncher: TerminalLauncher(),
             notificationService: NotificationService(),
-            attentionMonitor: AttentionMonitor()
+            attentionMonitor: AttentionMonitor(),
+            pushService: PushService()
         )
     }
 
@@ -74,7 +75,8 @@ final class AppViewModel: ObservableObject {
             processMonitor: processMonitor,
             terminalLauncher: TerminalLauncher(),
             notificationService: NotificationService(),
-            attentionMonitor: AttentionMonitor()
+            attentionMonitor: AttentionMonitor(),
+            pushService: PushService()
         )
     }
 
@@ -82,12 +84,14 @@ final class AppViewModel: ObservableObject {
         processMonitor: ProcessMonitor,
         terminalLauncher: TerminalLauncher,
         notificationService: NotificationService,
-        attentionMonitor: AttentionMonitor
+        attentionMonitor: AttentionMonitor,
+        pushService: PushService
     ) {
         self.processMonitor = processMonitor
         self.terminalLauncher = terminalLauncher
         self.notificationService = notificationService
         self.attentionMonitor = attentionMonitor
+        self.pushService = pushService
         self.activityLog = ActivityLog(
             processMonitor: processMonitor,
             attentionMonitor: attentionMonitor
@@ -96,15 +100,13 @@ final class AppViewModel: ObservableObject {
 
         processMonitor.onSessionBecameIdle = { [weak self] session in
             guard let self else { return }
-            // Don't ring for ghosts (sessions that are visually lingering after exit).
             if session.isGhost { return }
-            // If the attention hook already fired for this PID, the attention path owns
-            // the notification — skip "ready" to avoid duplication.
             if self.attentionMonitor.attentionPIDs.contains(session.pid) {
                 return
             }
             self.notificationService.sendNotification(for: session)
             self.notificationService.playReadySound(for: session)
+            self.pushService.notifySessionIdle(session)
         }
 
         // Forward ProcessMonitor updates to our own observers.
@@ -132,6 +134,7 @@ final class AppViewModel: ObservableObject {
             }
             self.notificationService.playAttentionSound(for: session)
             self.notificationService.sendNotification(for: session)
+            self.pushService.notifyAttentionNeeded(session)
         }
     }
 

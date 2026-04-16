@@ -9,75 +9,142 @@ enum SettingsTheme {
     static let panelBackground = Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1))
 }
 
+// MARK: - Settings Tab
+
+enum SettingsTab: String, CaseIterable, Identifiable {
+    case general
+    case notifications
+    case push
+    case claude
+    case advanced
+    case about
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .general:       return "General"
+        case .notifications: return "Notifications"
+        case .push:          return "Push"
+        case .claude:        return "Claude"
+        case .advanced:      return "Advanced"
+        case .about:         return "About"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .general:       return "gearshape"
+        case .notifications: return "bell"
+        case .push:          return "iphone.radiowaves.left.and.right"
+        case .claude:        return "terminal"
+        case .advanced:      return "wrench.and.screwdriver"
+        case .about:         return "info.circle"
+        }
+    }
+}
+
+// MARK: - Root
+
 struct SettingsView: View {
     @ObservedObject var appViewModel: AppViewModel
     @ObservedObject var notificationService: NotificationService
-    @AppStorage("pollingInterval") private var pollingInterval: Double = AppConstants.defaultPollingInterval
-    @State private var copiedDiagnostics = false
-    @State private var showAcknowledgements = false
-    @State private var resetConfirmation = false
-    @State private var resetDone = false
-    /// Currently-playing preview sound, kept so we can stop it before
-    /// starting another. Without this, rapidly clicking through the picker
-    /// stacks every selected sound on top of the previous one.
-    @State private var previewSound: NSSound?
+    @ObservedObject var pushService: PushService
+    @State private var selectedTab: SettingsTab = .general
 
     init(appViewModel: AppViewModel) {
         self.appViewModel = appViewModel
         self.notificationService = appViewModel.notificationService
+        self.pushService = appViewModel.pushService
     }
 
-    private let availableSounds = [
-        "Glass", "Blow", "Bottle", "Frog", "Funk", "Hero",
-        "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"
-    ]
-
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        HStack(spacing: 0) {
+            sidebar
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    appearanceSection
-                    monitoringSection
-                    soundSection
-                    SettingsSection(title: "Claude Integration") { ClaudeHooksRow(appViewModel: appViewModel) }
-                    maintenanceSection
-                    aboutSection
-                    supportSection
-                }
-                .padding(16)
-            }
+            Rectangle()
+                .fill(Color(white: 0.18))
+                .frame(width: 1)
+
+            detailContent
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minWidth: 560, minHeight: 440)
         .background(SettingsTheme.panelBackground)
     }
 
-    private var header: some View {
-        HStack {
-            Text("Settings")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-            Spacer()
-            Button(action: { appViewModel.showSettings = false }) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.gray)
-                    .frame(width: 24, height: 24)
+    private static let accentPurple = SessionTheme.processingColor
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(SettingsTab.allCases) { tab in
+                let isSelected = selectedTab == tab
+                Button(action: { selectedTab = tab }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(isSelected ? .white : Color(white: 0.45))
+                            .frame(width: 18)
+                        Text(tab.label)
+                            .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? .white : Color(white: 0.55))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(isSelected ? Self.accentPurple.opacity(0.22) : Color.clear)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(isSelected ? Self.accentPurple.opacity(0.4) : Color.clear, lineWidth: 0.5)
+                    )
                     .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(white: 0.13))
-        .overlay(
-            Rectangle().frame(height: 1).foregroundStyle(Color(white: 0.2)),
-            alignment: .bottom
-        )
+        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .frame(width: 160)
+        .background(Color(white: 0.07))
     }
 
-    private var appearanceSection: some View {
+    @ViewBuilder
+    private var detailContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                switch selectedTab {
+                case .general:
+                    GeneralSettingsTab(appViewModel: appViewModel)
+                case .notifications:
+                    NotificationsSettingsTab(notificationService: notificationService)
+                case .push:
+                    PushSettingsTab(pushService: pushService)
+                case .claude:
+                    ClaudeSettingsTab(appViewModel: appViewModel)
+                case .advanced:
+                    AdvancedSettingsTab(appViewModel: appViewModel)
+                case .about:
+                    AboutSettingsTab()
+                }
+            }
+            .padding(20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(SettingsTheme.panelBackground)
+        .tint(Self.accentPurple)
+    }
+}
+
+// MARK: - General
+
+struct GeneralSettingsTab: View {
+    @ObservedObject var appViewModel: AppViewModel
+    @AppStorage("pollingInterval") private var pollingInterval: Double = AppConstants.defaultPollingInterval
+
+    var body: some View {
         SettingsSection(title: "Appearance") {
             Toggle(isOn: $appViewModel.widgetVisible) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -92,9 +159,7 @@ struct SettingsView: View {
             }
             .toggleStyle(.switch)
         }
-    }
 
-    private var monitoringSection: some View {
         SettingsSection(title: "Monitoring") {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -111,9 +176,6 @@ struct SettingsView: View {
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color(white: 0.6))
                 }
-                // Use `onEditingChanged` so we only restart the polling
-                // task once the user releases the slider, instead of on
-                // every drag tick.
                 Slider(value: $pollingInterval, in: 1...10, step: 1, onEditingChanged: { editing in
                     if !editing {
                         appViewModel.updatePollingInterval(pollingInterval)
@@ -122,9 +184,21 @@ struct SettingsView: View {
             }
         }
     }
+}
 
-    private var soundSection: some View {
-        SettingsSection(title: "Notifications") {
+// MARK: - Notifications
+
+struct NotificationsSettingsTab: View {
+    @ObservedObject var notificationService: NotificationService
+    @State private var previewSound: NSSound?
+
+    private let availableSounds = [
+        "Glass", "Blow", "Bottle", "Frog", "Funk", "Hero",
+        "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"
+    ]
+
+    var body: some View {
+        SettingsSection(title: "System Notifications") {
             Toggle(isOn: $notificationService.systemNotificationsEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("System notifications")
@@ -136,9 +210,9 @@ struct SettingsView: View {
                 }
             }
             .toggleStyle(.switch)
+        }
 
-            Divider().background(Color(white: 0.2))
-
+        SettingsSection(title: "Sounds") {
             Toggle(isOn: $notificationService.soundEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Play sound on state changes")
@@ -185,9 +259,6 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 .frame(width: 130)
                 .onChange(of: selection.wrappedValue) { newSound in
-                    // Stop the previous preview before starting the next
-                    // one — otherwise rapid picker clicks stack every
-                    // sound on top of each other.
                     previewSound?.stop()
                     let next = NSSound(named: NSSound.Name(newSound))
                     next?.play()
@@ -196,9 +267,258 @@ struct SettingsView: View {
             }
         }
     }
+}
 
-    private var maintenanceSection: some View {
-        SettingsSection(title: "Maintenance") {
+// MARK: - Push Notifications
+
+struct PushSettingsTab: View {
+    @ObservedObject var pushService: PushService
+    @State private var isTesting = false
+
+    var body: some View {
+        SettingsSection(title: "Push Provider") {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Send notifications to your phone when sessions change state.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(white: 0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Picker("Provider", selection: $pushService.provider) {
+                ForEach(PushService.Provider.allCases) { provider in
+                    Text(provider.displayName).tag(provider)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+
+        if pushService.provider != .none {
+            providerConfig
+
+            SettingsSection(title: "Triggers") {
+                Toggle(isOn: $pushService.notifyOnIdle) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("When session becomes ready")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white)
+                        Text("Claude finished processing and is waiting for input")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.45))
+                    }
+                }
+                .toggleStyle(.switch)
+
+                Divider().background(Color(white: 0.2))
+
+                Toggle(isOn: $pushService.notifyOnAttention) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("When action is required")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white)
+                        Text("Permission prompt or other input needed")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.45))
+                    }
+                }
+                .toggleStyle(.switch)
+            }
+
+            SettingsSection(title: "Test") {
+                testButton
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var providerConfig: some View {
+        switch pushService.provider {
+        case .none:
+            EmptyView()
+        case .ntfy:
+            ntfyConfig
+        case .pushover:
+            pushoverConfig
+        case .webhook:
+            webhookConfig
+        }
+    }
+
+    private var ntfyConfig: some View {
+        SettingsSection(title: "ntfy Configuration") {
+            settingsField(label: "Server", placeholder: "https://ntfy.sh", text: $pushService.ntfyServer)
+            Divider().background(Color(white: 0.2))
+            settingsField(label: "Topic", placeholder: "my-clyde-notifications", text: $pushService.ntfyTopic)
+            Divider().background(Color(white: 0.2))
+            settingsField(label: "Access token (optional)", placeholder: "tk_...", text: $pushService.ntfyToken, isSecure: true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Install the ntfy app on your phone and subscribe to the same topic.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color(white: 0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(action: {
+                    if let url = URL(string: "https://ntfy.sh") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    Text("ntfy.sh")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.blue)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var pushoverConfig: some View {
+        SettingsSection(title: "Pushover Configuration") {
+            settingsField(label: "User key", placeholder: "u...", text: $pushService.pushoverUserKey, isSecure: true)
+            Divider().background(Color(white: 0.2))
+            settingsField(label: "Application token", placeholder: "a...", text: $pushService.pushoverAppToken, isSecure: true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Create an application at pushover.net to get your token, then install the Pushover app on your phone.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color(white: 0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(action: {
+                    if let url = URL(string: "https://pushover.net") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    Text("pushover.net")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.blue)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var webhookConfig: some View {
+        SettingsSection(title: "Webhook Configuration") {
+            settingsField(label: "URL", placeholder: "https://example.com/webhook", text: $pushService.webhookURL)
+            Divider().background(Color(white: 0.2))
+
+            HStack {
+                Text("Method")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white)
+                Spacer()
+                Picker("", selection: $pushService.webhookMethod) {
+                    Text("POST").tag("POST")
+                    Text("GET").tag("GET")
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 140)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("POST sends a JSON body with title, message, priority, and app fields. GET sends no body.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color(white: 0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func settingsField(label: String, placeholder: String, text: Binding<String>, isSecure: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(Color(white: 0.5))
+            if isSecure {
+                SecureField(placeholder, text: text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+            } else {
+                TextField(placeholder, text: text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+            }
+        }
+    }
+
+    private var testButton: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: {
+                isTesting = true
+                pushService.lastTestResult = nil
+                Task {
+                    let result = await pushService.testPush()
+                    pushService.lastTestResult = result
+                    isTesting = false
+                }
+            }) {
+                HStack {
+                    if isTesting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "paperplane")
+                            .font(.system(size: 11))
+                    }
+                    Text(isTesting ? "Sending..." : "Send test notification")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundStyle(pushService.isConfigured ? Color(white: 0.8) : Color(white: 0.4))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color(white: 0.18))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .disabled(!pushService.isConfigured || isTesting)
+
+            if let result = pushService.lastTestResult {
+                switch result {
+                case .success(let msg):
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.green)
+                        Text(msg)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.green)
+                    }
+                case .failure(let err):
+                    HStack(spacing: 4) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.red)
+                        Text(err.message)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Claude Integration
+
+struct ClaudeSettingsTab: View {
+    @ObservedObject var appViewModel: AppViewModel
+
+    var body: some View {
+        SettingsSection(title: "Claude Integration") {
+            ClaudeHooksRow(appViewModel: appViewModel)
+        }
+    }
+}
+
+// MARK: - Advanced
+
+struct AdvancedSettingsTab: View {
+    @ObservedObject var appViewModel: AppViewModel
+    @State private var resetConfirmation = false
+    @State private var resetDone = false
+
+    var body: some View {
+        SettingsSection(title: "Data") {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reveal Clyde data folder")
@@ -245,9 +565,6 @@ struct SettingsView: View {
                     let logURL = AppPaths.clydeDir
                         .appendingPathComponent("logs")
                         .appendingPathComponent("hook.log")
-                    // Make sure the parent dir exists, then touch the
-                    // file if it doesn't, so Finder always has something
-                    // to select instead of silently no-op'ing.
                     try? FileManager.default.createDirectory(
                         at: logURL.deletingLastPathComponent(),
                         withIntermediateDirectories: true
@@ -270,9 +587,11 @@ struct SettingsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
+            }
+        }
 
-                Divider().background(Color(white: 0.2))
-
+        SettingsSection(title: "Reset") {
+            VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reset tracking state")
                         .font(.system(size: 12))
@@ -316,8 +635,15 @@ struct SettingsView: View {
             }
         }
     }
+}
 
-    private var aboutSection: some View {
+// MARK: - About
+
+struct AboutSettingsTab: View {
+    @State private var copiedDiagnostics = false
+    @State private var showAcknowledgements = false
+
+    var body: some View {
         SettingsSection(title: "About") {
             HStack {
                 ClydeAnimationView(state: .idle, pixelSize: 2)
@@ -346,7 +672,7 @@ struct SettingsView: View {
                 HStack {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 11))
-                    Text("Check for updates…")
+                    Text("Check for updates...")
                         .font(.system(size: 12))
                 }
                 .foregroundStyle(Color(white: 0.7))
@@ -360,7 +686,8 @@ struct SettingsView: View {
             Divider().background(Color(white: 0.2))
 
             Button(action: {
-                appViewModel.copyDiagnosticInfoToPasteboard()
+                // Access AppViewModel through NotificationCenter to copy diagnostics
+                NotificationCenter.default.post(name: .clydeCopyDiagnostics, object: nil)
                 copiedDiagnostics = true
                 Task {
                     try? await Task.sleep(for: .seconds(2))
@@ -400,27 +727,8 @@ struct SettingsView: View {
             .sheet(isPresented: $showAcknowledgements) {
                 AcknowledgementsSheet(isPresented: $showAcknowledgements)
             }
-
-            Divider().background(Color(white: 0.2))
-
-            Button(action: { NSApplication.shared.terminate(nil) }) {
-                HStack {
-                    Image(systemName: "power")
-                        .font(.system(size: 11))
-                    Text("Quit Clyde")
-                        .font(.system(size: 12))
-                }
-                .foregroundStyle(.red)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(Color.red.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
         }
-    }
 
-    private var supportSection: some View {
         SettingsSection(title: "Support development") {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Clyde is free and MIT-licensed. If it's saving you time, you can chip in — it's entirely optional and there's no paid tier.")
@@ -477,8 +785,27 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
             }
         }
+
+        Divider().background(Color(white: 0.2))
+
+        Button(action: { NSApplication.shared.terminate(nil) }) {
+            HStack {
+                Image(systemName: "power")
+                    .font(.system(size: 11))
+                Text("Quit Clyde")
+                    .font(.system(size: 12))
+            }
+            .foregroundStyle(.red)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(Color.red.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
     }
 }
+
+// MARK: - Shared Components
 
 struct ClaudeHooksRow: View {
     @ObservedObject var appViewModel: AppViewModel
@@ -550,7 +877,7 @@ struct ClaudeHooksRow: View {
             Text(name)
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color(white: 0.7))
-            Text("·")
+            Text("\u{00B7}")
                 .font(.system(size: 10))
                 .foregroundStyle(Color(white: 0.35))
             Text(description)
@@ -599,9 +926,7 @@ struct SettingsSection<Content: View>: View {
     }
 }
 
-/// Third-party license display. Lists every dependency Clyde links
-/// against and reproduces the upstream license verbatim, as required
-/// by their respective terms.
+/// Third-party license display.
 struct AcknowledgementsSheet: View {
     @Binding var isPresented: Bool
 
@@ -667,10 +992,6 @@ struct AcknowledgementsSheet: View {
         }
     }
 
-    /// Verbatim copy of the Sparkle LICENSE file (MIT). Bundled inline so
-    /// the acknowledgements screen works without filesystem access and
-    /// survives any future bundling changes. Update if Sparkle is upgraded
-    /// across a license boundary.
     private static let sparkleLicense = """
     Copyright (c) 2006-2013 Andy Matuschak.
     Copyright (c) 2009-2013 Elgato Systems GmbH.
@@ -698,4 +1019,11 @@ struct AcknowledgementsSheet: View {
     IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
     CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     """
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let clydeOpenSettings = Notification.Name("clydeOpenSettings")
+    static let clydeCopyDiagnostics = Notification.Name("clydeCopyDiagnostics")
 }

@@ -1,29 +1,18 @@
 import SwiftUI
 
-/// Root view hosted inside the expanded panel. Switches between the
-/// session list and the settings screen based on `appViewModel.showSettings`.
-/// Doesn't host the widget — that lives in its own panel now.
+/// Root view hosted inside the expanded panel. Always shows the session
+/// list — settings now live in their own standalone window.
 struct ExpandedRootView: View {
     @ObservedObject var appViewModel: AppViewModel
     @ObservedObject var sessionViewModel: SessionListViewModel
 
     var body: some View {
         ZStack(alignment: .top) {
-            Group {
-                if appViewModel.showSettings {
-                    SettingsView(appViewModel: appViewModel)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .transition(.opacity)
-                } else {
-                    ExpandedView(
-                        appViewModel: appViewModel,
-                        sessionViewModel: sessionViewModel
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .transition(.opacity)
-                }
-            }
-            .animation(.easeInOut(duration: 0.22), value: appViewModel.showSettings)
+            ExpandedView(
+                appViewModel: appViewModel,
+                sessionViewModel: sessionViewModel
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
 
             if let error = appViewModel.lastError {
                 ErrorBanner(message: error)

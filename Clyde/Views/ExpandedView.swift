@@ -22,14 +22,14 @@ struct ExpandedView: View {
                         appViewModel.notificationService.snooze(minutes: 30)
                     }
                 },
-                onSettings: { appViewModel.showSettings = true },
+                onSettings: { NotificationCenter.default.post(name: .clydeOpenSettings, object: nil) },
                 onCollapse: { appViewModel.toggleExpanded() }
             )
 
             if let issue = appViewModel.hookHealthIssue {
                 HookHealthBanner(
                     issue: issue,
-                    onOpenSettings: { appViewModel.showSettings = true }
+                    onOpenSettings: { NotificationCenter.default.post(name: .clydeOpenSettings, object: nil) }
                 )
             }
 

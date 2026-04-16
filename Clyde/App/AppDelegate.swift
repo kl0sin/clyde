@@ -95,12 +95,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// hold it explicitly so `deinit` can remove it; the older
     /// selector-based observer leaked across the app's lifetime.
     private var widgetMoveObserver: NSObjectProtocol?
+    private var settingsObserver: NSObjectProtocol?
+    private var diagnosticsObserver: NSObjectProtocol?
 
     deinit {
-        // Resources held outside SwiftUI's automatic cleanup. AppDelegate
-        // is normally app-lifetime, but tests instantiate and discard it,
-        // and leaking event monitors / notification observers across
-        // those instances corrupts subsequent test runs.
+        if let token = settingsObserver {
+            NotificationCenter.default.removeObserver(token)
+        }
+        if let token = diagnosticsObserver {
+            NotificationCenter.default.removeObserver(token)
+        }
         if let token = widgetMoveObserver {
             NotificationCenter.default.removeObserver(token)
         }
@@ -190,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appViewModel.start()
         registerGlobalHotKey()
         installExpandedDragMonitor()
+        closeStraySettingsWindows()
         // Onboarding is deferred until the panel has been up for a moment
         // and we can present a non-blocking dialog.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -212,6 +217,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 self?.windowDidMove(note)
             }
+        }
+
+        // Settings / diagnostics notifications from the About tab.
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .clydeOpenSettings, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.showSettingsWindow() }
+        }
+        diagnosticsObserver = NotificationCenter.default.addObserver(
+            forName: .clydeCopyDiagnostics, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.appViewModel.copyDiagnosticInfoToPasteboard() }
         }
 
         appViewModel.$isCollapsed
@@ -555,9 +572,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appViewModel.focusSession(session)
     }
 
-    @MainActor @objc private func openSettings() {
-        appViewModel.showSettings = true
-        appViewModel.isCollapsed = false
+    @MainActor @objc func openSettings() {
+        showSettingsWindow()
+    }
+
+    // MARK: - Settings Window
+
+    private var settingsWindow: NSWindow?
+    private var settingsWindowDelegate: SettingsWindowDelegate?
+
+    @MainActor private func showSettingsWindow() {
+        if let existing = settingsWindow, existing.isVisible {
+            NSApp.setActivationPolicy(.regular)
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let settingsView = SettingsView(appViewModel: appViewModel)
+            .environment(\.colorScheme, .dark)
+        let hostingController = NSHostingController(rootView: settingsView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Clyde Settings"
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .visible
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.backgroundColor = NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1)
+        window.isMovableByWindowBackground = false
+        window.setContentSize(NSSize(width: 600, height: 500))
+        window.minSize = NSSize(width: 500, height: 400)
+        window.center()
+
+        let delegate = SettingsWindowDelegate { [weak self] in
+            self?.settingsWindow = nil
+            self?.settingsWindowDelegate = nil
+            NSApp.setActivationPolicy(.accessory)
+        }
+        window.delegate = delegate
+        settingsWindowDelegate = delegate
+
+        NSApp.setActivationPolicy(.regular)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow = window
+    }
+
+    /// Reverts the activation policy when the settings window closes so
+    /// Clyde goes back to being a menu-bar-only (LSUIElement) app.
+    private final class SettingsWindowDelegate: NSObject, NSWindowDelegate {
+        let onClose: () -> Void
+        init(onClose: @escaping () -> Void) { self.onClose = onClose }
+        func windowWillClose(_ notification: Notification) { onClose() }
+    }
+
+    /// SwiftUI's `Settings { EmptyView() }` scene in ClydeApp.swift can be
+    /// restored by macOS on launch if it was visible when Clyde last quit,
+    /// appearing as an empty "Settings" window. We manage Settings via our
+    /// own NSWindow, so any restored SwiftUI scene window is a ghost —
+    /// close it immediately. Deferred to the next runloop so SwiftUI has
+    /// a chance to instantiate any restored windows first.
+    @MainActor private func closeStraySettingsWindows() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            for window in NSApp.windows {
+                // Skip our own settings window (not yet created at launch, but
+                // guarded anyway) and any panels / onboarding.
+                if window === self.settingsWindow { continue }
+                if window === self.panel || window === self.expandedPanel { continue }
+                if window === self.onboardingWindow { continue }
+                // SwiftUI's Settings scene window has "Settings" in its title
+                // (localized as "Ustawienia" etc). Match on identifier prefix
+                // which is stable across locales: SwiftUI uses identifiers
+                // like "com_apple_SwiftUI_Settings_window".
+                let identifier = window.identifier?.rawValue ?? ""
+                if identifier.contains("Settings") || identifier.contains("SwiftUI") {
+                    ClydeLog.general.info("Closing stray SwiftUI Settings window: \(identifier, privacy: .public)")
+                    window.close()
+                }
+            }
+        }
     }
 
     // MARK: - Onboarding

@@ -63,7 +63,7 @@ struct WidgetView: View {
             Button(action: { viewModel.toggleExpanded() }) {
                 Label("Open", systemImage: "rectangle.expand.vertical")
             }
-            Button(action: { viewModel.showSettings = true; viewModel.isCollapsed = false }) {
+            Button(action: { NotificationCenter.default.post(name: .clydeOpenSettings, object: nil) }) {
                 Label("Settings", systemImage: "gearshape")
             }
             Divider()
