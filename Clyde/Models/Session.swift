@@ -46,6 +46,13 @@ struct Session: Identifiable, Equatable {
         }
     }
 
+    /// The project folder name extracted from the working directory, or
+    /// nil if the cwd is empty / the home directory.
+    var projectName: String? {
+        guard !workingDirectory.isEmpty, workingDirectory != NSHomeDirectory() else { return nil }
+        return (workingDirectory as NSString).lastPathComponent
+    }
+
     var displayName: String {
         if let customName, !customName.isEmpty {
             return Self.sanitize(customName)
