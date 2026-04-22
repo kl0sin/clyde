@@ -1,0 +1,12 @@
+docPaths:
+  - docs
+# categories: omit — Pulse builtins (roadmap, todo, brainstorming, notes) suffice
+startupCommands:
+  - label: "swift run"
+    command: "swift run Clyde"
+  - label: "swift test"
+    command: "swift test"
+  - label: "build .app"
+    command: "scripts/release/build.sh"
+progressSources:
+  - ROADMAP.md
