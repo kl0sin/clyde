@@ -10,6 +10,18 @@ yourself.
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-04-22
+
+First signed and notarized release. No product changes.
+
+- **Gatekeeper-friendly.** Clyde is now signed with a Developer ID
+  certificate and notarized by Apple. First launch no longer shows the
+  "unidentified developer" warning — just open the DMG and drag to
+  Applications.
+- **Sparkle auto-updates activated.** The appcast is now live, so
+  future versions will install themselves in the background instead of
+  requiring a manual DMG download.
+
 ## [0.2.0] — 2026-04-11
 
 Expanded hook integration, attention reliability, and error visibility.

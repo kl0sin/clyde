@@ -8,18 +8,18 @@ Phases follow Clyde's release rhythm. Detail behind each task lives in
 shipped is in [`CHANGELOG.md`](CHANGELOG.md) and
 [`docs/pre-launch-checklist.md`](docs/pre-launch-checklist.md).
 
-## Phase: v0.1.1 — Sign and ship properly
+## Phase: v0.2.1 — Sign and ship properly
 
-First point release. Single goal: eliminate the
+First signed + notarized release. Single goal: eliminate the
 "unidentified developer" Gatekeeper friction that v0.1.0 / v0.2.0
 still ship with. No new product features unless a critical bug
 demands one.
 
-- [ ] Apple Developer Program membership + Developer ID cert ready !hi
-- [ ] Wire up GitHub Secrets for the release pipeline (cert, password, Apple ID, Sparkle key) !hi
+- [x] Apple Developer Program membership + Developer ID cert ready !hi
+- [x] Wire up GitHub Secrets for the release pipeline (cert, password, Apple ID, Sparkle key) !hi
 - [ ] First signed + notarized release cut !hi
 - [ ] Gatekeeper verification on a clean Mac !hi
-- [ ] Activate Sparkle appcast — verify v0.1.0 sees an update !hi
+- [ ] Activate Sparkle appcast — verify v0.2.0 sees an update !hi
 - [ ] Resolve "Commit appcast back to main" vs branch-protection ruleset !md
 - [ ] Publish Homebrew cask to `kl0sin/homebrew-tap` !md
 - [ ] Update CHANGELOG with signed-release entry, promote resolved Known Limitations !lo
