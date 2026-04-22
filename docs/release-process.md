@@ -18,16 +18,35 @@ Confirm an active Developer Program membership ($99/year). You'll need:
 
 ### 2. Create the Developer ID Application certificate
 
-In the [Apple Developer portal](https://developer.apple.com/account/resources/certificates):
+Easiest path is through Xcode (it handles the CSR for you):
 
-1. Certificates → click **+**
-2. Pick **Developer ID Application**
-3. Upload a CSR generated locally via Keychain Access → Certificate Assistant → Request a Certificate from a Certificate Authority. Save to disk.
-4. Download the resulting `.cer` file, double-click to install in Keychain Access.
+1. Xcode → Settings → **Accounts** → sign in with the Apple ID that
+   holds the Developer Program membership.
+2. Select the team → **Manage Certificates…**
+3. Bottom-left **+** → **Developer ID Application**.
+
+The cert + private key land in your login Keychain. Verify with:
+
+```bash
+security find-identity -v -p codesigning | grep "Developer ID Application"
+```
+
+You should see one entry like `Developer ID Application: Your Name (ABCD123456)`.
+
+_Alternative (portal + manual CSR):_ [Apple Developer portal](https://developer.apple.com/account/resources/certificates)
+→ Certificates → **+** → Developer ID Application → upload a CSR
+generated via Keychain Access → Certificate Assistant → Request a
+Certificate from a Certificate Authority. Download the `.cer`,
+double-click to install. Use this path only if Xcode is unavailable.
 
 ### 3. Export the cert as `.p12` for CI
 
-In Keychain Access → My Certificates, find the new "Developer ID Application: ..." entry, right-click → Export → save as `developer-id.p12` with a strong password.
+Open **Keychain Access** (on recent macOS it's hidden — `open
+/System/Applications/Utilities/Keychain\ Access.app`). Select the
+**login** keychain, Category → **My Certificates** (must be *My*
+Certificates, otherwise the private key is missing and the export is
+useless). Right-click the "Developer ID Application: …" entry →
+Export → save as `developer-id.p12` with a strong password.
 
 Encode it for the GitHub Secret:
 
@@ -35,29 +54,54 @@ Encode it for the GitHub Secret:
 base64 -i developer-id.p12 | pbcopy
 ```
 
+If `base64` errors with `Operation not permitted`, macOS TCC is
+blocking your terminal's access to the folder. Move the file to
+`/tmp` first (or grant the terminal Desktop/Documents access in
+System Settings → Privacy & Security → Files and Folders).
+
 ### 4. Generate the app-specific password
 
 [appleid.apple.com](https://appleid.apple.com) → Sign-In and Security → App-Specific Passwords → **+** → label it "Clyde notarization".
 
 ### 5. Generate the Sparkle EdDSA keypair
 
-Sparkle ships its tools alongside the framework. After the first SPM build, run:
+Sparkle ships its tools alongside the framework. After the first SPM
+build, the binary lives at
+`.build/artifacts/sparkle/Sparkle/bin/generate_keys`.
+
+**First-time generation** (only if `SUPublicEDKey` is not yet set in
+`Clyde/Info.plist`):
 
 ```bash
-swift build
-find .build -name 'generate_keys' -type f
-# Found at: .build/.../Sparkle/.../generate_keys
-./.build/.../generate_keys
+swift build   # fetches Sparkle into .build
+.build/artifacts/sparkle/Sparkle/bin/generate_keys
 ```
 
-It writes the public key to stdout (paste into `Clyde/Info.plist` →
-`SUPublicEDKey`) and stores the private key in your default Keychain.
+It prints the public key to stdout (paste into `Clyde/Info.plist` →
+`SUPublicEDKey`) and stores the private key in your login Keychain
+under `https://sparkle-project.org`.
 
-To extract the private key for the GitHub Secret:
+**Export the private key for the GitHub Secret:**
 
 ```bash
-./.build/.../generate_keys --account default -p
+.build/artifacts/sparkle/Sparkle/bin/generate_keys -x /tmp/sparkle-private.pem
+cat /tmp/sparkle-private.pem            # 44-char base64, copy this
+rm /tmp/sparkle-private.pem             # do not leave it on disk
 ```
+
+**Verify the private key matches the public key in Info.plist** (before
+wiring it to CI — a mismatch means Sparkle will silently reject every
+update):
+
+```bash
+echo -n test > /tmp/sparkle-check.bin
+.build/artifacts/sparkle/Sparkle/bin/sign_update /tmp/sparkle-check.bin
+rm /tmp/sparkle-check.bin
+```
+
+If it emits a `sparkle:edSignature="…"` line, the Keychain key and the
+`SUPublicEDKey` in Info.plist match. If it errors or prompts for a key,
+they've diverged — rotate both sides.
 
 ### 6. GitHub Secrets
 
@@ -88,36 +132,47 @@ The first push to `main` triggers `deploy-site.yml` and the landing page +
 
 Day-to-day flow once the setup above is in place:
 
-1. **Bump the version** in `Clyde/Info.plist` (`CFBundleShortVersionString`).
-2. **Add a section to `CHANGELOG.md`** describing what's new — Sparkle
-   shows this directly inside the "Update available" sheet, so write it
-   for end users.
-3. **Commit + push:**
+1. **Add a section to `CHANGELOG.md`** describing what's new — Sparkle
+   shows this directly inside the "Update available" sheet, so write
+   it for end users.
+2. **Commit + push:**
 
    ```bash
-   git add Clyde/Info.plist CHANGELOG.md
-   git commit -m "release: 0.2.0"
+   git add CHANGELOG.md
+   git commit -m "release: 0.2.1"
    git push
    ```
 
-4. **Tag and push the tag:**
+3. **Tag and push the tag:**
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.2.1
+   git push origin v0.2.1
    ```
 
-5. The `release.yml` workflow runs automatically and:
+4. The `release.yml` workflow runs automatically and:
+   - stamps `CFBundleShortVersionString` from the tag and
+     `CFBundleVersion` from the workflow run number (the tag is the
+     single source of truth — no need to edit `Info.plist` by hand)
    - builds a universal `Clyde.app`
    - signs it with your Developer ID
    - notarizes via Apple
-   - packs it into `Clyde-0.2.0.dmg`
+   - packs it into `Clyde-0.2.1.dmg`
    - generates a Sparkle EdDSA signature
    - inserts a new entry into `site/appcast.xml` and pushes back to `main`
    - re-deploys the landing page (via `deploy-site.yml`)
    - publishes a GitHub Release with the DMG attached
 
    Total wall time: ~10–15 minutes (notarization is the slow part).
+
+   **Branch protection caveat:** the appcast push step runs as
+   `github-actions[bot]` and hits `main` directly. If `main` has a
+   protection rule that blocks bot pushes (required reviews, linear
+   history, required status checks), this step will fail — the signed
+   DMG still lands on the GitHub Release, but `site/appcast.xml` stays
+   stale. Recovery: pull the step's `<item>` block from the workflow
+   log, open a PR adding it to `site/appcast.xml` manually. Long-term
+   fix tracked in the roadmap.
 
 6. **Update the Homebrew cask** (until automated):
    - Compute the DMG sha256: `shasum -a 256 Clyde-0.2.0.dmg`
