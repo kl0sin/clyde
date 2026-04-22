@@ -113,7 +113,7 @@ Add all of these:
 |------|-------|
 | `DEVELOPER_ID_CERT_P12_BASE64`  | base64 of the exported `.p12` |
 | `DEVELOPER_ID_CERT_PASSWORD`    | password you used when exporting the .p12 |
-| `DEVELOPER_ID_APPLICATION`      | full identity name, e.g. `Developer ID Application: Mateusz Kłosiński (ABCD123456)` |
+| `DEVELOPER_ID_APPLICATION`      | full identity name, e.g. `Developer ID Application: Your Name (ABCD123456)` |
 | `APPLE_ID`                      | Apple ID email |
 | `APPLE_TEAM_ID`                 | 10-char team ID |
 | `APPLE_APP_PASSWORD`            | app-specific password from step 4 |

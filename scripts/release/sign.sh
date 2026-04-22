@@ -3,7 +3,7 @@
 #
 # Required env vars:
 #   DEVELOPER_ID_APPLICATION   — full identity name, e.g.
-#       "Developer ID Application: Mateusz Kłosiński (ABCD123456)"
+#       "Developer ID Application: Your Name (ABCD123456)"
 #
 # Usage:
 #   scripts/release/sign.sh
