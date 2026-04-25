@@ -18,7 +18,10 @@ permissions:
 jobs:
   release:
     runs-on: macos-14   # Apple Silicon runner — has Xcode + codesign
-    timeout-minutes: 60
+    # Apple's notary service is normally <10 min but can stall for hours
+    # when their queue backs up (we've seen ~17h waits). 180 min gives
+    # headroom without making CI feel infinite.
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
