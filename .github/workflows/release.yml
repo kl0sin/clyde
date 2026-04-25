@@ -138,6 +138,10 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The build step stamps version into Info.plist via PlistBuddy.
+          # That edit is per-build noise — discard it so it doesn't block
+          # the rebase or sneak into the appcast commit.
+          git checkout -- Clyde/Info.plist
           git checkout main
           git pull --rebase
           git add site/appcast.xml
