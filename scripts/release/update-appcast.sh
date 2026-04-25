@@ -88,9 +88,12 @@ EOF
 )
 
 # Insert the new item right after the <language> line of the channel.
+# We pass NEW_ITEM via the environment instead of `awk -v` because BSD
+# awk (the macOS default) rejects newlines in -v values, and the item
+# block is multi-line.
 TMP="$(mktemp)"
-awk -v new_item="$NEW_ITEM" '
-    /<language>/ && !inserted { print; print new_item; inserted=1; next }
+NEW_ITEM="$NEW_ITEM" awk '
+    /<language>/ && !inserted { print; print ENVIRON["NEW_ITEM"]; inserted=1; next }
     { print }
 ' "$APPCAST" > "$TMP"
 mv "$TMP" "$APPCAST"
