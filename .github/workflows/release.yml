@@ -143,7 +143,10 @@ jobs:
           # the rebase or sneak into the appcast commit.
           git checkout -- Clyde/Info.plist
           git checkout main
-          git pull --rebase
+          # --autostash because update-appcast.sh just modified
+          # site/appcast.xml — we want to keep that change across the
+          # rebase, not have rebase abort on it.
+          git pull --rebase --autostash
           git add site/appcast.xml
           git commit -m "chore(release): appcast for v${{ steps.version.outputs.version }}" || true
           git push origin main
