@@ -7,6 +7,21 @@
         <link>https://kl0sin.github.io/clyde/appcast.xml</link>
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
+        <item>
+            <title>Version 0.2.1</title>
+            <pubDate>Sun, 26 Apr 2026 07:21:40 +0000</pubDate>
+            <sparkle:version>11</sparkle:version>
+            <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+See the changelog for details.
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.2.1/Clyde-0.2.1.dmg"
+                length="5080024"
+                type="application/octet-stream"
+                sparkle:edSignature="nGfw3jwar15flHf3nbc/Os5csUkBSCWoUy6L5BOB9PGFPaqJGUP72kx5426wUPyMzXOo1AoyVIs6bNUbcb7WDg==" />
+        </item>
         <!-- New <item> entries are inserted here by scripts/release/update-appcast.sh -->
     </channel>
 </rss>
