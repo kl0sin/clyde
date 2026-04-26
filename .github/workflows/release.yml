@@ -28,6 +28,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history so we can read CHANGELOG context
+          # Use a PAT so the appcast push at the end of the job goes
+          # through as a real user (who's on the ruleset bypass list)
+          # rather than as github-actions[bot] (which isn't, and gets
+          # rejected with GH013).
+          token: ${{ secrets.RELEASE_PAT }}
 
       - name: Determine version
         id: version
