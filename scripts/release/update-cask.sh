@@ -9,6 +9,12 @@
 #                          ambient `gh auth setup-git` credential helper.
 # Optional env vars:
 #   HOMEBREW_TAP_REPO    — defaults to "kl0sin/homebrew-tap"
+#   RELEASE_VERSION      — overrides the version read from Info.plist.
+#                          The release workflow MUST pass this because the
+#                          "Commit appcast back to main" step reverts the
+#                          stamped Info.plist before this script runs, so
+#                          PlistBuddy would otherwise read the dev-time
+#                          placeholder version.
 #
 # Usage:
 #   scripts/release/update-cask.sh path/to/Clyde-0.2.1.dmg
@@ -25,7 +31,11 @@ if [[ -z "$DMG" || ! -f "$DMG" ]]; then
     exit 1
 fi
 
-VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+if [[ -n "${RELEASE_VERSION:-}" ]]; then
+    VERSION="$RELEASE_VERSION"
+else
+    VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+fi
 SHA256="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 
 if [[ -z "$VERSION" || -z "$SHA256" ]]; then

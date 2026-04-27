@@ -135,6 +135,7 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           GITHUB_REPO:         ${{ github.repository }}
+          RELEASE_VERSION:     ${{ steps.version.outputs.version }}
         run: |
           scripts/release/update-appcast.sh "build/release/Clyde-${{ steps.version.outputs.version }}.dmg"
 
@@ -174,6 +175,13 @@ jobs:
           # both; fine-grained PATs need the tap repo added explicitly.
           HOMEBREW_TAP_TOKEN: ${{ secrets.RELEASE_PAT }}
           HOMEBREW_TAP_REPO:  kl0sin/homebrew-tap
+          # Pass the release version explicitly: by this step the
+          # "Commit appcast back to main" step has already reverted
+          # the Info.plist stamp via `git checkout`, so PlistBuddy
+          # would otherwise read the dev placeholder. v0.2.2 shipped
+          # with this exact bug — cask was published with version
+          # "0.1.0" pointing at a nonexistent DMG.
+          RELEASE_VERSION:    ${{ steps.version.outputs.version }}
         run: |
           scripts/release/update-cask.sh "build/release/Clyde-${{ steps.version.outputs.version }}.dmg"
 

@@ -31,7 +31,15 @@ if [[ -z "${SPARKLE_PRIVATE_KEY:-}" ]]; then
     exit 1
 fi
 
-VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+# Prefer RELEASE_VERSION (passed by the release workflow) over the
+# Info.plist value. This script currently runs while Info.plist is still
+# stamped, but downstream scripts revert that stamp — keep the env-var
+# precedence so we never read a stale placeholder by accident.
+if [[ -n "${RELEASE_VERSION:-}" ]]; then
+    VERSION="$RELEASE_VERSION"
+else
+    VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+fi
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
 DMG_NAME="$(basename "$DMG")"
 DMG_SIZE="$(stat -f%z "$DMG")"
