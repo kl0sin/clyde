@@ -17,10 +17,11 @@ demands one.
 
 - [x] Apple Developer Program membership + Developer ID cert ready !hi
 - [x] Wire up GitHub Secrets for the release pipeline (cert, password, Apple ID, Sparkle key) !hi
-- [ ] First signed + notarized release cut !hi
-- [ ] Gatekeeper verification on a clean Mac !hi
-- [ ] Activate Sparkle appcast — verify v0.2.0 sees an update !hi
-- [ ] Resolve "Commit appcast back to main" vs branch-protection ruleset !md
+- [x] First signed + notarized release cut !hi
+- [x] Gatekeeper verification on a clean Mac !hi
+- [x] Activate Sparkle appcast — verify v0.2.0 sees an update !hi
+- [x] Resolve "Commit appcast back to main" vs branch-protection ruleset !md
+- [ ] Fix Sparkle update dialog showing only fallback copy — `update-appcast.sh` regex didn't match Keep-a-Changelog `## [x.y.z]` heading format, so v0.2.1 shipped with "See the changelog for details." instead of real notes !hi
 - [ ] Publish Homebrew cask to `kl0sin/homebrew-tap` !md
 - [ ] Update CHANGELOG with signed-release entry, promote resolved Known Limitations !lo
 - [ ] Refresh landing page to drop the "unsigned prerelease" warning !lo
@@ -30,6 +31,7 @@ demands one.
 Items surfaced by the 0.1.0 / 0.2.0 smoke tests and deferred to
 avoid scope creep.
 
+- [ ] Render Sparkle release notes as HTML — convert CHANGELOG markdown (bullets, bold, links) to HTML in `update-appcast.sh` so the update dialog formats properly instead of showing raw `**bold**` / `- ` syntax !md #release
 - [ ] Document the `PermissionRequest → deny` hook trace in `clyde-hook.sh` + smoke-test doc !md #hooks
 - [ ] Fix phantom `-info` files from recycled PIDs in `discoverPIDs` !md #hooks
 - [ ] Investigate `claude --resume` firing two `SessionStart` events ~1 minute apart !lo #hooks
