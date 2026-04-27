@@ -78,7 +78,12 @@ RELEASE_NOTES="$(printf '%s' "$RELEASE_NOTES" | awk '
 ')"
 
 if [[ -z "$RELEASE_NOTES" ]]; then
-    RELEASE_NOTES="See the changelog for details."
+    RELEASE_NOTES="<p>See the changelog for details.</p>"
+else
+    # Sparkle renders the description through WebKit, so convert the
+    # markdown source to a small HTML subset (paragraphs, lists,
+    # headings, bold, links) instead of dumping raw `**` and `- `.
+    RELEASE_NOTES="$(printf '%s\n' "$RELEASE_NOTES" | python3 "$PROJECT_ROOT/scripts/release/md_to_html.py")"
 fi
 
 # Build the new <item> XML chunk.
