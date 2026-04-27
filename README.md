@@ -58,20 +58,16 @@ drag `Clyde.app` into your Applications folder, and launch it.
 On first run Clyde offers to install its Claude Code hook automatically —
 accept and you're done.
 
-> **Early releases are not yet code-signed or notarized.** On first
-> launch macOS Gatekeeper will say the app is "from an unidentified
-> developer". Right-click `Clyde.app` → **Open** → confirm in the
-> dialog. macOS remembers the exception, so subsequent launches are
-> clean. Signing and notarization are on the roadmap and will land in
-> a later release.
+Clyde is signed with a Developer ID certificate and notarized by Apple,
+so Gatekeeper opens the app on the first try without any right-click
+workaround.
 
 ### Updates
 
 Clyde ships with [Sparkle](https://sparkle-project.org/) built in for
-in-app auto-updates. The update channel is dormant until signed
-releases start publishing to the appcast — until then, grab new
-versions from
-[Releases](https://github.com/kl0sin/clyde/releases) directly.
+in-app auto-updates. New versions are picked up from the appcast and
+installed in the background — you can also grab any release manually
+from [Releases](https://github.com/kl0sin/clyde/releases).
 
 ## How it works
 

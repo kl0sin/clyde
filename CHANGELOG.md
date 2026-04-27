@@ -22,6 +22,17 @@ First signed and notarized release. No product changes.
   future versions will install themselves in the background instead of
   requiring a manual DMG download.
 
+### Resolved limitations from earlier releases
+
+- Code signing and notarization (called out in 0.1.0 and 0.2.0).
+- Sparkle update channel — was dormant in 0.1.0 / 0.2.0, now active.
+
+### Known limitations
+
+- **Homebrew cask not yet published.** `Casks/clyde.rb` is drafted in
+  the repo but the `kl0sin/homebrew-tap` publish step is still pending,
+  so `brew install --cask clyde` won't work yet. Use the DMG for now.
+
 ## [0.2.0] — 2026-04-11
 
 Expanded hook integration, attention reliability, and error visibility.
