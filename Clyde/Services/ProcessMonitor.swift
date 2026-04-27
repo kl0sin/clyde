@@ -141,7 +141,13 @@ final class ProcessMonitor: ObservableObject {
                     try? FileManager.default.removeItem(at: file)
                     continue
                 }
-                if kill(info.pid, 0) != 0 && errno == ESRCH {
+                // Liveness alone is not enough: macOS aggressively recycles
+                // PIDs, so a dead Claude PID often gets reassigned to an
+                // unrelated long-lived binary (Slack, mdworker, …). Without
+                // the identity check we'd surface that recycled PID as a
+                // phantom Claude session. Mirror the rule used for `-busy`
+                // markers (see refreshHookBusy at line ~489).
+                if !isLiveClaudeProcess(pid: info.pid) {
                     try? FileManager.default.removeItem(at: file)
                     continue
                 }

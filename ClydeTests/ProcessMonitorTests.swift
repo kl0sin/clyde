@@ -75,10 +75,38 @@ final class ProcessMonitorTests: XCTestCase {
         let body = #"{"session_id":"dead","pid":\#(deadPID),"cwd":"/tmp","started_at":0}"#
         try? body.write(to: dir.appendingPathComponent("dead-info"), atomically: true, encoding: .utf8)
 
-        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
+        // The identity check rejects the dead PID — the production
+        // implementation does the same via kill(pid,0) + ps comm check.
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { $0 != deadPID })
         _ = await monitor.discoverPIDs()
         // Dead -info file should have been removed.
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("dead-info").path))
+    }
+
+    /// Regression: an -info file whose PID is alive but no longer
+    /// belongs to Claude (macOS recycled it onto a different binary)
+    /// must be pruned, not surfaced as a phantom session. Before this
+    /// fix, discoverPIDs only checked liveness via kill(pid,0) and the
+    /// recycled PID kept showing up in the UI until the file was
+    /// hand-deleted.
+    func testDiscoverPIDsDropsRecycledPIDsThatAreNoLongerClaude() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let livePID = getpid()
+        let body = #"{"session_id":"\#(sid)","pid":\#(livePID),"cwd":"/tmp","started_at":0}"#
+        let infoURL = dir.appendingPathComponent("\(sid)-info")
+        try? body.write(to: infoURL, atomically: true, encoding: .utf8)
+
+        // Identity check returns false → simulates a recycled PID that
+        // is alive but is not the Claude binary anymore.
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir, isLiveClaudeProcessCheck: { _ in false })
+        let pids = await monitor.discoverPIDs()
+
+        XCTAssertEqual(pids, [], "recycled PID must not be surfaced as a Claude session")
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: infoURL.path),
+            "stale -info file for recycled PID must be pruned"
+        )
     }
 
     func testClassifyStatusIsBusyWhenBusyMarkerPresent() async {
