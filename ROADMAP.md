@@ -32,8 +32,8 @@ Items surfaced by the 0.1.0 / 0.2.0 smoke tests and deferred to
 avoid scope creep.
 
 - [x] Render Sparkle release notes as HTML — convert CHANGELOG markdown (bullets, bold, links) to HTML in `update-appcast.sh` so the update dialog formats properly instead of showing raw `**bold**` / `- ` syntax !md #release
-- [ ] Document the `PermissionRequest → deny` hook trace in `clyde-hook.sh` + smoke-test doc !md #hooks
-- [ ] Fix phantom `-info` files from recycled PIDs in `discoverPIDs` !md #hooks
+- [x] Document the `PermissionRequest → deny` hook trace in `clyde-hook.sh` + smoke-test doc !md #hooks
+- [x] Fix phantom `-info` files from recycled PIDs in `discoverPIDs` !md #hooks
 - [ ] Investigate `claude --resume` firing two `SessionStart` events ~1 minute apart !lo #hooks
 - [ ] Coachmarks / "how to use" tooltip on first panel expand !md #ux
 - [ ] Accessibility pass — VoiceOver labels on all controls !md #ux

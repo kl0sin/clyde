@@ -188,6 +188,39 @@ Clyde shows "Needs Input" then "Working" then idle.
 
 ---
 
+## Scenario 4b — Permission request denied
+
+**Goal:** denying a permission prompt clears the "Needs Input"
+badge instantly via `PermissionDenied`, instead of waiting for the
+next `PreToolUse` or `Stop` to clean it up.
+
+**Setup:**
+- Clyde running and healthy.
+- A fresh `claude` session.
+
+**Steps:**
+1. Send a prompt that triggers a Bash command Claude has not seen
+   before, e.g. `run \`uname -a\``.
+2. When Claude asks for permission, the Clyde widget switches from
+   Working to Needs Input.
+3. **Deny** the permission (pick "No" / "Don't allow" in the
+   prompt).
+4. Watch the widget and `state/` immediately after the deny.
+
+**Expect:**
+- `hook.log` shows: `UserPromptSubmit`, one or more `PreToolUse`,
+  `PermissionRequest`, `PermissionDenied`, then either `Stop` (if
+  Claude gives up) or another `PreToolUse` cycle (if Claude tries
+  a different approach).
+- `events/<sid>.json` is removed by `PermissionDenied` — it must
+  NOT linger until the next `PreToolUse` / `Stop`.
+- Clyde UI: Needs Input → Working (or idle, if Claude gave up)
+  within the FSEvents tick (~50 ms after the deny). The
+  attention badge must not stay on a tool call the user
+  explicitly rejected.
+
+---
+
 ## Scenario 5 — `claude --resume`
 
 **Goal:** resuming an existing session keeps the same `session_id`

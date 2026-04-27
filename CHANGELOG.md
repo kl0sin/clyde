@@ -24,6 +24,17 @@ yourself.
   surfaces the discoverable shortcuts (`⌃⌘C` to toggle the panel,
   `⌘,` for Settings, `⌘Q` to quit), and the same list landed in the
   README so newcomers can find them without launching the app.
+- **Phantom session rows from recycled PIDs are gone.** When
+  macOS reused a dead Claude PID for an unrelated long-lived
+  binary, `discoverPIDs` was only checking liveness — never the
+  argv[0] identity — so the recycled PID kept showing up as a
+  Claude session in Clyde's UI. The discovery path now mirrors
+  the identity check used for `-busy` markers, with regression
+  coverage in `ProcessMonitorTests`.
+- **Smoke-test doc covers the permission-denied path.** Scenario
+  4b walks through `PermissionRequest → PermissionDenied`, where
+  `events/<sid>.json` is dropped instantly instead of lingering
+  on a tool call the user explicitly rejected.
 
 ## [0.2.1] — 2026-04-22
 
