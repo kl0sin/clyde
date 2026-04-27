@@ -58,10 +58,24 @@ if [[ -z "$SIGNATURE" ]]; then
 fi
 
 # Pull the latest section out of CHANGELOG.md as the release notes payload.
-RELEASE_NOTES="$(awk -v version="## $VERSION" '
+# CHANGELOG follows Keep a Changelog: headings look like `## [0.2.1] — 2026-04-22`,
+# so we match the bracketed version prefix.
+RELEASE_NOTES="$(awk -v version="## [$VERSION]" '
     $0 ~ "^## " { if (printing) exit; if (index($0, version)==1) { printing=1; next } }
     printing { print }
 ' "$CHANGELOG" || echo "")"
+
+# Trim leading/trailing blank lines so the Sparkle dialog doesn't render
+# a tall empty band above the first bullet.
+RELEASE_NOTES="$(printf '%s' "$RELEASE_NOTES" | awk '
+    NF { found=1 }
+    found { lines[++n]=$0 }
+    END {
+        last=n
+        while (last>0 && lines[last] ~ /^[[:space:]]*$/) last--
+        for (i=1; i<=last; i++) print lines[i]
+    }
+')"
 
 if [[ -z "$RELEASE_NOTES" ]]; then
     RELEASE_NOTES="See the changelog for details."

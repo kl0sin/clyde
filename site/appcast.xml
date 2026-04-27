@@ -14,7 +14,15 @@
             <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <description><![CDATA[
-See the changelog for details.
+First signed and notarized release. No product changes.
+
+- **Gatekeeper-friendly.** Clyde is now signed with a Developer ID
+  certificate and notarized by Apple. First launch no longer shows the
+  "unidentified developer" warning — just open the DMG and drag to
+  Applications.
+- **Sparkle auto-updates activated.** The appcast is now live, so
+  future versions will install themselves in the background instead of
+  requiring a manual DMG download.
             ]]></description>
             <enclosure
                 url="https://github.com/kl0sin/clyde/releases/download/v0.2.1/Clyde-0.2.1.dmg"
