@@ -27,6 +27,7 @@ from typing import List
 _HEADING_RE = re.compile(r"^(#{2,6})\s+(.*)$")
 _LIST_ITEM_RE = re.compile(r"^- (.*)$")
 _BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
+_CODE_RE = re.compile(r"`([^`]+)`")
 _LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 
@@ -34,6 +35,7 @@ def _inline(text: str) -> str:
     out = html.escape(text, quote=False)
     out = _LINK_RE.sub(lambda m: f'<a href="{html.escape(m.group(2), quote=True)}">{m.group(1)}</a>', out)
     out = _BOLD_RE.sub(r"<strong>\1</strong>", out)
+    out = _CODE_RE.sub(r"<code>\1</code>", out)
     return out
 
 

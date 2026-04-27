@@ -10,6 +10,12 @@ yourself.
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-04-27
+
+Quality-of-life pass on top of the v0.2.1 signed release. No new
+product features — just polish across the install surface, the
+update dialog, and one real bugfix.
+
 - **Homebrew cask published.** `brew tap kl0sin/tap && brew install --cask clyde`
   now works, served from
   [kl0sin/homebrew-tap](https://github.com/kl0sin/homebrew-tap). The
