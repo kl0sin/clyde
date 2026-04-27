@@ -39,6 +39,8 @@ avoid scope creep.
 - [ ] Accessibility pass — VoiceOver labels on all controls !md #ux
 - [x] Document keyboard shortcuts (⌃⌘C and friends) in README + Settings !lo #ux
 - [ ] Copy proofread by a second pair of eyes !lo #ux
+- [ ] Bump GitHub Actions to Node-24-compatible versions before 2026-09-16 — annotation on the v0.2.2 run flagged `actions/checkout@v4` and `softprops/action-gh-release@v2` as Node-20 (forced to Node-24 from 2026-06-02, removed 2026-09-16) !lo #release
+- [ ] Validate the v0.2.2 cask-version fix on the next release — `update-cask.sh` + `update-appcast.sh` now read `RELEASE_VERSION` from the workflow env, but the path is unproven until the next signed release stamps a non-placeholder version into the tap automatically !md #release
 
 ## Phase: v0.3.0+ — Content & reach
 
