@@ -22,7 +22,7 @@ demands one.
 - [x] Activate Sparkle appcast — verify v0.2.0 sees an update !hi
 - [x] Resolve "Commit appcast back to main" vs branch-protection ruleset !md
 - [ ] Fix Sparkle update dialog showing only fallback copy — `update-appcast.sh` regex didn't match Keep-a-Changelog `## [x.y.z]` heading format, so v0.2.1 shipped with "See the changelog for details." instead of real notes !hi
-- [ ] Publish Homebrew cask to `kl0sin/homebrew-tap` !md
+- [x] Publish Homebrew cask to `kl0sin/homebrew-tap` !md
 - [x] Update CHANGELOG with signed-release entry, promote resolved Known Limitations !lo
 - [x] Refresh landing page to drop the "unsigned prerelease" warning !lo
 

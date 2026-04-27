@@ -51,9 +51,18 @@ It connects to Claude Code's native hook events, so updates are
 
 ## Install
 
-Grab the latest `.dmg` from
+### Homebrew
+
+```sh
+brew tap kl0sin/tap
+brew install --cask clyde
+```
+
+### DMG
+
+Or grab the latest `.dmg` from
 [Releases](https://github.com/kl0sin/clyde/releases/latest), open it,
-drag `Clyde.app` into your Applications folder, and launch it.
+and drag `Clyde.app` into your Applications folder.
 
 On first run Clyde offers to install its Claude Code hook automatically —
 accept and you're done.

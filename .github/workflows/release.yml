@@ -166,6 +166,34 @@ jobs:
           files: |
             build/release/Clyde-${{ steps.version.outputs.version }}.dmg
 
+      - name: Publish Homebrew cask
+        if: steps.signed.outputs.signing == 'true'
+        env:
+          # RELEASE_PAT needs write access to kl0sin/homebrew-tap as
+          # well as kl0sin/clyde. Classic PATs with `repo` scope cover
+          # both; fine-grained PATs need the tap repo added explicitly.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.RELEASE_PAT }}
+          HOMEBREW_TAP_REPO:  kl0sin/homebrew-tap
+        run: |
+          scripts/release/update-cask.sh "build/release/Clyde-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Commit cask bump back to main
+        if: steps.signed.outputs.signing == 'true'
+        run: |
+          if git diff --quiet --exit-code Casks/clyde.rb; then
+            echo "==> Local cask unchanged — nothing to commit"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Same defensive cleanup as the appcast commit step.
+          git checkout -- Clyde/Info.plist || true
+          git checkout main
+          git pull --rebase --autostash
+          git add Casks/clyde.rb
+          git commit -m "chore(release): cask bump for v${{ steps.version.outputs.version }}" || true
+          git push origin main
+
       - name: Create GitHub Release (unsigned pre-release)
         if: steps.signed.outputs.signing != 'true'
         uses: softprops/action-gh-release@v2

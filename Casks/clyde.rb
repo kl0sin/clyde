@@ -1,21 +1,22 @@
-# Homebrew Cask formula for Clyde.
+# Canonical Homebrew cask for Clyde.
 #
-# This file is the canonical source of the cask. To make `brew install
-# --cask clyde` work for users, copy it into your own homebrew tap repo
-# (e.g. github.com/kl0sin/homebrew-tap/Casks/clyde.rb), then users
-# can:
+# This file is the source of truth. On every signed release, the
+# release workflow runs scripts/release/update-cask.sh to stamp in the
+# new version + DMG sha256 and pushes the result to
+# https://github.com/kl0sin/homebrew-tap so users can
 #
 #     brew tap kl0sin/tap
 #     brew install --cask clyde
 #
-# The version + sha256 are updated automatically by the release workflow
-# (see .github/workflows/release.yml — TODO step) once the GitHub Release
-# has been published. Until then, run `scripts/release/update-cask.sh`
-# locally.
+# To bump by hand, run:
+#     scripts/release/update-cask.sh path/to/Clyde-x.y.z.dmg
+#
+# The script rewrites the `version "..."` and `sha256 "..."` lines in
+# place — keep their format intact.
 
 cask "clyde" do
-  version "0.1.0"
-  sha256 "REPLACE_ME_WITH_DMG_SHA256"
+  version "0.2.1"
+  sha256 "b7d358a1e0d6e7b4b5dfe9f0ba1d97b92e74649467d02bf1b7a34f4cdb8894ce"
 
   url "https://github.com/kl0sin/clyde/releases/download/v#{version}/Clyde-#{version}.dmg"
   name "Clyde"
