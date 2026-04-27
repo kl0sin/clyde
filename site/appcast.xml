@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.2.2</title>
+            <pubDate>Mon, 27 Apr 2026 12:54:12 +0000</pubDate>
+            <sparkle:version>12</sparkle:version>
+            <sparkle:shortVersionString>0.2.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Quality-of-life pass on top of the v0.2.1 signed release. No new product features — just polish across the install surface, the update dialog, and one real bugfix.</p>
+<ul><li><strong>Homebrew cask published.</strong> <code>brew tap kl0sin/tap &amp;&amp; brew install --cask clyde</code> now works, served from <a href="https://github.com/kl0sin/homebrew-tap">kl0sin/homebrew-tap</a>. The release workflow stamps the cask on every signed release, so the tap stays in sync automatically.</li><li><strong>Sparkle release notes render as HTML.</strong> The update dialog now shows formatted bullets, headings, and bold text instead of raw markdown punctuation. The release pipeline pipes the CHANGELOG section through a small markdown→HTML converter before writing it into the appcast <code>&lt;description&gt;</code>.</li><li><strong>Keyboard Shortcuts section in Settings.</strong> Settings → General now surfaces the discoverable shortcuts (<code>⌃⌘C</code> to toggle the panel, <code>⌘,</code> for Settings, <code>⌘Q</code> to quit), and the same list landed in the README so newcomers can find them without launching the app.</li><li><strong>Phantom session rows from recycled PIDs are gone.</strong> When macOS reused a dead Claude PID for an unrelated long-lived binary, <code>discoverPIDs</code> was only checking liveness — never the argv[0] identity — so the recycled PID kept showing up as a Claude session in Clyde's UI. The discovery path now mirrors the identity check used for <code>-busy</code> markers, with regression coverage in <code>ProcessMonitorTests</code>.</li><li><strong>Smoke-test doc covers the permission-denied path.</strong> Scenario 4b walks through <code>PermissionRequest → PermissionDenied</code>, where <code>events/&lt;sid&gt;.json</code> is dropped instantly instead of lingering on a tool call the user explicitly rejected.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.2.2/Clyde-0.2.2.dmg"
+                length="5080346"
+                type="application/octet-stream"
+                sparkle:edSignature="xuOUHcNeDiI1y26+h869VVSFrIpwBzccplRMa7Dnzar2HkGKXqpXiYJvz1VSaLYUi6Y2/2ASiOZjNbCrlQrrBQ==" />
+        </item>
+        <item>
             <title>Version 0.2.1</title>
             <pubDate>Sun, 26 Apr 2026 07:21:40 +0000</pubDate>
             <sparkle:version>11</sparkle:version>
