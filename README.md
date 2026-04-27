@@ -78,6 +78,17 @@ in-app auto-updates. New versions are picked up from the appcast and
 installed in the background — you can also grab any release manually
 from [Releases](https://github.com/kl0sin/clyde/releases).
 
+## Keyboard shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `⌃⌘C` | Toggle the expanded panel from anywhere on the system |
+| `⌘,` | Open Settings (when Clyde is the active app) |
+| `⌘Q` | Quit Clyde (from the menu bar menu) |
+
+The same list lives in **Settings → General → Keyboard Shortcuts**
+inside the app.
+
 ## How it works
 
 Clyde reads two things from your local file system:

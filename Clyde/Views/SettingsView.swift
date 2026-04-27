@@ -183,6 +183,36 @@ struct GeneralSettingsTab: View {
                 })
             }
         }
+
+        SettingsSection(title: "Keyboard Shortcuts") {
+            VStack(alignment: .leading, spacing: 8) {
+                ShortcutRow(keys: "⌃⌘C", description: "Toggle the expanded panel from anywhere")
+                ShortcutRow(keys: "⌘,",  description: "Open Settings")
+                ShortcutRow(keys: "⌘Q",  description: "Quit Clyde (from menu bar menu)")
+            }
+        }
+    }
+}
+
+private struct ShortcutRow: View {
+    let keys: String
+    let description: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(keys)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color(white: 0.18))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .frame(minWidth: 56, alignment: .leading)
+            Text(description)
+                .font(.system(size: 12))
+                .foregroundStyle(Color(white: 0.75))
+            Spacer()
+        }
     }
 }
 

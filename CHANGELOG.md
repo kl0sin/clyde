@@ -15,6 +15,15 @@ yourself.
   [kl0sin/homebrew-tap](https://github.com/kl0sin/homebrew-tap). The
   release workflow stamps the cask on every signed release, so the tap
   stays in sync automatically.
+- **Sparkle release notes render as HTML.** The update dialog now
+  shows formatted bullets, headings, and bold text instead of raw
+  markdown punctuation. The release pipeline pipes the CHANGELOG
+  section through a small markdown→HTML converter before writing it
+  into the appcast `<description>`.
+- **Keyboard Shortcuts section in Settings.** Settings → General now
+  surfaces the discoverable shortcuts (`⌃⌘C` to toggle the panel,
+  `⌘,` for Settings, `⌘Q` to quit), and the same list landed in the
+  README so newcomers can find them without launching the app.
 
 ## [0.2.1] — 2026-04-22
 
