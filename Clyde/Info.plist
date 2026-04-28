@@ -28,6 +28,12 @@
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
+    <!-- Disable Cocoa state restoration. As an LSUIElement menu-bar app,
+         Clyde owns its windows explicitly via AppDelegate; allowing macOS
+         to restore the SwiftUI `Settings { EmptyView() }` scene results
+         in a blank gray Settings window appearing randomly at launch. -->
+    <key>NSQuitAlwaysKeepsWindows</key>
+    <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>

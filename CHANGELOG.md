@@ -10,6 +10,14 @@ yourself.
 
 ## [Unreleased]
 
+- **No more blank Settings window on launch.** macOS state restoration
+  was occasionally resurrecting SwiftUI's placeholder `Settings` scene
+  (Clyde's real Settings live in a window managed by `AppDelegate`),
+  which surfaced as an empty gray window appearing at random app
+  launches. `NSQuitAlwaysKeepsWindows` is now `false` in `Info.plist`
+  so Cocoa skips restoration entirely — the menu-bar app owns its
+  windows explicitly anyway.
+
 ## [0.2.2] — 2026-04-27
 
 Quality-of-life pass on top of the v0.2.1 signed release. No new
