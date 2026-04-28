@@ -34,7 +34,8 @@ avoid scope creep.
 - [x] Render Sparkle release notes as HTML — convert CHANGELOG markdown (bullets, bold, links) to HTML in `update-appcast.sh` so the update dialog formats properly instead of showing raw `**bold**` / `- ` syntax !md #release
 - [x] Document the `PermissionRequest → deny` hook trace in `clyde-hook.sh` + smoke-test doc !md #hooks
 - [x] Fix phantom `-info` files from recycled PIDs in `discoverPIDs` !md #hooks
-- [ ] Investigate `claude --resume` firing two `SessionStart` events ~1 minute apart !lo #hooks
+- [x] Investigate `claude --resume` firing two `SessionStart` events ~1 minute apart — root cause: the second event is Claude Code's auto-compact restart signal (`source=compact`), fired alongside `PostCompact`, not a `--resume` bug. Hook now records `source=…` on `SessionStart` lines (`clyde-hook` v16) so future investigations don't need to correlate with `PreCompact`/`PostCompact` !lo #hooks
+- [ ] Surface auto-compact as its own Activity timeline entry — second `SessionStart` with `source=compact` in the same PID currently doesn't emit `.sessionCompacted` because `ActivityLog.reconcile` only treats unseen PIDs as "new" sessions !lo #ux
 - [ ] Coachmarks / "how to use" tooltip on first panel expand !md #ux
 - [ ] Accessibility pass — VoiceOver labels on all controls !md #ux
 - [x] Document keyboard shortcuts (⌃⌘C and friends) in README + Settings !lo #ux

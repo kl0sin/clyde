@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 15
+# clyde-hook-version: 16
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -85,18 +85,31 @@ SESSION_ID=$(extract_field session_id)
 CWD=$(extract_field cwd)
 [ -z "$HOOK_EVENT" ] && HOOK_EVENT="unknown"
 
+# `source` only ships on SessionStart payloads ("startup", "resume",
+# "clear", "compact"). Hoist it here so the always-on log can record
+# *why* a session is starting — without that, a second SessionStart
+# fired ~1 min after the first looks like a Claude Code bug, when in
+# fact it's the post-compact restart signal.
+SOURCE=""
+if [ "$HOOK_EVENT" = "SessionStart" ]; then
+    SOURCE=$(extract_field source)
+fi
+
 # Always-on event log. One line per invocation. Used to confirm that
 # Claude is actually calling us for the events we care about — without
 # this, "no -busy markers" is indistinguishable from "hook never ran".
 # Cheap (single append, no fsync) and self-rotating below.
 log_event() {
-    printf "[%s] event=%-22s sid=%s ppid=%s pid=%s cwd=%s\n" \
+    local extra=""
+    [ -n "$SOURCE" ] && extra=" source=$SOURCE"
+    printf "[%s] event=%-22s sid=%s ppid=%s pid=%s cwd=%s%s\n" \
         "$(date "+%Y-%m-%d %H:%M:%S")" \
         "$HOOK_EVENT" \
         "${SESSION_ID:--}" \
         "$PPID" \
         "${CLAUDE_PID:--}" \
-        "${CWD:--}" >>"$HOOK_LOG" 2>/dev/null || true
+        "${CWD:--}" \
+        "$extra" >>"$HOOK_LOG" 2>/dev/null || true
 }
 # Rotate the log if it's grown beyond ~512 KiB. Keeps the file small
 # enough to tail comfortably while preserving recent history.
@@ -151,7 +164,6 @@ atomic_write() {
 
 case "$HOOK_EVENT" in
     SessionStart)
-        SOURCE=$(extract_field source)
         ESC_SOURCE=$(printf '%s' "$SOURCE" | sed 's/\\/\\\\/g; s/"/\\"/g')
         atomic_write "$STATE_DIR/$KEY-info" \
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"}"
