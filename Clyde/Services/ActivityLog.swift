@@ -22,6 +22,12 @@ final class ActivityLog: ObservableObject {
         var hadError: String?
         var hadSubagent: String?
         var displayName: String
+        /// Last-seen `source` from the SessionStart hook ("startup",
+        /// "resume", "compact", "clear", or empty for legacy hooks). Used
+        /// to detect auto-compact and /clear, which both emit a fresh
+        /// `SessionStart` in the *same* PID — without tracking source we
+        /// only emit a lifecycle event when the PID itself changes.
+        var lastSource: String
     }
     private var snapshots: [pid_t: Snapshot] = [:]
     /// Hash of the last sessions+attention input we processed. Used to
@@ -45,7 +51,8 @@ final class ActivityLog: ObservableObject {
                 hadAttention: attentionMonitor.attentionPIDs.contains(session.pid),
                 hadError: session.errorReason,
                 hadSubagent: session.subagentType,
-                displayName: session.displayName
+                displayName: session.displayName,
+                lastSource: processMonitor.hookInfoByPID[session.pid]?.source ?? ""
             )
         }
 
@@ -87,6 +94,10 @@ final class ActivityLog: ObservableObject {
             hasher.combine(attentionPIDs.contains(s.pid))
             hasher.combine(s.errorReason)
             hasher.combine(s.subagentType)
+            // Include hook source so an in-PID auto-compact / /clear
+            // transition (which keeps every other field unchanged)
+            // doesn't get short-circuited away by the fingerprint check.
+            hasher.combine(processMonitor?.hookInfoByPID[s.pid]?.source ?? "")
         }
         let fingerprint = hasher.finalize()
         if fingerprint == lastReconcileFingerprint && snapshots.keys.allSatisfy(livePIDs.contains) {
@@ -116,8 +127,24 @@ final class ActivityLog: ObservableObject {
         for session in live {
             let hadAttention = attentionPIDs.contains(session.pid)
             let prev = snapshots[session.pid]
+            let currentSource = processMonitor?.hookInfoByPID[session.pid]?.source ?? ""
 
             if let prev {
+                // Auto-compact and /clear both fire a fresh SessionStart
+                // in the same PID, flipping `source` from "startup"/"resume"
+                // to "compact"/"clear". Surface that as its own timeline
+                // entry — without this, the user only sees a quiet status
+                // flicker even though Claude just wiped its context.
+                if currentSource != prev.lastSource,
+                   currentSource == "compact" || currentSource == "clear" {
+                    append(.init(
+                        timestamp: Date(),
+                        kind: .sessionCompacted,
+                        sessionDisplayName: session.displayName,
+                        sessionPID: session.pid
+                    ))
+                }
+
                 if prev.status == .idle && session.status == .busy {
                     append(.init(
                         timestamp: Date(),
@@ -185,7 +212,8 @@ final class ActivityLog: ObservableObject {
                 hadAttention: hadAttention,
                 hadError: session.errorReason,
                 hadSubagent: session.subagentType,
-                displayName: session.displayName
+                displayName: session.displayName,
+                lastSource: currentSource
             )
         }
 
