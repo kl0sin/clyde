@@ -74,6 +74,10 @@ struct SessionRow: View {
                             .foregroundStyle(.white)
                             .lineLimit(1)
 
+                        if let plan = session.activePlan {
+                            PlanBadge(plan: plan)
+                        }
+
                         if let suffix = disambiguator {
                             Text(suffix)
                                 .font(.system(size: 10, weight: .medium))
@@ -376,6 +380,47 @@ struct SessionRow: View {
         let m = s / 60
         let r = s % 60
         return r == 0 ? "\(m)m" : "\(m)m \(r)s"
+    }
+}
+
+// MARK: - Plan Progress Badge
+
+/// Inline badge that surfaces TaskCreated / TaskCompleted progress on
+/// the session row's name line. Purple while in progress, green ✓ on
+/// completion. The fixed-width 24pt progress bar prevents the badge
+/// from changing width as digit counts grow (1/9 → 9/9 stays the same).
+private struct PlanBadge: View {
+    let plan: ActivePlan
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(plan.isComplete ? "✓" : "📋")
+                .font(.system(size: 9))
+            Text("\(plan.doneCount)/\(plan.taskCount)")
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(accent.opacity(0.25))
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(accent)
+                    .frame(width: 24 * plan.progress)
+            }
+            .frame(width: 24, height: 3)
+        }
+        .foregroundStyle(accent)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2)
+        .background(accent.opacity(0.12))
+        .clipShape(Capsule())
+        .animation(.easeInOut(duration: 0.25), value: plan.doneCount)
+        .animation(.easeInOut(duration: 0.25), value: plan.isComplete)
+    }
+
+    private var accent: Color {
+        plan.isComplete
+            ? Color(red: 0.47, green: 0.78, blue: 0.55)   // soft green
+            : Color(red: 0.71, green: 0.55, blue: 0.86)   // soft purple
     }
 }
 
