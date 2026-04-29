@@ -6,6 +6,8 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **The session row now shows what Claude is actually doing.** When Claude calls a built-in tool — `Edit`, `Write`, `Read`, `Bash`, `Glob`, `Grep`, `Task`, `WebFetch`, `WebSearch` — the second line of the row swaps from the project path to e.g. `Edit · SessionRow.swift · 3s` with a spring slide animation, ticking the duration live. When the tool finishes the path slides back in. TodoWrite and MCP tools show just the tool name (no summary), so the indicator is silent only on truly unidentifiable activity. Powered by a new hook event capture (`-tool` state file) — no new IPC.
+
 ## [0.2.3] — 2026-04-29
 
 Small-but-real bugfix and timeline polish pass on top of v0.2.2.
