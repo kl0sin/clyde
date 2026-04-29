@@ -98,10 +98,9 @@ struct SessionRow: View {
                 }
 
                 ZStack(alignment: .leading) {
-                    if let label = session.toolDisplayLabel,
-                       let started = session.activeTool?.startedAt {
-                        TimelineView(.periodic(from: started, by: 1)) { context in
-                            Text("\(label) · \(formatDuration(from: started, now: context.date))")
+                    if let tool = session.activeTool, let label = session.toolDisplayLabel {
+                        TimelineView(.periodic(from: tool.startedAt, by: 1)) { context in
+                            Text("\(label) · \(formatDuration(from: tool.startedAt, now: context.date))")
                                 .font(.system(size: 10, design: .monospaced))
                                 .foregroundStyle(Color(white: 0.65))
                                 .lineLimit(1)
@@ -121,6 +120,10 @@ struct SessionRow: View {
                 }
                 .frame(height: 14, alignment: .leading)
                 .clipped()
+                // Bool trigger: back-to-back tools skip the slide (tool
+                // identity changes but both states stay non-nil).
+                // Intentional — rapid tool chaining would look jittery
+                // with double slides.
                 .animation(.spring(response: 0.28, dampingFraction: 0.85),
                            value: session.activeTool != nil)
             }
