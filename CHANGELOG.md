@@ -10,6 +10,10 @@ yourself.
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-04-29
+
+Small-but-real bugfix and timeline polish pass on top of v0.2.2.
+
 - **No more blank Settings window on launch.** macOS state restoration
   was occasionally resurrecting SwiftUI's placeholder `Settings` scene
   (Clyde's real Settings live in a window managed by `AppDelegate`),
@@ -17,6 +21,18 @@ yourself.
   launches. `NSQuitAlwaysKeepsWindows` is now `false` in `Info.plist`
   so Cocoa skips restoration entirely — the menu-bar app owns its
   windows explicitly anyway.
+- **Auto-compact and `/clear` now show up in the Activity timeline.**
+  Previously the second `SessionStart` that Claude Code fires after an
+  auto-compact (same PID, fresh context) slipped past the diff
+  silently, so the timeline went quiet right when the most interesting
+  thing was happening. Clyde now tracks the hook `source` field per
+  session and emits a dedicated "Session compacted" entry whenever the
+  source flips to `compact` or `clear`.
+- **Hook log records the SessionStart source.** `clyde-hook.sh` (v16)
+  now appends `source=startup|resume|clear|compact` to the always-on
+  hook log, so future investigations don't need to correlate
+  `SessionStart` lines with `PreCompact`/`PostCompact` to tell apart
+  a real `--resume` from an in-place auto-compact restart.
 
 ## [0.2.2] — 2026-04-27
 
