@@ -62,6 +62,10 @@ final class ProcessMonitor: ObservableObject {
     /// files written by SubagentStart. Cleared on SubagentStop / Stop.
     private var hookSubagentByPID: [pid_t: String] = [:]
 
+    /// Active tool per PID, populated from `-tool` marker files written
+    /// by PreToolUse. Cleared on PostToolUse / Stop / SessionEnd.
+    private var hookToolByPID: [pid_t: ActiveTool] = [:]
+
     /// Pgrep-only PIDs (no `-info` file yet, so no `sessionId`) that we
     /// deferred for one poll tick to give the SessionStart hook a chance
     /// to fire. Used by `poll()` to ensure each PID is deferred at most
@@ -221,6 +225,7 @@ final class ProcessMonitor: ObservableObject {
         refreshHookBusyPIDs()
         refreshHookErrors()
         refreshHookSubagents()
+        refreshHookTools()
 
         let pids = await discoverPIDs()
         let now = Date()
@@ -370,6 +375,7 @@ final class ProcessMonitor: ObservableObject {
             }
             existing.errorReason = hookErrorByPID[pid]
             existing.subagentType = hookSubagentByPID[pid]
+            existing.activeTool = hookToolByPID[pid]
             return existing
         }
 
@@ -384,17 +390,20 @@ final class ProcessMonitor: ObservableObject {
             if let info, !info.cwd.isEmpty {
                 revived.workingDirectory = info.cwd
             }
+            revived.activeTool = hookToolByPID[pid]
             return revived
         }
 
         // (3) Brand-new session.
         let cwd = info?.cwd.isEmpty == false ? info!.cwd : await detectCWD(pid: pid)
-        return Session(
+        var fresh = Session(
             pid: pid,
             workingDirectory: cwd,
             status: newStatus,
             sessionId: info?.sessionId
         )
+        fresh.activeTool = hookToolByPID[pid]
+        return fresh
     }
 
     func updatePollingInterval(_ interval: TimeInterval) {
@@ -567,6 +576,45 @@ final class ProcessMonitor: ObservableObject {
         return changed
     }
 
+    /// Reads `-tool` marker files written by the PreToolUse hook.
+    /// Returns true if the dictionary changed since last call.
+    @discardableResult
+    private func refreshHookTools() -> Bool {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: stateDir, includingPropertiesForKeys: nil
+        ) else {
+            let changed = !hookToolByPID.isEmpty
+            if changed { hookToolByPID = [:] }
+            return changed
+        }
+        var tools: [pid_t: ActiveTool] = [:]
+        for file in files where file.lastPathComponent.hasSuffix("-tool") {
+            guard let data = try? Data(contentsOf: file),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let pidValue = json["pid"] as? Int,
+                  let toolName = json["tool_name"] as? String,
+                  !toolName.isEmpty,
+                  let startedAt = json["started_at"] as? Int else {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            let pid = pid_t(pidValue)
+            if kill(pid, 0) != 0 {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            let summary = (json["summary"] as? String) ?? ""
+            tools[pid] = ActiveTool(
+                toolName: toolName,
+                summary: summary,
+                startedAt: Date(timeIntervalSince1970: TimeInterval(startedAt))
+            )
+        }
+        let changed = tools != hookToolByPID
+        if changed { hookToolByPID = tools }
+        return changed
+    }
+
     /// Watches the state dir for changes via FSEvents and triggers a re-poll.
     /// Cheap (just dir listing + mtime reads) so it runs independently of the
     /// main classification cycle.
@@ -574,6 +622,7 @@ final class ProcessMonitor: ObservableObject {
         let busyChanged = refreshHookBusyPIDs()
         let errorChanged = refreshHookErrors()
         let subagentChanged = refreshHookSubagents()
+        let toolChanged = refreshHookTools()
 
         // Detect session arrivals/departures via -info file presence so a new
         // session is reflected in the UI immediately instead of waiting for
@@ -597,11 +646,11 @@ final class ProcessMonitor: ObservableObject {
         // This avoids waiting on the full `poll()` cycle (which shells
         // out to pgrep — ~50–200 ms of latency before the UI catches
         // up to the hook event).
-        if busyChanged || errorChanged || subagentChanged {
+        if busyChanged || errorChanged || subagentChanged || toolChanged {
             applyBusyStateToSessions()
         }
 
-        if busyChanged || infoChanged || errorChanged || subagentChanged {
+        if busyChanged || infoChanged || errorChanged || subagentChanged || toolChanged {
             Task { await self.poll() }
         }
     }
@@ -633,6 +682,11 @@ final class ProcessMonitor: ObservableObject {
             let newSubagent = hookSubagentByPID[pid]
             if updated[index].subagentType != newSubagent {
                 updated[index].subagentType = newSubagent
+                changed = true
+            }
+            let newTool = hookToolByPID[pid]
+            if updated[index].activeTool != newTool {
+                updated[index].activeTool = newTool
                 changed = true
             }
         }

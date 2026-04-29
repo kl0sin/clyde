@@ -45,6 +45,22 @@ final class ProcessMonitorTests: XCTestCase {
         return pid
     }
 
+    /// Writes a `-tool` marker the way PreToolUse hook would. Same PID
+    /// semantics as `writeInfoFile` (uses the current process PID so
+    /// kill(pid, 0) succeeds).
+    private func writeToolFile(
+        in dir: URL,
+        sessionId: String,
+        toolName: String,
+        summary: String = "",
+        startedAt: TimeInterval = Date().timeIntervalSince1970,
+        pid: pid_t = getpid()
+    ) {
+        let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"tool_name":"\#(toolName)","summary":"\#(summary)","started_at":\#(Int(startedAt))}"#
+        let url = dir.appendingPathComponent("\(sessionId)-tool")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     /// Writes a -busy marker. Same PID semantics as `writeInfoFile`.
     private func writeBusyFile(in dir: URL, sessionId: String, pid: pid_t = getpid(), cwd: String = "/tmp") {
         let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","timestamp":\#(Int(Date().timeIntervalSince1970))}"#
@@ -400,5 +416,105 @@ final class ProcessMonitorTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: busyURL.path),
                        "Busy marker must be cleaned up when identity check fails")
+    }
+
+    func testActiveToolIsPopulatedFromToolFile() async throws {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        let started = Date().timeIntervalSince1970 - 3
+        writeToolFile(in: dir, sessionId: sid, toolName: "Edit", summary: "SessionRow.swift", startedAt: started)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.count, 1)
+        let tool = try XCTUnwrap(monitor.sessions[0].activeTool)
+        XCTAssertEqual(tool.toolName, "Edit")
+        XCTAssertEqual(tool.summary, "SessionRow.swift")
+        XCTAssertEqual(tool.startedAt.timeIntervalSince1970, started, accuracy: 1)
+    }
+
+    func testActiveToolClearsWhenFileRemoved() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        writeToolFile(in: dir, sessionId: sid, toolName: "Bash", summary: "swift test")
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+        XCTAssertNotNil(monitor.sessions.first?.activeTool)
+
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-tool"))
+        await monitor.poll()
+        XCTAssertNil(monitor.sessions.first?.activeTool)
+    }
+
+    func testActiveToolHandlesEmptySummary() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        writeToolFile(in: dir, sessionId: sid, toolName: "TodoWrite", summary: "")
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.first?.activeTool?.toolName, "TodoWrite")
+        XCTAssertEqual(monitor.sessions.first?.activeTool?.summary, "")
+    }
+
+    func testToolFileIsRemovedWhenPIDIsDead() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        // Write -tool with a PID that almost certainly doesn't exist.
+        let body = #"{"session_id":"\#(sid)","pid":999999,"tool_name":"Edit","summary":"x.swift","started_at":0}"#
+        let url = dir.appendingPathComponent("\(sid)-tool")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertNil(monitor.sessions.first?.activeTool)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testMalformedToolFileIsRemoved() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        let url = dir.appendingPathComponent("\(sid)-tool")
+        try? "not json".write(to: url, atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertNil(monitor.sessions.first?.activeTool)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 }
