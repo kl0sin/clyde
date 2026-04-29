@@ -43,6 +43,16 @@ avoid scope creep.
 - [x] Bump GitHub Actions to Node-24-compatible versions — `actions/checkout` v4→v6, `softprops/action-gh-release` v2→v3, `actions/configure-pages` v5→v6, `actions/upload-pages-artifact` v3→v5, `actions/deploy-pages` v4→v5. All drop-in major bumps; the only behavioural change in each release is the runtime move from Node 20 to Node 24 !lo #release
 - [ ] Validate the v0.2.2 cask-version fix on the next release — `update-cask.sh` + `update-appcast.sh` now read `RELEASE_VERSION` from the workflow env, but the path is unproven until the next signed release stamps a non-placeholder version into the tap automatically !md #release
 
+## Phase: v0.3.0 — Richer session telemetry
+
+Push Clyde from "monitor" toward "feed of what Claude is actually
+doing" by harvesting payload fields the hook bus already delivers
+but Clyde currently throws away. All work is on the existing local
+hook pipeline — no new IPC surface.
+
+- [ ] Surface current tool + duration in the panel — `PreToolUse` and `PostToolUse` (Claude Code v2.1.119+) carry `tool_name`, `tool_input` and `duration_ms`. Today `clyde-hook.sh` only `touch`es the busy marker on `PreToolUse`. Capture `tool_name` + a short `tool_input` summary into a new `state/<sid>-tool` file, render it in `ExpandedView` as e.g. "Edit · Foo.swift (3.2s)", and clear it on `PostToolUse`/`Stop` !md #hooks #ux
+- [ ] Subscribe to `TaskCreated` hook event — fires when Claude calls the `TaskCreate` (todo-list) tool. Add a case to `clyde-hook.sh`, persist a count to `state/<sid>-plan`, and surface a small "📋 planning N tasks" affordance so users know an extended plan-then-execute run is starting !lo #hooks #ux
+
 ## Phase: v0.3.0+ — Content & reach
 
 Backlog. Pick when there's time or when community interest bumps
