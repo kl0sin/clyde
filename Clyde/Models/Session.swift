@@ -5,6 +5,20 @@ enum SessionStatus: Equatable {
     case idle
 }
 
+struct ActiveTool: Equatable {
+    /// Verbatim tool_name from Claude's hook payload (e.g. "Edit",
+    /// "Bash", "mcp__github__create_issue"). Never empty — the hook
+    /// skips writing the -tool file when tool_name is missing.
+    let toolName: String
+    /// Short, display-ready summary of the tool's primary input
+    /// (basename for Edit/Write, host for WebFetch, etc.). Empty for
+    /// unknown tools — `toolDisplayLabel` falls back to just the name.
+    let summary: String
+    /// Wall-clock time the PreToolUse hook fired. Used by SessionRow's
+    /// TimelineView to render a live-ticking duration string.
+    let startedAt: Date
+}
+
 struct Session: Identifiable, Equatable {
     let id: UUID
     /// Mutable so a `claude --resume` can swap in the new Claude process
@@ -25,6 +39,10 @@ struct Session: Identifiable, Equatable {
     var errorReason: String? = nil
     /// Non-nil while a subagent is actively running inside this session.
     var subagentType: String? = nil
+    /// Non-nil while a built-in or MCP tool call is in flight. The hook
+    /// writes this on PreToolUse and clears it on PostToolUse / Stop /
+    /// SessionEnd, so it tracks the same per-tool-call lifecycle.
+    var activeTool: ActiveTool? = nil
     /// Set when the underlying Claude process has exited but we're keeping
     /// the row visible briefly. Nil for live sessions.
     var endedAt: Date? = nil
@@ -44,6 +62,15 @@ struct Session: Identifiable, Equatable {
         case "invalid_request":         return "Invalid request"
         default:                        return "Error"
         }
+    }
+
+    /// Single-line label rendered on the session row's second line
+    /// while a tool is running. Returns `nil` when the session is idle
+    /// or busy-but-not-in-a-tool — callers fall back to the project
+    /// path in that case.
+    var toolDisplayLabel: String? {
+        guard let tool = activeTool else { return nil }
+        return tool.summary.isEmpty ? tool.toolName : "\(tool.toolName) · \(tool.summary)"
     }
 
     /// The project folder name extracted from the working directory, or

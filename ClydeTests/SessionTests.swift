@@ -57,4 +57,31 @@ final class SessionTests: XCTestCase {
         let b = Session(pid: 100)
         XCTAssertNotEqual(a.id, b.id)
     }
+
+    // MARK: - activeTool / toolDisplayLabel
+
+    func testToolDisplayLabelIsNilWhenNoActiveTool() {
+        let session = Session(pid: 123, workingDirectory: "/tmp")
+        XCTAssertNil(session.toolDisplayLabel)
+    }
+
+    func testToolDisplayLabelCombinesNameAndSummary() {
+        var session = Session(pid: 123, workingDirectory: "/tmp")
+        session.activeTool = ActiveTool(
+            toolName: "Edit",
+            summary: "SessionRow.swift",
+            startedAt: Date()
+        )
+        XCTAssertEqual(session.toolDisplayLabel, "Edit · SessionRow.swift")
+    }
+
+    func testToolDisplayLabelOmitsSeparatorWhenSummaryEmpty() {
+        var session = Session(pid: 123, workingDirectory: "/tmp")
+        session.activeTool = ActiveTool(
+            toolName: "TodoWrite",
+            summary: "",
+            startedAt: Date()
+        )
+        XCTAssertEqual(session.toolDisplayLabel, "TodoWrite")
+    }
 }
