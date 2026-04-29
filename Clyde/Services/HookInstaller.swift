@@ -64,7 +64,7 @@ enum HookInstaller {
     ///
     /// MUST stay in sync with the `clyde-hook-version` line at the top of
     /// `Clyde/Resources/clyde-hook.sh`.
-    static let currentScriptVersion = 16
+    static let currentScriptVersion = 17
 
     /// Loads the hook script source from the bundled resource. The script
     /// itself lives in `Clyde/Resources/clyde-hook.sh` so it can be edited
