@@ -41,7 +41,7 @@ avoid scope creep.
 - [x] Document keyboard shortcuts (⌃⌘C and friends) in README + Settings !lo #ux
 - [ ] Copy proofread by a second pair of eyes !lo #ux
 - [x] Bump GitHub Actions to Node-24-compatible versions — `actions/checkout` v4→v6, `softprops/action-gh-release` v2→v3, `actions/configure-pages` v5→v6, `actions/upload-pages-artifact` v3→v5, `actions/deploy-pages` v4→v5. All drop-in major bumps; the only behavioural change in each release is the runtime move from Node 20 to Node 24 !lo #release
-- [ ] Validate the v0.2.2 cask-version fix on the next release — `update-cask.sh` + `update-appcast.sh` now read `RELEASE_VERSION` from the workflow env, but the path is unproven until the next signed release stamps a non-placeholder version into the tap automatically !md #release
+- [x] Validate the v0.2.2 cask-version fix on the next release — verified end-to-end on the v0.2.3 release (2026-04-29): `Casks/clyde.rb` in `kl0sin/homebrew-tap` carries `version "0.2.3"` (no placeholder), `site/appcast.xml` carries `<sparkle:shortVersionString>0.2.3</sparkle:shortVersionString>`, and the DMG enclosure URL resolves to `…/v0.2.3/Clyde-0.2.3.dmg` !md #release
 
 ## Phase: v0.3.0 — Richer session telemetry
 
