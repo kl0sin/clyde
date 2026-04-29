@@ -390,16 +390,23 @@ final class AppViewModel: ObservableObject {
         Task { await processMonitor.poll() }
     }
 
-    /// Wipe state for a single session (info + busy markers + any pending
-    /// attention event). Used by the per-session reset action in the
-    /// expanded view.
+    /// Wipe state for a single session: every hook-written marker
+    /// (info / busy / error / subagent / tool / plan) plus any pending
+    /// attention event. Used by the per-session reset action in the
+    /// expanded view's context menu — the manual escape hatch when a
+    /// marker (typically -plan) wedges in a state that no future hook
+    /// event will resolve.
     func resetSession(_ session: Session) {
         if let sid = session.sessionId {
-            let names = ["\(sid)-info", "\(sid)-busy"]
-            for name in names {
-                try? FileManager.default.removeItem(at: AppPaths.stateDir.appendingPathComponent(name))
+            let suffixes = ["info", "busy", "error", "subagent", "tool", "plan"]
+            for suffix in suffixes {
+                try? FileManager.default.removeItem(
+                    at: AppPaths.stateDir.appendingPathComponent("\(sid)-\(suffix)")
+                )
             }
-            try? FileManager.default.removeItem(at: AppPaths.eventsDir.appendingPathComponent("\(sid).json"))
+            try? FileManager.default.removeItem(
+                at: AppPaths.eventsDir.appendingPathComponent("\(sid).json")
+            )
         }
         // Also clear the in-memory attention flag for this PID, in case
         // there were legacy events keyed by something else.
