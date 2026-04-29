@@ -52,6 +52,12 @@ Commits should look exactly as if a human wrote them. Author and co-author field
 - Investigative items often surface follow-up bugs. Add those as fresh `[ ] …` lines in the same phase rather than burying them in the just-completed item's prose.
 - Phases follow the release rhythm: `v0.2.x` (current polish), `v0.3.0` (next feature wave), `v0.3.0+` (backlog), `Testing backlog` (needs hardware / wall time).
 
+## Markdown style
+
+Prose markdown files (CHANGELOG, ROADMAP, README, CLAUDE, `docs/*.md`) are **not hard-wrapped** — each paragraph and each list item is one long line. Modern renderers re-flow, and a single-sentence edit shows as a single-line diff. Code fences, headings, tables, blockquotes, and embedded HTML stay verbatim. Don't reintroduce hard-wraps when editing.
+
+`docs/superpowers/{plans,specs}/*.md` are frozen historical artefacts — leave their original wrapping untouched.
+
 ## Dates
 
 The user is in Europe (Polish); commit dates and CHANGELOG headings use ISO 8601 (`YYYY-MM-DD`). When the user mentions relative dates ("Thursday", "next week"), resolve them to absolute dates before committing — relative phrasing decays in artefacts.
