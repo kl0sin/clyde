@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 17
+# clyde-hook-version: 18
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -11,7 +11,7 @@
 #
 # Handled events:
 #   SessionStart        → state/<session_id>-info (alive marker, includes source)
-#   SessionEnd          → removes info + busy + error + subagent + tool + event
+#   SessionEnd          → removes info + busy + error + subagent + tool + plan + event
 #   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info)
 #   Stop                → removes busy + error + subagent + tool + event marker
 #   StopFailure         → writes state/<session_id>-error with stop_reason
@@ -25,6 +25,8 @@
 #   ElicitationResult   → clears event file (MCP input answered)
 #   SubagentStart       → state/<session_id>-subagent (agent type)
 #   SubagentStop        → removes subagent marker
+#   TaskCreated         → bumps task_count in state/<session_id>-plan
+#   TaskCompleted       → bumps done_count in state/<session_id>-plan (if file exists)
 #   Notification        → log only (no state files)
 #   PreCompact          → log only (no state files)
 #   PostCompact         → log only (no state files)
@@ -178,6 +180,42 @@ compute_tool_summary() {
     esac
 }
 
+# Read a numeric field from the existing -plan file (if any). Returns
+# 0 if the file is missing, the key is absent, or python3 fails. Uses
+# python3 because hand-parsing arbitrary-order JSON keys in shell is
+# fragile (the existing extract_field grep fallback works because
+# Claude's payloads have predictable shapes, but our own state files
+# could be re-ordered by a future hook revision).
+read_plan_field() {
+    local key=$1
+    local plan_file="$STATE_DIR/$KEY-plan"
+    if [ ! -f "$plan_file" ]; then
+        printf '0'
+        return
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        # python3 missing — best-effort grep for the key. Acceptable
+        # because we only emit integer values for these keys, no
+        # quoting / escaping concerns.
+        local value
+        value=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*[0-9]*" "$plan_file" 2>/dev/null \
+            | head -n1 \
+            | sed -E 's/.*:[[:space:]]*([0-9]+)/\1/')
+        printf '%s' "${value:-0}"
+        return
+    fi
+    python3 -c "
+import json, sys
+try:
+    with open('$plan_file') as f:
+        d = json.load(f)
+    v = d.get('$key', 0)
+    print(int(v) if isinstance(v, (int, float)) else 0)
+except Exception:
+    print(0)
+" 2>/dev/null || printf '0'
+}
+
 HOOK_EVENT=$(extract_field hook_event_name)
 SESSION_ID=$(extract_field session_id)
 CWD=$(extract_field cwd)
@@ -277,7 +315,7 @@ case "$HOOK_EVENT" in
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"}"
         ;;
     SessionEnd)
-        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$EVENTS_DIR/$KEY.json"
+        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$EVENTS_DIR/$KEY.json"
         ;;
     PermissionRequest)
         atomic_write "$EVENTS_DIR/$KEY.json" \
@@ -398,6 +436,36 @@ case "$HOOK_EVENT" in
         ;;
     SubagentStop)
         rm -f "$STATE_DIR/$KEY-subagent"
+        ;;
+    TaskCreated)
+        # Plan-then-execute progress. Read the existing -plan record
+        # (if any) so we can increment task_count without losing
+        # done_count or the original started_at. First TaskCreated
+        # initializes started_at to the current timestamp.
+        PLAN_TASK_COUNT=$(read_plan_field task_count)
+        PLAN_DONE_COUNT=$(read_plan_field done_count)
+        PLAN_STARTED_AT=$(read_plan_field started_at)
+        if [ "$PLAN_STARTED_AT" -eq 0 ] 2>/dev/null; then
+            PLAN_STARTED_AT=$TIMESTAMP
+        fi
+        PLAN_TASK_COUNT=$((PLAN_TASK_COUNT + 1))
+        atomic_write "$STATE_DIR/$KEY-plan" \
+            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"task_count\": $PLAN_TASK_COUNT, \"done_count\": $PLAN_DONE_COUNT, \"started_at\": $PLAN_STARTED_AT}"
+        ;;
+    TaskCompleted)
+        # Increment done_count only if a -plan file already exists.
+        # A TaskCompleted without a prior TaskCreated would be a race
+        # / lost event — fabricating a new file with done_count=1 and
+        # task_count=0 would render as "1/0" in the UI, which is worse
+        # than skipping silently.
+        if [ -f "$STATE_DIR/$KEY-plan" ]; then
+            PLAN_TASK_COUNT=$(read_plan_field task_count)
+            PLAN_DONE_COUNT=$(read_plan_field done_count)
+            PLAN_STARTED_AT=$(read_plan_field started_at)
+            PLAN_DONE_COUNT=$((PLAN_DONE_COUNT + 1))
+            atomic_write "$STATE_DIR/$KEY-plan" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"task_count\": $PLAN_TASK_COUNT, \"done_count\": $PLAN_DONE_COUNT, \"started_at\": $PLAN_STARTED_AT}"
+        fi
         ;;
     Notification|PreCompact|PostCompact)
         # Log-only events. The always-on event log at the top of this
