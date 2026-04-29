@@ -517,4 +517,125 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertNil(monitor.sessions.first?.activeTool)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
+
+    /// Writes a `-plan` marker the way TaskCreated/TaskCompleted hook
+    /// would (after read-modify-write). Same PID semantics as
+    /// `writeInfoFile` (uses the current process PID so kill(pid, 0)
+    /// succeeds in tests).
+    private func writePlanFile(
+        in dir: URL,
+        sessionId: String,
+        taskCount: Int,
+        doneCount: Int,
+        startedAt: TimeInterval = Date().timeIntervalSince1970,
+        pid: pid_t = getpid()
+    ) {
+        let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"task_count":\#(taskCount),"done_count":\#(doneCount),"started_at":\#(Int(startedAt))}"#
+        let url = dir.appendingPathComponent("\(sessionId)-plan")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func testActivePlanIsPopulatedFromPlanFile() async throws {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        let started = Date().timeIntervalSince1970 - 30
+        writePlanFile(in: dir, sessionId: sid, taskCount: 5, doneCount: 2, startedAt: started)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.count, 1)
+        let plan = try XCTUnwrap(monitor.sessions[0].activePlan)
+        XCTAssertEqual(plan.taskCount, 5)
+        XCTAssertEqual(plan.doneCount, 2)
+        XCTAssertEqual(plan.startedAt.timeIntervalSince1970, started, accuracy: 1)
+    }
+
+    func testActivePlanClearsWhenFileRemoved() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        writePlanFile(in: dir, sessionId: sid, taskCount: 3, doneCount: 1)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+        XCTAssertNotNil(monitor.sessions.first?.activePlan)
+
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-plan"))
+        await monitor.poll()
+        XCTAssertNil(monitor.sessions.first?.activePlan)
+    }
+
+    func testActivePlanUpdatesAfterRewrite() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        writePlanFile(in: dir, sessionId: sid, taskCount: 5, doneCount: 1)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.first?.activePlan?.doneCount, 1)
+
+        // Simulate the hook re-writing the file with an incremented done_count.
+        writePlanFile(in: dir, sessionId: sid, taskCount: 5, doneCount: 3)
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.first?.activePlan?.doneCount, 3)
+        XCTAssertEqual(monitor.sessions.first?.activePlan?.taskCount, 5)
+    }
+
+    func testPlanFileIsRemovedWhenPIDIsDead() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        // Write -plan with a PID that almost certainly doesn't exist.
+        let body = #"{"session_id":"\#(sid)","pid":999999,"task_count":3,"done_count":1,"started_at":0}"#
+        let url = dir.appendingPathComponent("\(sid)-plan")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertNil(monitor.sessions.first?.activePlan)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testMalformedPlanFileIsRemoved() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        let url = dir.appendingPathComponent("\(sid)-plan")
+        try? "not json".write(to: url, atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertNil(monitor.sessions.first?.activePlan)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
 }
