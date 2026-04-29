@@ -98,6 +98,11 @@ enum HookInstaller {
     /// - `PostToolUseFailure`: tool failed; if `is_interrupt: true` (user
     ///                 Ctrl+C), drop the busy marker immediately; always drop
     ///                 the `-tool` marker (the call has terminated either way)
+    /// - `TaskCreated`: Claude called the TaskCreate tool → bump
+    ///                 task_count in `state/<sid>-plan` (initialize file
+    ///                 if absent) for the plan-progress badge
+    /// - `TaskCompleted`: a task was marked done → bump done_count in
+    ///                 `state/<sid>-plan` (no-op if the file is missing)
     static let registeredHookEvents = [
         "SessionStart",
         "SessionEnd",
@@ -118,6 +123,9 @@ enum HookInstaller {
         "Notification",
         "PreCompact",
         "PostCompact",
+        // v18 additions:
+        "TaskCreated",
+        "TaskCompleted",
     ]
 
     static var isInstalled: Bool {
