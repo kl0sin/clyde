@@ -19,6 +19,31 @@ struct ActiveTool: Equatable {
     let startedAt: Date
 }
 
+struct ActivePlan: Equatable {
+    /// Number of TaskCreated events seen for the current session run
+    /// (starts at 0, increments by 1 per event). Reset only on
+    /// SessionEnd or a manual session reset.
+    let taskCount: Int
+    /// Number of TaskCompleted events seen since the first TaskCreated
+    /// in the current run. Bounded above by `taskCount` for display
+    /// purposes via `progress` clamping.
+    let doneCount: Int
+    /// Wall-clock time the first TaskCreated event fired. Held across
+    /// turns so a multi-turn plan-then-execute keeps the same start.
+    let startedAt: Date
+
+    /// True when the badge should switch to the green ✓ rendering.
+    var isComplete: Bool { taskCount > 0 && doneCount >= taskCount }
+
+    /// 0.0…1.0 fill ratio for the progress bar. Clamped so
+    /// `doneCount > taskCount` (defensive — Claude shouldn't fire
+    /// extra TaskCompleted events but if it does we don't overflow).
+    var progress: Double {
+        guard taskCount > 0 else { return 0 }
+        return Double(min(doneCount, taskCount)) / Double(taskCount)
+    }
+}
+
 struct Session: Identifiable, Equatable {
     let id: UUID
     /// Mutable so a `claude --resume` can swap in the new Claude process
@@ -43,6 +68,11 @@ struct Session: Identifiable, Equatable {
     /// writes this on PreToolUse and clears it on PostToolUse / Stop /
     /// SessionEnd, so it tracks the same per-tool-call lifecycle.
     var activeTool: ActiveTool? = nil
+    /// Non-nil while a plan-then-execute run is in progress. Populated
+    /// by ProcessMonitor from -plan marker files written by the
+    /// TaskCreated / TaskCompleted hook events. Cleared on SessionEnd
+    /// or manual session reset.
+    var activePlan: ActivePlan? = nil
     /// Set when the underlying Claude process has exited but we're keeping
     /// the row visible briefly. Nil for live sessions.
     var endedAt: Date? = nil

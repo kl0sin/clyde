@@ -84,4 +84,36 @@ final class SessionTests: XCTestCase {
         )
         XCTAssertEqual(session.toolDisplayLabel, "TodoWrite")
     }
+
+    // MARK: - ActivePlan / activePlan
+
+    func testActivePlanIsIncompleteWhenZeroTasks() {
+        let plan = ActivePlan(taskCount: 0, doneCount: 0, startedAt: Date())
+        XCTAssertFalse(plan.isComplete)
+        XCTAssertEqual(plan.progress, 0.0)
+    }
+
+    func testActivePlanIsIncompleteWhenSomeDone() {
+        let plan = ActivePlan(taskCount: 5, doneCount: 2, startedAt: Date())
+        XCTAssertFalse(plan.isComplete)
+        XCTAssertEqual(plan.progress, 0.4, accuracy: 0.001)
+    }
+
+    func testActivePlanIsCompleteWhenAllDone() {
+        let plan = ActivePlan(taskCount: 5, doneCount: 5, startedAt: Date())
+        XCTAssertTrue(plan.isComplete)
+        XCTAssertEqual(plan.progress, 1.0)
+    }
+
+    func testActivePlanProgressClampsOnOverflow() {
+        // Defensive: a runaway TaskCompleted shouldn't push progress past 100%.
+        let plan = ActivePlan(taskCount: 5, doneCount: 6, startedAt: Date())
+        XCTAssertTrue(plan.isComplete)
+        XCTAssertEqual(plan.progress, 1.0)
+    }
+
+    func testSessionActivePlanDefaultsToNil() {
+        let session = Session(pid: 123, workingDirectory: "/tmp")
+        XCTAssertNil(session.activePlan)
+    }
 }
