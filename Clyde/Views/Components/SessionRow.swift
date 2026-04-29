@@ -97,11 +97,32 @@ struct SessionRow: View {
                     }
                 }
 
-                Text(session.workingDirectory.isEmpty ? "Unknown path" : abbreviatePath(session.workingDirectory))
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Color(white: 0.4))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                ZStack(alignment: .leading) {
+                    if let label = session.toolDisplayLabel,
+                       let started = session.activeTool?.startedAt {
+                        TimelineView(.periodic(from: started, by: 1)) { context in
+                            Text("\(label) · \(formatDuration(from: started, now: context.date))")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(Color(white: 0.65))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
+                        Text(session.workingDirectory.isEmpty
+                             ? "Unknown path"
+                             : abbreviatePath(session.workingDirectory))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.4))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .frame(height: 14, alignment: .leading)
+                .clipped()
+                .animation(.spring(response: 0.28, dampingFraction: 0.85),
+                           value: session.activeTool != nil)
             }
 
             Spacer()
@@ -341,6 +362,17 @@ struct SessionRow: View {
         if minutes < 60 { return "\(minutes)m" }
         let hours = minutes / 60
         return "\(hours)h \(minutes % 60)m"
+    }
+
+    /// Human-readable elapsed time for the active-tool indicator.
+    /// Mirrors `timeAgo`'s style but trims to "Ns" / "Nm" / "Nm Ns" so
+    /// the second line stays compact even on a 90s Bash command.
+    private func formatDuration(from start: Date, now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(start)))
+        if s < 60 { return "\(s)s" }
+        let m = s / 60
+        let r = s % 60
+        return r == 0 ? "\(m)m" : "\(m)m \(r)s"
     }
 }
 
