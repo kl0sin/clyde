@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.2.3</title>
+            <pubDate>Wed, 29 Apr 2026 08:36:30 +0000</pubDate>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>0.2.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Small-but-real bugfix and timeline polish pass on top of v0.2.2.</p>
+<ul><li><strong>No more blank Settings window on launch.</strong> macOS state restoration was occasionally resurrecting SwiftUI's placeholder <code>Settings</code> scene (Clyde's real Settings live in a window managed by <code>AppDelegate</code>), which surfaced as an empty gray window appearing at random app launches. <code>NSQuitAlwaysKeepsWindows</code> is now <code>false</code> in <code>Info.plist</code> so Cocoa skips restoration entirely — the menu-bar app owns its windows explicitly anyway.</li><li><strong>Auto-compact and <code>/clear</code> now show up in the Activity timeline.</strong> Previously the second <code>SessionStart</code> that Claude Code fires after an auto-compact (same PID, fresh context) slipped past the diff silently, so the timeline went quiet right when the most interesting thing was happening. Clyde now tracks the hook <code>source</code> field per session and emits a dedicated "Session compacted" entry whenever the source flips to <code>compact</code> or <code>clear</code>.</li><li><strong>Hook log records the SessionStart source.</strong> <code>clyde-hook.sh</code> (v16) now appends <code>source=startup|resume|clear|compact</code> to the always-on hook log, so future investigations don't need to correlate <code>SessionStart</code> lines with <code>PreCompact</code>/<code>PostCompact</code> to tell apart a real <code>--resume</code> from an in-place auto-compact restart.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.2.3/Clyde-0.2.3.dmg"
+                length="5082792"
+                type="application/octet-stream"
+                sparkle:edSignature="kpl7t3n9TusV2qYF6Wbpnt2sn1L08eVrcZYGruv4IOwFhUkv9Kb2vMmvx7tJnABOrruBuHTaWyf1TcXQWV0HBA==" />
+        </item>
+        <item>
             <title>Version 0.2.2</title>
             <pubDate>Mon, 27 Apr 2026 12:54:12 +0000</pubDate>
             <sparkle:version>12</sparkle:version>
