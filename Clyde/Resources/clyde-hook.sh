@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 16
+# clyde-hook-version: 17
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -11,14 +11,15 @@
 #
 # Handled events:
 #   SessionStart        → state/<session_id>-info (alive marker, includes source)
-#   SessionEnd          → removes info + busy + error + subagent + event
+#   SessionEnd          → removes info + busy + error + subagent + tool + event
 #   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info)
-#   Stop                → removes busy + error + subagent + event marker
+#   Stop                → removes busy + error + subagent + tool + event marker
 #   StopFailure         → writes state/<session_id>-error with stop_reason
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
-#   PreToolUse          → clears event file + refreshes busy marker mtime
-#   PostToolUseFailure  → removes busy marker IF is_interrupt=true (user Ctrl+C)
+#   PreToolUse          → clears event file + refreshes busy mtime + writes -tool
+#   PostToolUse         → removes -tool marker
+#   PostToolUseFailure  → removes -tool marker; removes busy IF is_interrupt=true
 #   CwdChanged          → rewrites state/<session_id>-info with new cwd
 #   Elicitation         → events/<session_id>.json (MCP tool input request)
 #   ElicitationResult   → clears event file (MCP input answered)
@@ -80,6 +81,101 @@ print(d.get('$key', ''))
     printf '%s' "$value"
 }
 
+# Extract a string from `tool_input.<key>` in the Claude hook payload.
+# Mirrors extract_field's python3 + grep fallback strategy. Returns
+# empty string when the key is missing, when tool_input isn't an
+# object, or when the value isn't a string.
+extract_tool_input_field() {
+    local key=$1
+    local value=""
+
+    if command -v python3 >/dev/null 2>&1; then
+        value=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    ti = d.get('tool_input') or {}
+    v = ti.get('$key', '')
+    print(v if isinstance(v, str) else '')
+except Exception:
+    print('')
+" 2>/dev/null) || value=""
+    fi
+
+    if [ -z "$value" ]; then
+        # Pure-shell fallback. We can't reliably parse nested JSON
+        # without a real parser, so we just look for the first
+        # "key": "value" occurrence anywhere in the payload. Acceptable
+        # because Claude's tool_input fields use distinct names
+        # (file_path, command, pattern, url, query, subagent_type) that
+        # don't collide with top-level payload keys.
+        value=$(printf '%s' "$INPUT" \
+            | tr -d '\n' \
+            | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+            | head -n1 \
+            | sed -E 's/.*"([^"]*)"$/\1/')
+    fi
+
+    printf '%s' "$value"
+}
+
+# Truncate $1 to at most $2 characters, appending an ellipsis if
+# truncated. Pure shell, byte-counted (fine for ASCII summaries; the
+# whitelisted fields below are all ASCII paths/commands/patterns).
+truncate_summary() {
+    local s=$1
+    local max=$2
+    if [ ${#s} -le "$max" ]; then
+        printf '%s' "$s"
+    else
+        printf '%s…' "${s:0:$max}"
+    fi
+}
+
+# Compute a short summary string for the active tool, based on
+# tool_name. Empty for unknown / MCP / TodoWrite tools — Swift will
+# render just the tool name in that case.
+compute_tool_summary() {
+    local tool=$1
+    local raw=""
+    case "$tool" in
+        Edit|Write|Read|MultiEdit|NotebookEdit)
+            raw=$(extract_tool_input_field file_path)
+            # basename without forking
+            printf '%s' "${raw##*/}"
+            ;;
+        Bash)
+            raw=$(extract_tool_input_field command)
+            # First line only — collapse any embedded newlines just in
+            # case the grep fallback grabbed a multi-line value.
+            raw=$(printf '%s' "$raw" | tr '\n' ' ' | head -c 200)
+            truncate_summary "$raw" 40
+            ;;
+        Glob|Grep)
+            raw=$(extract_tool_input_field pattern)
+            truncate_summary "$raw" 40
+            ;;
+        Task)
+            extract_tool_input_field subagent_type
+            ;;
+        WebFetch)
+            raw=$(extract_tool_input_field url)
+            # Extract host: drop scheme, then keep up to next slash.
+            raw=${raw#*://}
+            printf '%s' "${raw%%/*}"
+            ;;
+        WebSearch)
+            raw=$(extract_tool_input_field query)
+            truncate_summary "$raw" 40
+            ;;
+        *)
+            # TodoWrite, MCP tools, and any future built-in fall through
+            # to the empty-summary path. Swift renders just tool_name.
+            printf ''
+            ;;
+    esac
+}
+
 HOOK_EVENT=$(extract_field hook_event_name)
 SESSION_ID=$(extract_field session_id)
 CWD=$(extract_field cwd)
@@ -94,6 +190,16 @@ SOURCE=""
 if [ "$HOOK_EVENT" = "SessionStart" ]; then
     SOURCE=$(extract_field source)
 fi
+
+# `tool_name` ships on PreToolUse / PostToolUse / PostToolUseFailure
+# payloads. Hoist it once so the case branches don't each call
+# extract_field redundantly.
+TOOL_NAME=""
+case "$HOOK_EVENT" in
+    PreToolUse|PostToolUse|PostToolUseFailure)
+        TOOL_NAME=$(extract_field tool_name)
+        ;;
+esac
 
 # Always-on event log. One line per invocation. Used to confirm that
 # Claude is actually calling us for the events we care about — without
@@ -169,7 +275,7 @@ case "$HOOK_EVENT" in
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"}"
         ;;
     SessionEnd)
-        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$EVENTS_DIR/$KEY.json"
+        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$EVENTS_DIR/$KEY.json"
         ;;
     PermissionRequest)
         atomic_write "$EVENTS_DIR/$KEY.json" \
@@ -197,9 +303,9 @@ case "$HOOK_EVENT" in
         fi
         ;;
     Stop)
-        # Clear busy, error, subagent, and attention markers. Stop means
-        # the turn is over — everything from that turn is resolved.
-        rm -f "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$EVENTS_DIR/$KEY.json"
+        # Clear busy, error, subagent, tool, and attention markers. Stop
+        # means the turn is over — everything from that turn is resolved.
+        rm -f "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$EVENTS_DIR/$KEY.json"
         ;;
     StopFailure)
         # API/billing/rate-limit error. Extract stop_reason so Clyde
@@ -228,6 +334,9 @@ case "$HOOK_EVENT" in
         if printf '%s' "$INPUT" | grep -q '"is_interrupt"[[:space:]]*:[[:space:]]*true'; then
             rm -f "$STATE_DIR/$KEY-busy"
         fi
+        # The tool call itself has terminated either way (interrupt or
+        # error), so the active-tool indicator must clear.
+        rm -f "$STATE_DIR/$KEY-tool"
         ;;
     PreToolUse)
         # Tools can only run after permission was granted, so clear any
@@ -239,6 +348,24 @@ case "$HOOK_EVENT" in
         # the Claude process is alive — but keeping mtime current is
         # cheap and useful.
         [ -f "$STATE_DIR/$KEY-busy" ] && touch "$STATE_DIR/$KEY-busy"
+        # Capture which tool is now running and a short summary of its
+        # primary input field. Clyde renders this on the session row so
+        # the user sees "Edit · SessionRow.swift" instead of just the
+        # busy spinner. Empty TOOL_NAME would only happen for malformed
+        # payloads — skip the write rather than producing a junk file.
+        if [ -n "$TOOL_NAME" ]; then
+            ESC_TOOL=$(printf '%s' "$TOOL_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            TOOL_SUMMARY=$(compute_tool_summary "$TOOL_NAME")
+            ESC_SUMMARY=$(printf '%s' "$TOOL_SUMMARY" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            atomic_write "$STATE_DIR/$KEY-tool" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"tool_name\": \"$ESC_TOOL\", \"summary\": \"$ESC_SUMMARY\", \"started_at\": $TIMESTAMP}"
+        fi
+        ;;
+    PostToolUse)
+        # Tool finished cleanly. Drop the active-tool indicator; the
+        # session row will slide back to the project path until the
+        # next PreToolUse fires.
+        rm -f "$STATE_DIR/$KEY-tool"
         ;;
     CwdChanged)
         # User changed directory mid-session. Rewrite -info with the
