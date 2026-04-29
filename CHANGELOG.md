@@ -6,8 +6,13 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-04-29
+
+Richer session telemetry. Clyde stops at "is Claude busy?" and starts answering "what is Claude actually doing?" — every session row now narrates the active tool with a live duration, and surfaces plan-then-execute progress when Claude maps out a multi-step run.
+
 - **The session row now shows what Claude is actually doing.** When Claude calls a built-in tool — `Edit`, `Write`, `Read`, `Bash`, `Glob`, `Grep`, `Task`, `WebFetch`, `WebSearch` — the second line of the row swaps from the project path to e.g. `Edit · SessionRow.swift · 3s` with a spring slide animation, ticking the duration live. When the tool finishes the path slides back in. TodoWrite and MCP tools show just the tool name (no summary), so the indicator is silent only on truly unidentifiable activity. Powered by a new hook event capture (`-tool` state file) — no new IPC.
 - **Plan-then-execute progress on the session row.** When Claude maps out tasks via `TaskCreate` (the planning tool), Clyde shows a small `📋 N/M` badge with a progress bar next to the session name. The bar fills as Claude completes tasks and switches to a green `✓ N/N` when the plan is done. The badge persists across turns, so a long plan that Claude works on over several "continue" prompts keeps tracking — no flicker, no reset. Right-click "Reset session state" wipes the badge if it ever lingers after a plan changes direction.
+- **"Reset session state" now actually resets.** The per-session reset action in the row's right-click menu used to leave behind `-error`, `-subagent`, and `-tool` markers — only `-info` and `-busy` were cleared. It now wipes every hook-written marker plus any pending attention event, so the manual escape hatch works whether the wedged state is a stale plan badge, a stuck "Working" pill, or a phantom "Needs Input" flag.
 
 ## [0.2.3] — 2026-04-29
 
