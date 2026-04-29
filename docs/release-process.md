@@ -1,7 +1,6 @@
 # Release process
 
-How to cut a new Clyde release. The process is fully automated via
-GitHub Actions — your job is to bump the version and push a tag.
+How to cut a new Clyde release. The process is fully automated via GitHub Actions — your job is to bump the version and push a tag.
 
 ## One-time setup
 
@@ -20,8 +19,7 @@ Confirm an active Developer Program membership ($99/year). You'll need:
 
 Easiest path is through Xcode (it handles the CSR for you):
 
-1. Xcode → Settings → **Accounts** → sign in with the Apple ID that
-   holds the Developer Program membership.
+1. Xcode → Settings → **Accounts** → sign in with the Apple ID that holds the Developer Program membership.
 2. Select the team → **Manage Certificates…**
 3. Bottom-left **+** → **Developer ID Application**.
 
@@ -33,20 +31,11 @@ security find-identity -v -p codesigning | grep "Developer ID Application"
 
 You should see one entry like `Developer ID Application: Your Name (ABCD123456)`.
 
-_Alternative (portal + manual CSR):_ [Apple Developer portal](https://developer.apple.com/account/resources/certificates)
-→ Certificates → **+** → Developer ID Application → upload a CSR
-generated via Keychain Access → Certificate Assistant → Request a
-Certificate from a Certificate Authority. Download the `.cer`,
-double-click to install. Use this path only if Xcode is unavailable.
+_Alternative (portal + manual CSR):_ [Apple Developer portal](https://developer.apple.com/account/resources/certificates) → Certificates → **+** → Developer ID Application → upload a CSR generated via Keychain Access → Certificate Assistant → Request a Certificate from a Certificate Authority. Download the `.cer`, double-click to install. Use this path only if Xcode is unavailable.
 
 ### 3. Export the cert as `.p12` for CI
 
-Open **Keychain Access** (on recent macOS it's hidden — `open
-/System/Applications/Utilities/Keychain\ Access.app`). Select the
-**login** keychain, Category → **My Certificates** (must be *My*
-Certificates, otherwise the private key is missing and the export is
-useless). Right-click the "Developer ID Application: …" entry →
-Export → save as `developer-id.p12` with a strong password.
+Open **Keychain Access** (on recent macOS it's hidden — `open /System/Applications/Utilities/Keychain\ Access.app`). Select the **login** keychain, Category → **My Certificates** (must be *My* Certificates, otherwise the private key is missing and the export is useless). Right-click the "Developer ID Application: …" entry → Export → save as `developer-id.p12` with a strong password.
 
 Encode it for the GitHub Secret:
 
@@ -54,10 +43,7 @@ Encode it for the GitHub Secret:
 base64 -i developer-id.p12 | pbcopy
 ```
 
-If `base64` errors with `Operation not permitted`, macOS TCC is
-blocking your terminal's access to the folder. Move the file to
-`/tmp` first (or grant the terminal Desktop/Documents access in
-System Settings → Privacy & Security → Files and Folders).
+If `base64` errors with `Operation not permitted`, macOS TCC is blocking your terminal's access to the folder. Move the file to `/tmp` first (or grant the terminal Desktop/Documents access in System Settings → Privacy & Security → Files and Folders).
 
 ### 4. Generate the app-specific password
 
@@ -65,21 +51,16 @@ System Settings → Privacy & Security → Files and Folders).
 
 ### 5. Generate the Sparkle EdDSA keypair
 
-Sparkle ships its tools alongside the framework. After the first SPM
-build, the binary lives at
-`.build/artifacts/sparkle/Sparkle/bin/generate_keys`.
+Sparkle ships its tools alongside the framework. After the first SPM build, the binary lives at `.build/artifacts/sparkle/Sparkle/bin/generate_keys`.
 
-**First-time generation** (only if `SUPublicEDKey` is not yet set in
-`Clyde/Info.plist`):
+**First-time generation** (only if `SUPublicEDKey` is not yet set in `Clyde/Info.plist`):
 
 ```bash
 swift build   # fetches Sparkle into .build
 .build/artifacts/sparkle/Sparkle/bin/generate_keys
 ```
 
-It prints the public key to stdout (paste into `Clyde/Info.plist` →
-`SUPublicEDKey`) and stores the private key in your login Keychain
-under `https://sparkle-project.org`.
+It prints the public key to stdout (paste into `Clyde/Info.plist` → `SUPublicEDKey`) and stores the private key in your login Keychain under `https://sparkle-project.org`.
 
 **Export the private key for the GitHub Secret:**
 
@@ -89,9 +70,7 @@ cat /tmp/sparkle-private.pem            # 44-char base64, copy this
 rm /tmp/sparkle-private.pem             # do not leave it on disk
 ```
 
-**Verify the private key matches the public key in Info.plist** (before
-wiring it to CI — a mismatch means Sparkle will silently reject every
-update):
+**Verify the private key matches the public key in Info.plist** (before wiring it to CI — a mismatch means Sparkle will silently reject every update):
 
 ```bash
 echo -n test > /tmp/sparkle-check.bin
@@ -99,9 +78,7 @@ echo -n test > /tmp/sparkle-check.bin
 rm /tmp/sparkle-check.bin
 ```
 
-If it emits a `sparkle:edSignature="…"` line, the Keychain key and the
-`SUPublicEDKey` in Info.plist match. If it errors or prompts for a key,
-they've diverged — rotate both sides.
+If it emits a `sparkle:edSignature="…"` line, the Keychain key and the `SUPublicEDKey` in Info.plist match. If it errors or prompts for a key, they've diverged — rotate both sides.
 
 ### 6. GitHub Secrets
 
@@ -123,8 +100,7 @@ Add all of these:
 
 Repo → Settings → Pages → Source: **GitHub Actions**.
 
-The first push to `main` triggers `deploy-site.yml` and the landing page +
-`appcast.xml` go live at `https://kl0sin.github.io/clyde/`.
+The first push to `main` triggers `deploy-site.yml` and the landing page + `appcast.xml` go live at `https://kl0sin.github.io/clyde/`.
 
 ---
 
@@ -132,9 +108,7 @@ The first push to `main` triggers `deploy-site.yml` and the landing page +
 
 Day-to-day flow once the setup above is in place:
 
-1. **Add a section to `CHANGELOG.md`** describing what's new — Sparkle
-   shows this directly inside the "Update available" sheet, so write
-   it for end users.
+1. **Add a section to `CHANGELOG.md`** describing what's new — Sparkle shows this directly inside the "Update available" sheet, so write it for end users.
 2. **Commit + push:**
 
    ```bash
@@ -151,9 +125,7 @@ Day-to-day flow once the setup above is in place:
    ```
 
 4. The `release.yml` workflow runs automatically and:
-   - stamps `CFBundleShortVersionString` from the tag and
-     `CFBundleVersion` from the workflow run number (the tag is the
-     single source of truth — no need to edit `Info.plist` by hand)
+   - stamps `CFBundleShortVersionString` from the tag and `CFBundleVersion` from the workflow run number (the tag is the single source of truth — no need to edit `Info.plist` by hand)
    - builds a universal `Clyde.app`
    - signs it with your Developer ID
    - notarizes via Apple
@@ -163,24 +135,16 @@ Day-to-day flow once the setup above is in place:
    - re-deploys the landing page (via `deploy-site.yml`)
    - publishes a GitHub Release with the DMG attached
 
-   Total wall time: ~10–15 minutes (notarization is the slow part).
+Total wall time: ~10–15 minutes (notarization is the slow part).
 
-   **Branch protection caveat:** the appcast push step runs as
-   `github-actions[bot]` and hits `main` directly. If `main` has a
-   protection rule that blocks bot pushes (required reviews, linear
-   history, required status checks), this step will fail — the signed
-   DMG still lands on the GitHub Release, but `site/appcast.xml` stays
-   stale. Recovery: pull the step's `<item>` block from the workflow
-   log, open a PR adding it to `site/appcast.xml` manually. Long-term
-   fix tracked in the roadmap.
+**Branch protection caveat:** the appcast push step runs as `github-actions[bot]` and hits `main` directly. If `main` has a protection rule that blocks bot pushes (required reviews, linear history, required status checks), this step will fail — the signed DMG still lands on the GitHub Release, but `site/appcast.xml` stays stale. Recovery: pull the step's `<item>` block from the workflow log, open a PR adding it to `site/appcast.xml` manually. Long-term fix tracked in the roadmap.
 
 6. **Update the Homebrew cask** (until automated):
    - Compute the DMG sha256: `shasum -a 256 Clyde-0.2.0.dmg`
    - Edit `Casks/clyde.rb` in your tap repo, bump version + sha256
    - Commit + push
 
-Users running Clyde will see the update banner within 24 hours
-automatically. Homebrew users get it on their next `brew upgrade`.
+Users running Clyde will see the update banner within 24 hours automatically. Homebrew users get it on their next `brew upgrade`.
 
 ---
 
@@ -198,5 +162,4 @@ DEVELOPER_ID_APPLICATION="Developer ID Application: Your Name (XXXXXXXXXX)" \
     scripts/release/make-dmg.sh
 ```
 
-Resulting DMG: `build/release/Clyde-x.y.z.dmg`. Open it on a clean Mac to
-verify Gatekeeper accepts the signed bundle.
+Resulting DMG: `build/release/Clyde-x.y.z.dmg`. Open it on a clean Mac to verify Gatekeeper accepts the signed bundle.

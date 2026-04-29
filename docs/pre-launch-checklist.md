@@ -1,9 +1,6 @@
 # Clyde — Pre-Launch Checklist
 
-Tracking everything that needs to be in place before publishing Clyde
-to users. Items checked off below have been verified against the
-current codebase; items still open require either implementation or
-manual verification.
+Tracking everything that needs to be in place before publishing Clyde to users. Items checked off below have been verified against the current codebase; items still open require either implementation or manual verification.
 
 > See also: [`hook-smoke-test.md`](hook-smoke-test.md) for the manual
 > end-to-end checklist of the hook pipeline, and
@@ -92,48 +89,18 @@ manual verification.
 - [x] CHANGELOG.md exists at repo root
 - [x] Release script / GitHub Action that builds, signs, notarizes, uploads — `.github/workflows/release.yml` + `scripts/release/*`
 - [x] Sparkle EdDSA keypair generated and `SUPublicEDKey` set in `Info.plist`
-- [ ] Tag → release flow tested end-to-end on a dry run — deferred to
-  the actual `v0.1.0` cut. Running the full sign + notarize + DMG
-  pipeline locally requires the Apple Developer credentials and ~10 min
-  per attempt for notarization, and we'd rather front-load that work
-  on the real release than rehearse it ahead of time. Risk: the first
-  real cut might surface a config issue that a dry-run would have
-  caught earlier.
-- [ ] Gatekeeper accept on a clean Mac — depends on having a signed +
-  notarized DMG, so deferred with the dry-run above.
+- [ ] Tag → release flow tested end-to-end on a dry run — deferred to the actual `v0.1.0` cut. Running the full sign + notarize + DMG pipeline locally requires the Apple Developer credentials and ~10 min per attempt for notarization, and we'd rather front-load that work on the real release than rehearse it ahead of time. Risk: the first real cut might surface a config issue that a dry-run would have caught earlier.
+- [ ] Gatekeeper accept on a clean Mac — depends on having a signed + notarized DMG, so deferred with the dry-run above.
 - [ ] First release cut (`v0.1.0`) — gated on the manual smoke test pass
 
 ## Hook pipeline followups
 
-Items surfaced during the manual smoke test that aren't blockers for
-v0.1.0 but should be triaged before / shortly after release.
+Items surfaced during the manual smoke test that aren't blockers for v0.1.0 but should be triaged before / shortly after release.
 
-- [ ] Verify the `PermissionRequest → deny` path is intentional and
-  documented. Smoke test scenario #4 produced this trace:
+- [ ] Verify the `PermissionRequest → deny` path is intentional and documented. Smoke test scenario #4 produced this trace:
   ```
   UserPromptSubmit → PreToolUse → PermissionRequest → Stop
   ```
-  Note the absence of a second `PreToolUse` after the user's
-  decision. Confirm whether Claude Code emits a second `PreToolUse`
-  on approval (and only skips it on deny), or whether it never
-  re-fires `PreToolUse` for the same tool invocation. Either way
-  the `-busy` marker stays correct because `Stop` cleans it; the
-  question is just contract documentation in `clyde-hook.sh` and
-  `hook-smoke-test.md`.
-- [ ] Investigate `claude --resume` firing two `SessionStart` events
-  ~1 minute apart for the same session_id and same PID. Observed
-  during smoke test scenario #5: 13:04:51 first SessionStart right
-  after `--resume`, then 13:05:51 a second one with no other event
-  in between. Doesn't break Clyde (revival path is idempotent), but
-  worth understanding — may be a Claude Code "session reactivated"
-  signal we could surface in the UI, or a bug in their hook firing.
-- [ ] Phantom `-info` files from recycled PIDs. `discoverPIDs` only
-  uses `kill(pid, 0)` to verify a session is alive, not the full
-  `isLiveClaudeProcess` identity check. If a Claude PID dies and the
-  kernel later recycles that PID to a non-Claude binary, the `-info`
-  file lingers and Clyde shows a phantom "idle" row in the UI for
-  that recycled process until it dies in turn. Cheap fix: route
-  `discoverPIDs` through the same identity check as
-  `refreshHookBusyPIDs`. Risk: a brief window during process startup
-  where `ps -o comm=` doesn't yet report "claude" could drop
-  legitimate sessions — needs verification.
+Note the absence of a second `PreToolUse` after the user's decision. Confirm whether Claude Code emits a second `PreToolUse` on approval (and only skips it on deny), or whether it never re-fires `PreToolUse` for the same tool invocation. Either way the `-busy` marker stays correct because `Stop` cleans it; the question is just contract documentation in `clyde-hook.sh` and `hook-smoke-test.md`.
+- [ ] Investigate `claude --resume` firing two `SessionStart` events ~1 minute apart for the same session_id and same PID. Observed during smoke test scenario #5: 13:04:51 first SessionStart right after `--resume`, then 13:05:51 a second one with no other event in between. Doesn't break Clyde (revival path is idempotent), but worth understanding — may be a Claude Code "session reactivated" signal we could surface in the UI, or a bug in their hook firing.
+- [ ] Phantom `-info` files from recycled PIDs. `discoverPIDs` only uses `kill(pid, 0)` to verify a session is alive, not the full `isLiveClaudeProcess` identity check. If a Claude PID dies and the kernel later recycles that PID to a non-Claude binary, the `-info` file lingers and Clyde shows a phantom "idle" row in the UI for that recycled process until it dies in turn. Cheap fix: route `discoverPIDs` through the same identity check as `refreshHookBusyPIDs`. Risk: a brief window during process startup where `ps -o comm=` doesn't yet report "claude" could drop legitimate sessions — needs verification.

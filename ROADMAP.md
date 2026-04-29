@@ -1,19 +1,12 @@
 # Clyde Roadmap
 
-Post-v0.2.0 work for Clyde, the macOS menu bar app that watches every
-Claude Code session in real time.
+Post-v0.2.0 work for Clyde, the macOS menu bar app that watches every Claude Code session in real time.
 
-Phases follow Clyde's release rhythm. Detail behind each task lives in
-[`docs/roadmap.md`](docs/roadmap.md); the historical record of what
-shipped is in [`CHANGELOG.md`](CHANGELOG.md) and
-[`docs/pre-launch-checklist.md`](docs/pre-launch-checklist.md).
+Phases follow Clyde's release rhythm. Detail behind each task lives in [`docs/roadmap.md`](docs/roadmap.md); the historical record of what shipped is in [`CHANGELOG.md`](CHANGELOG.md) and [`docs/pre-launch-checklist.md`](docs/pre-launch-checklist.md).
 
 ## Phase: v0.2.1 — Sign and ship properly
 
-First signed + notarized release. Single goal: eliminate the
-"unidentified developer" Gatekeeper friction that v0.1.0 / v0.2.0
-still ship with. No new product features unless a critical bug
-demands one.
+First signed + notarized release. Single goal: eliminate the "unidentified developer" Gatekeeper friction that v0.1.0 / v0.2.0 still ship with. No new product features unless a critical bug demands one.
 
 - [x] Apple Developer Program membership + Developer ID cert ready !hi
 - [x] Wire up GitHub Secrets for the release pipeline (cert, password, Apple ID, Sparkle key) !hi
@@ -28,8 +21,7 @@ demands one.
 
 ## Phase: v0.2.x — Hook pipeline followups + UX polish
 
-Items surfaced by the 0.1.0 / 0.2.0 smoke tests and deferred to
-avoid scope creep.
+Items surfaced by the 0.1.0 / 0.2.0 smoke tests and deferred to avoid scope creep.
 
 - [x] Render Sparkle release notes as HTML — convert CHANGELOG markdown (bullets, bold, links) to HTML in `update-appcast.sh` so the update dialog formats properly instead of showing raw `**bold**` / `- ` syntax !md #release
 - [x] Document the `PermissionRequest → deny` hook trace in `clyde-hook.sh` + smoke-test doc !md #hooks
@@ -45,18 +37,14 @@ avoid scope creep.
 
 ## Phase: v0.3.0 — Richer session telemetry
 
-Push Clyde from "monitor" toward "feed of what Claude is actually
-doing" by harvesting payload fields the hook bus already delivers
-but Clyde currently throws away. All work is on the existing local
-hook pipeline — no new IPC surface.
+Push Clyde from "monitor" toward "feed of what Claude is actually doing" by harvesting payload fields the hook bus already delivers but Clyde currently throws away. All work is on the existing local hook pipeline — no new IPC surface.
 
 - [ ] Surface current tool + duration in the panel — `PreToolUse` and `PostToolUse` (Claude Code v2.1.119+) carry `tool_name`, `tool_input` and `duration_ms`. Today `clyde-hook.sh` only `touch`es the busy marker on `PreToolUse`. Capture `tool_name` + a short `tool_input` summary into a new `state/<sid>-tool` file, render it in `ExpandedView` as e.g. "Edit · Foo.swift (3.2s)", and clear it on `PostToolUse`/`Stop` !md #hooks #ux
 - [ ] Subscribe to `TaskCreated` hook event — fires when Claude calls the `TaskCreate` (todo-list) tool. Add a case to `clyde-hook.sh`, persist a count to `state/<sid>-plan`, and surface a small "📋 planning N tasks" affordance so users know an extended plan-then-execute run is starting !lo #hooks #ux
 
 ## Phase: v0.3.0+ — Content & reach
 
-Backlog. Pick when there's time or when community interest bumps
-priority.
+Backlog. Pick when there's time or when community interest bumps priority.
 
 - [ ] Short demo video (30-60s) showing busy / ready / attention flow !md
 - [ ] Press kit folder — logos, screenshots, fact sheet !lo
