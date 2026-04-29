@@ -120,8 +120,10 @@ except Exception:
 }
 
 # Truncate $1 to at most $2 characters, appending an ellipsis if
-# truncated. Pure shell, byte-counted (fine for ASCII summaries; the
-# whitelisted fields below are all ASCII paths/commands/patterns).
+# truncated. Pure shell; bash's ${#s} and ${s:0:N} are
+# character-counted in a UTF-8 locale, so this is safe for Unicode
+# file paths and query strings. The 40-char cap downstream keeps
+# display strings compact regardless of encoding.
 truncate_summary() {
     local s=$1
     local max=$2
@@ -146,9 +148,9 @@ compute_tool_summary() {
             ;;
         Bash)
             raw=$(extract_tool_input_field command)
-            # First line only — collapse any embedded newlines just in
-            # case the grep fallback grabbed a multi-line value.
-            raw=$(printf '%s' "$raw" | tr '\n' ' ' | head -c 200)
+            # Collapse embedded newlines (python3 strips them; the
+            # grep fallback may not).
+            raw=$(printf '%s' "$raw" | tr '\n' ' ')
             truncate_summary "$raw" 40
             ;;
         Glob|Grep)
