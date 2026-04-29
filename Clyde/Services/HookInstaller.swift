@@ -90,9 +90,14 @@ enum HookInstaller {
     /// - `StopFailure`: turn ended due to API error → busy end (abnormal)
     /// - `PermissionRequest`: Claude needs user approval → attention
     /// - `PreToolUse`: Claude is about to run a tool → permission was resolved,
-    ///                 plus refresh busy marker mtime so it doesn't go stale
+    ///                 refresh busy marker mtime, and capture the active tool
+    ///                 name + summary into a `-tool` marker for the panel
+    /// - `PostToolUse`: tool finished cleanly → drop the `-tool` marker so the
+    ///                 session row slides back to the project path until the
+    ///                 next `PreToolUse` fires
     /// - `PostToolUseFailure`: tool failed; if `is_interrupt: true` (user
-    ///                 Ctrl+C), drop the busy marker immediately
+    ///                 Ctrl+C), drop the busy marker immediately; always drop
+    ///                 the `-tool` marker (the call has terminated either way)
     static let registeredHookEvents = [
         "SessionStart",
         "SessionEnd",
@@ -102,6 +107,7 @@ enum HookInstaller {
         "PermissionRequest",
         "PermissionDenied",
         "PreToolUse",
+        "PostToolUse",
         "PostToolUseFailure",
         // v15 additions:
         "CwdChanged",
