@@ -88,6 +88,8 @@ struct ClydeAnimationView: View {
     /// permission too.)
     let ambientIdleEnabled: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var animationTick: Int = 0
     @State private var antennaGlow: Bool = false
     @State private var zzzOffset: CGFloat = 0
@@ -221,10 +223,12 @@ struct ClydeAnimationView: View {
             }
             .frame(width: gridWidth, height: gridHeight)
             .onChange(of: timeline.date) { _ in
+                guard !reduceMotion else { return }
                 animationTick += 1
                 updateAnimations()
             }
         }
+        .accessibilityHidden(true)
         .onAppear {
             updateAnimations()
             if ambientIdleEnabled && state != .sleeping {
@@ -367,8 +371,12 @@ struct ClydeAnimationView: View {
     private func updateAnimations() {
         switch state {
         case .busy:
-            withAnimation(.easeInOut(duration: 0.4)) {
-                antennaGlow.toggle()
+            if reduceMotion {
+                antennaGlow = false
+            } else {
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    antennaGlow.toggle()
+                }
             }
             zzzOffset = 0
             zzzOpacity = 1
@@ -377,18 +385,29 @@ struct ClydeAnimationView: View {
             zzzOffset = 0
             zzzOpacity = 1
         case .attention:
-            withAnimation(.easeInOut(duration: 0.3)) {
-                antennaGlow.toggle()
-            }
-            withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
-                zzzOffset = pixelSize * 0.6
-                zzzOpacity = 0.5
+            if reduceMotion {
+                antennaGlow = false
+                zzzOffset = 0
+                zzzOpacity = 1
+            } else {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    antennaGlow.toggle()
+                }
+                withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                    zzzOffset = pixelSize * 0.6
+                    zzzOpacity = 0.5
+                }
             }
         case .sleeping:
             antennaGlow = false
-            withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
-                zzzOffset = pixelSize * 3
-                zzzOpacity = 0.3
+            if reduceMotion {
+                zzzOffset = 0
+                zzzOpacity = 1
+            } else {
+                withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
+                    zzzOffset = pixelSize * 3
+                    zzzOpacity = 0.3
+                }
             }
         }
     }
