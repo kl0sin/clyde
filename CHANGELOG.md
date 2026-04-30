@@ -6,6 +6,8 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **First-run coachmark tour.** After the welcome modal Clyde now walks you through the four things that aren't obvious at a glance — what each session row shows and means, the live `Edit · MyFile.swift · 3s` tool/plan line that ticks while Claude works, the snooze button for muting alerts during meetings, and the global `⌃⌘C` hotkey for opening or hiding the panel from anywhere. Skippable mid-tour, replayable from Settings → General, and silent for anyone upgrading from a Clyde version that didn't have it.
+
 ## [0.3.0] — 2026-04-29
 
 Richer session telemetry. Clyde stops at "is Claude busy?" and starts answering "what is Claude actually doing?" — every session row now narrates the active tool with a live duration, and surfaces plan-then-execute progress when Claude maps out a multi-step run.

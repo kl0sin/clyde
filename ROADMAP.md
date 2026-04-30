@@ -43,10 +43,10 @@ Push Clyde from "monitor" toward "feed of what Claude is actually doing" by harv
 
 Backlog. Pick when there's time or when community interest bumps priority.
 
-- [ ] Coachmarks / "how to use" tooltip on first panel expand !md #ux
+- [x] Coachmark first-run tour — four anchored popovers (session row + tool/plan line + snooze + collapse with ⌃⌘C hotkey discovery) using SwiftUI's native `.popover`. Empty-state branch handles "panel opened before any session exists" with a three-step degraded tour. Migration suppresses the tour for users upgrading from a Clyde version that didn't have it !md #ux
 - [ ] Accessibility pass — VoiceOver labels on all controls !md #ux
 - [ ] Copy proofread by a second pair of eyes !lo #ux
-- [ ] Coachmark re-trigger from Settings ("Replay welcome tour") !lo #ux
+- [x] "Replay welcome tour" button in Settings → General. Clears the persisted flag and either fires the tour immediately (panel open) or queues it for the next expand (panel collapsed) with an inline confirmation label !lo #ux
 - [ ] Short demo video (30-60s) showing busy / ready / attention flow !md
 - [ ] Press kit folder — logos, screenshots, fact sheet !lo
 - [ ] Opt-in crash reporting (Sentry / KSCrash / MetricKit), off by default !lo
