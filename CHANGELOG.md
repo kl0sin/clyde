@@ -6,8 +6,13 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-04-30
+
+Onboarding plus accessibility plus a plan-badge fix on top of v0.3.0. Same feature surface — same panel, same hooks, same telemetry — just easier to discover and to use, regardless of how you read the screen.
+
 - **First-run coachmark tour.** After the welcome modal Clyde now walks you through the four things that aren't obvious at a glance — what each session row shows and means, the live `Edit · MyFile.swift · 3s` tool/plan line that ticks while Claude works, the snooze button for muting alerts during meetings, and the global `⌃⌘C` hotkey for opening or hiding the panel from anywhere. Skippable mid-tour, replayable from Settings → General, and silent for anyone upgrading from a Clyde version that didn't have it.
 - **Accessibility pass.** Every interactive control in Clyde now announces itself meaningfully under VoiceOver — session rows speak their name, status, current tool and plan progress as one breath, the menu-bar capsule reads its live count, and tooltips, snooze remaining time, and onboarding cards all carry semantic labels. With Reduce Motion enabled in System Settings, Clyde stops every auto-running animation: the mascot freezes on its first frame, status pills no longer pulse, and slide transitions become opacity crossfades. Drag-and-drop and color transitions stay intact.
+- **Completed plan badges no longer linger.** When Claude finishes a multi-step plan (the green `✓ N/N` badge), the badge now disappears the next time you submit a prompt instead of sticking around through every subsequent unrelated turn. Partial plans still persist across turns so the progress badge keeps tracking when you type "continue" mid-execution — only fully-completed badges get cleared.
 
 ## [0.3.0] — 2026-04-29
 
