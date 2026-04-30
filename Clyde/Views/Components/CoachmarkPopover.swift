@@ -45,3 +45,48 @@ struct CoachmarkPopover: View {
         .frame(width: 260)
     }
 }
+
+extension View {
+    /// Attaches a coachmark popover to this view. The popover is
+    /// presented when `controller.currentStep == step` and this
+    /// view's `identity` wins the first-claim-wins race (handled by
+    /// `controller.shouldAnchor`).
+    ///
+    /// `identity` defaults to a per-call `UUID()` — fine for
+    /// single-anchor steps (snooze, collapse, emptyState). Pass a
+    /// stable per-row identity for steps anchored inside `ForEach`
+    /// lists (sessionRow, toolPlan).
+    func coachmarkAnchor(
+        _ step: CoachmarkStep,
+        identity: AnyHashable = AnyHashable(UUID())
+    ) -> some View {
+        modifier(CoachmarkAnchorModifier(step: step, identity: identity))
+    }
+}
+
+private struct CoachmarkAnchorModifier: ViewModifier {
+    let step: CoachmarkStep
+    let identity: AnyHashable
+
+    @EnvironmentObject private var controller: CoachmarkController
+
+    func body(content: Content) -> some View {
+        content.popover(
+            isPresented: Binding(
+                get: { controller.shouldAnchor(step, identity: identity) },
+                set: { isShown in
+                    if !isShown && controller.currentStep == step {
+                        controller.skip()
+                    }
+                }
+            ),
+            arrowEdge: .trailing
+        ) {
+            CoachmarkPopover(
+                step: step,
+                onAdvance: { controller.advance() },
+                onSkip: { controller.skip() }
+            )
+        }
+    }
+}
