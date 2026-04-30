@@ -20,5 +20,7 @@ struct EmptyStateView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
         .coachmarkAnchor(.emptyState)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No active Claude sessions. Start one in your terminal to see it here.")
     }
 }

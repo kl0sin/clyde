@@ -124,5 +124,9 @@ private struct HookHealthBanner: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(issue.bannerMessage)
+        .accessibilityHint("Click to open Settings")
+        .accessibilityAddTraits(.isButton)
     }
 }
