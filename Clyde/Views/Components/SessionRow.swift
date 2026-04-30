@@ -111,6 +111,7 @@ struct SessionRow: View {
                                 .truncationMode(.tail)
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .coachmarkAnchor(.toolPlan, identity: AnyHashable(session.id))
                     } else {
                         Text(session.workingDirectory.isEmpty
                              ? "Unknown path"
@@ -218,6 +219,7 @@ struct SessionRow: View {
                 pillPulse = true
             }
         }
+        .coachmarkAnchor(.sessionRow, identity: AnyHashable(session.id))
     }
 
     /// Pill is shown for active states (busy / attention) and ghosts.
