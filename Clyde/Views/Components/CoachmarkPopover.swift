@@ -52,15 +52,19 @@ extension View {
     /// view's `identity` wins the first-claim-wins race (handled by
     /// `controller.shouldAnchor`).
     ///
-    /// `identity` defaults to a per-call `UUID()` — fine for
-    /// single-anchor steps (snooze, collapse, emptyState). Pass a
-    /// stable per-row identity for steps anchored inside `ForEach`
-    /// lists (sessionRow, toolPlan).
+    /// `identity` defaults to the step's raw value — stable across
+    /// re-renders, fine for single-anchor steps (snooze, collapse,
+    /// emptyState). Pass a per-row identity for steps anchored inside
+    /// `ForEach` lists (sessionRow, toolPlan) so first-claim-wins picks
+    /// a deterministic row.
     func coachmarkAnchor(
         _ step: CoachmarkStep,
-        identity: AnyHashable = AnyHashable(UUID())
+        identity: AnyHashable? = nil
     ) -> some View {
-        modifier(CoachmarkAnchorModifier(step: step, identity: identity))
+        modifier(CoachmarkAnchorModifier(
+            step: step,
+            identity: identity ?? AnyHashable(step.rawValue)
+        ))
     }
 }
 
