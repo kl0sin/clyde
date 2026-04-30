@@ -112,4 +112,38 @@ final class CoachmarkControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.currentStep, .emptyState)
     }
+
+    // MARK: - advance
+
+    func test_advance_walksFullTour_withSessions() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+        controller.maybeStart(hasSessions: true)
+
+        XCTAssertEqual(controller.currentStep, .sessionRow)
+        controller.advance()
+        XCTAssertEqual(controller.currentStep, .toolPlan)
+        controller.advance()
+        XCTAssertEqual(controller.currentStep, .snooze)
+        controller.advance()
+        XCTAssertEqual(controller.currentStep, .collapse)
+        controller.advance()
+        XCTAssertNil(controller.currentStep)
+        XCTAssertTrue(defaults.bool(forKey: "coachmarksShown"))
+    }
+
+    func test_advance_walksEmptyStateBranch() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+        controller.maybeStart(hasSessions: false)
+
+        XCTAssertEqual(controller.currentStep, .emptyState)
+        controller.advance()
+        XCTAssertEqual(controller.currentStep, .snooze)
+        controller.advance()
+        XCTAssertEqual(controller.currentStep, .collapse)
+        controller.advance()
+        XCTAssertNil(controller.currentStep)
+        XCTAssertTrue(defaults.bool(forKey: "coachmarksShown"))
+    }
 }

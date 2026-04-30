@@ -75,6 +75,21 @@ final class CoachmarkController: ObservableObject {
 
     private var claimedAnchorID: AnyHashable?
 
+    /// Step ordering for each branch. The branch is locked in at
+    /// `maybeStart` time — appending a session list mid-tour does NOT
+    /// switch the user from the empty-state branch into the with-sessions
+    /// branch.
+    private static let withSessionsSequence: [CoachmarkStep] = [
+        .sessionRow, .toolPlan, .snooze, .collapse
+    ]
+    private static let emptyStateSequence: [CoachmarkStep] = [
+        .emptyState, .snooze, .collapse
+    ]
+
+    /// Captured at `maybeStart` so that `.snooze` / `.collapse` (shared
+    /// between branches) advance to the right next step.
+    private var startedBranch: [CoachmarkStep]?
+
     private enum Keys {
         static let shown = "coachmarksShown"
         static let migrated = "coachmarksMigrated"
@@ -106,6 +121,24 @@ final class CoachmarkController: ObservableObject {
     func maybeStart(hasSessions: Bool) {
         guard !defaults.bool(forKey: Keys.shown) else { return }
         guard onboardingShown() else { return }
-        currentStep = hasSessions ? .sessionRow : .emptyState
+        let sequence = hasSessions ? Self.withSessionsSequence : Self.emptyStateSequence
+        startedBranch = sequence
+        currentStep = sequence.first
+    }
+
+    /// Advance one step. Called from the popover's "Got it ›" / "Done ✓"
+    /// button. Crossing past the last step persists the "shown" flag and
+    /// clears the in-memory step.
+    func advance() {
+        guard let step = currentStep, let sequence = startedBranch else { return }
+        guard let idx = sequence.firstIndex(of: step) else { return }
+        let next = idx + 1
+        claimedAnchorID = nil
+        if next >= sequence.count {
+            currentStep = nil
+            defaults.set(true, forKey: Keys.shown)
+        } else {
+            currentStep = sequence[next]
+        }
     }
 }
