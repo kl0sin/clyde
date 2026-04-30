@@ -120,6 +120,16 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         return seconds > 0 ? Int(ceil(seconds / 60.0)) : 0
     }
 
+    /// Whole minutes remaining in the active snooze, or `nil` when not
+    /// snoozed. Sub-minute remainders round up to 1 so VoiceOver never
+    /// announces "0 minutes" right before the snooze expires.
+    var snoozeRemainingMinutes: Int? {
+        guard let snoozeUntil else { return nil }
+        let interval = snoozeUntil.timeIntervalSinceNow
+        guard interval > 0 else { return nil }
+        return max(1, Int(ceil(interval / 60.0)))
+    }
+
     private func scheduleWakeTimer() {
         snoozeWakeTimer?.invalidate()
         guard let deadline = snoozeUntil else { return }

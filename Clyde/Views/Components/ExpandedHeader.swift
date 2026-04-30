@@ -13,6 +13,7 @@ struct ExpandedHeader: View {
     let workingCount: Int
     let readyCount: Int
     let isSnoozed: Bool
+    let snoozeRemainingMinutes: Int?
     let onSnooze: () -> Void
     let onSettings: () -> Void
     let onCollapse: () -> Void
@@ -41,6 +42,8 @@ struct ExpandedHeader: View {
                     .accessibilityAddTraits(.isHeader)
 
                 statsRow
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(statsAccessibilityLabel)
             }
 
             Spacer(minLength: 0)
@@ -52,6 +55,7 @@ struct ExpandedHeader: View {
                     accessibilityLabel: isSnoozed ? "Resume notifications" : "Snooze notifications"
                 )
                 .coachmarkAnchor(.snooze)
+                .accessibilityValue(snoozeAccessibilityValue)
 
                 headerButton(
                     icon: "gearshape",
@@ -65,6 +69,7 @@ struct ExpandedHeader: View {
                     accessibilityLabel: "Collapse to widget"
                 )
                 .coachmarkAnchor(.collapse)
+                .accessibilityHint("Or press Control-Command-C from anywhere")
             }
         }
         .padding(.horizontal, 16)
@@ -142,6 +147,26 @@ struct ExpandedHeader: View {
             entries.append(("ready", readyCount, SessionTheme.readyColor))
         }
         return entries
+    }
+
+    /// Single combined VoiceOver string for the stats row. Visually the
+    /// row is three colored dot+count pairs; VO users get a comma-joined
+    /// summary in the same priority order (attention > working > ready)
+    /// so they don't have to swipe through three elements to learn what
+    /// changed.
+    private var statsAccessibilityLabel: String {
+        let entries = visibleStats
+        if entries.isEmpty { return "No active sessions" }
+        return entries.map { "\($0.count) \($0.label)" }.joined(separator: ", ")
+    }
+
+    /// Remaining-time announcement for the snooze button. Rendered as
+    /// the button's `.accessibilityValue` so VO reads "Resume
+    /// notifications, Snoozed for 23 minutes" — users learn when
+    /// notifications resume without leaving the row.
+    private var snoozeAccessibilityValue: String {
+        guard isSnoozed, let minutes = snoozeRemainingMinutes else { return "" }
+        return minutes == 1 ? "Snoozed for 1 minute" : "Snoozed for \(minutes) minutes"
     }
 
     // MARK: - Helpers

@@ -15,6 +15,7 @@ struct ExpandedView: View {
                 workingCount: sessionViewModel.busyCount,
                 readyCount: sessionViewModel.idleCount,
                 isSnoozed: appViewModel.notificationService.isSnoozed,
+                snoozeRemainingMinutes: appViewModel.notificationService.snoozeRemainingMinutes,
                 onSnooze: {
                     if appViewModel.notificationService.isSnoozed {
                         appViewModel.notificationService.clearSnooze()
