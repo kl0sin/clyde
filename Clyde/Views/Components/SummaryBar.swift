@@ -43,6 +43,18 @@ struct SummaryBar: View {
             Rectangle().frame(height: 1).foregroundStyle(Color(white: 0.18)),
             alignment: .top
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(summaryAccessibilityLabel)
+    }
+
+    private var summaryAccessibilityLabel: String {
+        if sessionCount == 0 { return "Waiting for sessions" }
+        var parts: [String] = []
+        if busyCount > 0 { parts.append("\(busyCount) working") }
+        if idleCount > 0 { parts.append("\(idleCount) ready") }
+        let summary = "Status summary: " + parts.joined(separator: ", ")
+        let total = sessionCount == 1 ? "1 session" : "\(sessionCount) sessions"
+        return "\(summary). \(total) total."
     }
 }
 
