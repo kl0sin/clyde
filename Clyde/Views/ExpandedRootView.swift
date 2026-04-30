@@ -29,7 +29,14 @@ struct ExpandedRootView: View {
             appViewModel.coachmarks.maybeStart(hasSessions: appViewModel.hasLiveSessions)
         }
         .onDisappear {
-            appViewModel.coachmarks.reset()
+            if appViewModel.coachmarks.currentStep == .collapse {
+                // Closing the panel while the popover points at the collapse
+                // button IS the action the popover is teaching — treat it as
+                // completion rather than a mid-tour reset.
+                appViewModel.coachmarks.advance()
+            } else {
+                appViewModel.coachmarks.reset()
+            }
         }
     }
 }
