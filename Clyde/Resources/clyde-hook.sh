@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 18
+# clyde-hook-version: 19
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -12,7 +12,7 @@
 # Handled events:
 #   SessionStart        → state/<session_id>-info (alive marker, includes source)
 #   SessionEnd          → removes info + busy + error + subagent + tool + plan + event
-#   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info)
+#   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info, drops fully-completed -plan)
 #   Stop                → removes busy + error + subagent + tool + event marker
 #   StopFailure         → writes state/<session_id>-error with stop_reason
 #   PermissionRequest   → events/<session_id>.json (attention flag)
@@ -340,6 +340,18 @@ case "$HOOK_EVENT" in
         if [ ! -f "$STATE_DIR/$KEY-info" ]; then
             atomic_write "$STATE_DIR/$KEY-info" \
                 "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP}"
+        fi
+        # If the previous turn finished a plan (done_count == task_count),
+        # drop the -plan marker now that the user has moved on. Partial
+        # plans persist across turns so the badge keeps tracking when the
+        # user types "continue".
+        if [ -f "$STATE_DIR/$KEY-plan" ]; then
+            PLAN_TASK_COUNT=$(read_plan_field task_count)
+            PLAN_DONE_COUNT=$(read_plan_field done_count)
+            if [ -n "$PLAN_TASK_COUNT" ] && [ "$PLAN_TASK_COUNT" -gt 0 ] \
+               && [ "$PLAN_DONE_COUNT" = "$PLAN_TASK_COUNT" ]; then
+                rm -f "$STATE_DIR/$KEY-plan"
+            fi
         fi
         ;;
     Stop)
