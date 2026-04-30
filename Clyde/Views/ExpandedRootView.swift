@@ -26,9 +26,7 @@ struct ExpandedRootView: View {
         .ignoresSafeArea()
         .environmentObject(appViewModel.coachmarks)
         .onAppear {
-            appViewModel.coachmarks.maybeStart(
-                hasSessions: !sessionViewModel.sessions.isEmpty
-            )
+            appViewModel.coachmarks.maybeStart(hasSessions: appViewModel.hasLiveSessions)
         }
         .onDisappear {
             appViewModel.coachmarks.reset()

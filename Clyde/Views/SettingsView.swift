@@ -210,9 +210,7 @@ struct GeneralSettingsTab: View {
                     Button("Replay welcome tour") {
                         appViewModel.coachmarks.replay()
                         if !appViewModel.isCollapsed {
-                            appViewModel.coachmarks.maybeStart(
-                                hasSessions: !appViewModel.processMonitor.sessions.filter { !$0.isGhost }.isEmpty
-                            )
+                            appViewModel.coachmarks.maybeStart(hasSessions: appViewModel.hasLiveSessions)
                         } else {
                             replayQueued = true
                         }

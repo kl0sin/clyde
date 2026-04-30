@@ -24,6 +24,13 @@ final class AppViewModel: ObservableObject {
     /// window via `.environmentObject`.
     let coachmarks: CoachmarkController
 
+    /// Whether any non-ghost session is currently being tracked. Used by
+    /// the coachmark tour to pick the with-sessions vs empty-state branch
+    /// at first panel expand.
+    var hasLiveSessions: Bool {
+        processMonitor.sessions.contains { !$0.isGhost }
+    }
+
     var clydeState: ClydeState {
         // Attention takes priority over busy — if any session is waiting for
         // permission, surface that distinct state to the animation layer.
