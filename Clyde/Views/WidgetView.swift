@@ -71,6 +71,10 @@ struct WidgetView: View {
                 Label("Quit Clyde", systemImage: "power")
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(viewModel.widgetAccessibilityLabel)
+        .accessibilityHint("Click to expand panel")
+        .accessibilityAddTraits(.isButton)
     }
 }
 

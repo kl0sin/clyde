@@ -873,20 +873,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Plain-language summary of the menu-bar status item's current state,
     /// used as the VoiceOver value so users hear e.g. "2 working, 1 ready"
-    /// alongside the static "Clyde" label and `.button` role.
+    /// alongside the static "Clyde" label and `.button` role. Delegates to
+    /// `AppViewModel.widgetAccessibilityLabel` (the shared source of truth
+    /// the widget panel uses) and strips the leading "Clyde, " prefix
+    /// because the status item's own accessibility label already says
+    /// "Clyde — Claude Code session monitor".
     @MainActor
     private func currentStatusItemValue() -> String {
-        let attentionPIDs = appViewModel.attentionMonitor.attentionPIDs
-        let sessions = appViewModel.processMonitor.sessions.filter { !$0.isGhost }
-        if sessions.isEmpty { return "No active sessions" }
-        let attention = sessions.filter { attentionPIDs.contains($0.pid) }.count
-        let working = sessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
-        let ready = sessions.count - attention - working
-        var parts: [String] = []
-        if attention > 0 { parts.append("\(attention) needs attention") }
-        if working > 0 { parts.append("\(working) working") }
-        if ready > 0 { parts.append("\(ready) ready") }
-        return parts.joined(separator: ", ")
+        let label = appViewModel.widgetAccessibilityLabel
+        return label.replacingOccurrences(of: "Clyde, ", with: "")
     }
 }
 

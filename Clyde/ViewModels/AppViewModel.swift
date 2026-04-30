@@ -31,6 +31,25 @@ final class AppViewModel: ObservableObject {
         processMonitor.sessions.contains { !$0.isGhost }
     }
 
+    /// Plain-language summary of the menu-bar capsule's current state, used
+    /// as the VoiceOver label on `WidgetView` and (transitively, with the
+    /// "Clyde, " prefix stripped) the menu-bar status item's accessibility
+    /// value. Keeping the source of truth here means both surfaces always
+    /// announce the same thing.
+    var widgetAccessibilityLabel: String {
+        let attentionPIDs = attentionMonitor.attentionPIDs
+        let sessions = processMonitor.sessions.filter { !$0.isGhost }
+        if sessions.isEmpty { return "Clyde, no active sessions" }
+        let attention = sessions.filter { attentionPIDs.contains($0.pid) }.count
+        let working = sessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
+        let ready = sessions.count - attention - working
+        var parts: [String] = ["Clyde"]
+        if attention > 0 { parts.append("\(attention) needs attention") }
+        if working > 0 { parts.append("\(working) working") }
+        if ready > 0 { parts.append("\(ready) ready") }
+        return parts.joined(separator: ", ")
+    }
+
     var clydeState: ClydeState {
         // Attention takes priority over busy — if any session is waiting for
         // permission, surface that distinct state to the animation layer.
