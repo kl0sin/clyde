@@ -73,4 +73,43 @@ final class CoachmarkControllerTests: XCTestCase {
         // Second call must NOT flip `coachmarksShown` back to true.
         XCTAssertFalse(defaults.bool(forKey: "coachmarksShown"))
     }
+
+    // MARK: - maybeStart
+
+    func test_maybeStart_blockedIfShown() {
+        let defaults = tempDefaults()
+        defaults.set(true, forKey: "coachmarksShown")
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+
+        controller.maybeStart(hasSessions: true)
+
+        XCTAssertNil(controller.currentStep)
+    }
+
+    func test_maybeStart_blockedIfOnboardingNotShown() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: false)
+
+        controller.maybeStart(hasSessions: true)
+
+        XCTAssertNil(controller.currentStep)
+    }
+
+    func test_maybeStart_picksSessionRow_whenSessionsExist() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+
+        controller.maybeStart(hasSessions: true)
+
+        XCTAssertEqual(controller.currentStep, .sessionRow)
+    }
+
+    func test_maybeStart_picksEmptyState_whenNoSessions() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+
+        controller.maybeStart(hasSessions: false)
+
+        XCTAssertEqual(controller.currentStep, .emptyState)
+    }
 }

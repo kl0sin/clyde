@@ -97,4 +97,15 @@ final class CoachmarkController: ObservableObject {
         }
         defaults.set(true, forKey: Keys.migrated)
     }
+
+    /// Called from `ExpandedRootView.onAppear`. No-op if the tour was
+    /// already shown, or if the onboarding modal has not yet been
+    /// dismissed (onboarding always wins; coachmarks come after).
+    /// Picks the first step based on whether any session is currently
+    /// being tracked.
+    func maybeStart(hasSessions: Bool) {
+        guard !defaults.bool(forKey: Keys.shown) else { return }
+        guard onboardingShown() else { return }
+        currentStep = hasSessions ? .sessionRow : .emptyState
+    }
 }
