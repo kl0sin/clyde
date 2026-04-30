@@ -231,7 +231,7 @@ struct ClydeAnimationView: View {
         .accessibilityHidden(true)
         .onAppear {
             updateAnimations()
-            if ambientIdleEnabled && state != .sleeping {
+            if ambientIdleEnabled && state != .sleeping && !reduceMotion {
                 startAmbientLoop()
             }
         }
@@ -246,11 +246,20 @@ struct ClydeAnimationView: View {
             // which left the busy and attention mascots visually
             // frozen — users reported it as "Clyde isn't animated
             // anymore". Sleeping is still excluded because the snore
-            // animation owns the sprite then.
-            if ambientIdleEnabled && newState != .sleeping {
+            // animation owns the sprite then. Reduce-motion users
+            // also opt out so the eyes don't blink/glance while the
+            // body is frozen.
+            if ambientIdleEnabled && newState != .sleeping && !reduceMotion {
                 startAmbientLoop()
             } else {
                 stopAmbientLoop()
+            }
+        }
+        .onChange(of: reduceMotion) { newValue in
+            if newValue {
+                stopAmbientLoop()
+            } else if ambientIdleEnabled && state != .sleeping {
+                startAmbientLoop()
             }
         }
     }

@@ -8,8 +8,6 @@ struct SummaryBar: View {
     let idleCount: Int
     let clydeState: ClydeState
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
         HStack(spacing: 10) {
             ClydeAnimationView(state: clydeState, pixelSize: 0.75)

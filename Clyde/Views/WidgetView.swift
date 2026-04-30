@@ -2,7 +2,6 @@ import SwiftUI
 
 struct WidgetView: View {
     @ObservedObject var viewModel: AppViewModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
