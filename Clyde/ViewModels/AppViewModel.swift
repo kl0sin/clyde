@@ -19,6 +19,11 @@ final class AppViewModel: ObservableObject {
     let activityLog: ActivityLog
     let pushService: PushService
 
+    /// Drives the first-run coachmark tour. Owned here so the same
+    /// instance is shared between the expanded panel and the Settings
+    /// window via `.environmentObject`.
+    let coachmarks: CoachmarkController
+
     var clydeState: ClydeState {
         // Attention takes priority over busy — if any session is waiting for
         // permission, surface that distinct state to the animation layer.
@@ -95,6 +100,9 @@ final class AppViewModel: ObservableObject {
         self.activityLog = ActivityLog(
             processMonitor: processMonitor,
             attentionMonitor: attentionMonitor
+        )
+        self.coachmarks = CoachmarkController(
+            onboardingShown: { UserDefaults.standard.bool(forKey: "onboardingShown") }
         )
         self.widgetVisible = (UserDefaults.standard.object(forKey: Self.widgetVisibleKey) as? Bool) ?? true
 
