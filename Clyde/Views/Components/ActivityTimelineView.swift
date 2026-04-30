@@ -55,6 +55,44 @@ struct ActivityTimelineView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Activity timeline")
+        .accessibilityValue(timelineAccessibilityValue)
+        .accessibilityHint(expanded ? "Tap to collapse" : "Tap to expand")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var timelineAccessibilityValue: String {
+        let count = log.events.count
+        if count == 0 { return "No events" }
+        return count == 1 ? "1 event" : "\(count) events"
+    }
+
+    private func eventAccessibilityLabel(_ event: ActivityEvent) -> String {
+        let timeText = event.timestamp.formatted(date: .omitted, time: .shortened)
+        switch event.kind {
+        case .sessionStarted:
+            return "\(event.sessionDisplayName): session started at \(timeText)"
+        case .sessionResumed:
+            return "\(event.sessionDisplayName): session resumed at \(timeText)"
+        case .sessionCompacted:
+            return "\(event.sessionDisplayName): context compacted at \(timeText)"
+        case .promptSubmitted:
+            return "\(event.sessionDisplayName): prompt submitted at \(timeText)"
+        case .permissionRequested:
+            return "\(event.sessionDisplayName): permission requested at \(timeText)"
+        case .permissionResolved:
+            return "\(event.sessionDisplayName): permission resolved at \(timeText)"
+        case .errorOccurred(let reason):
+            return "\(event.sessionDisplayName): error at \(timeText): \(reason)"
+        case .subagentStarted(let agentType):
+            return "\(event.sessionDisplayName): subagent \(agentType) started at \(timeText)"
+        case .subagentStopped:
+            return "\(event.sessionDisplayName): subagent finished at \(timeText)"
+        case .sessionReady:
+            return "\(event.sessionDisplayName): ready at \(timeText)"
+        case .sessionEnded:
+            return "\(event.sessionDisplayName): session ended at \(timeText)"
+        }
     }
 
     @ViewBuilder
@@ -119,6 +157,8 @@ struct ActivityTimelineView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(eventAccessibilityLabel(event))
     }
 
     private func color(for kind: ActivityEvent.Kind) -> Color {
