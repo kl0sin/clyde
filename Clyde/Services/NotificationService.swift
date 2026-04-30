@@ -113,16 +113,11 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         ClydeLog.general.info("Snooze cleared")
     }
 
-    /// Number of whole minutes left in the current snooze, or 0 if not snoozed.
-    var minutesRemaining: Int {
-        guard let snoozeUntil else { return 0 }
-        let seconds = snoozeUntil.timeIntervalSinceNow
-        return seconds > 0 ? Int(ceil(seconds / 60.0)) : 0
-    }
-
     /// Whole minutes remaining in the active snooze, or `nil` when not
     /// snoozed. Sub-minute remainders round up to 1 so VoiceOver never
-    /// announces "0 minutes" right before the snooze expires.
+    /// announces "0 minutes" right before the snooze expires. UI surfaces
+    /// that need a numeric default ("Snoozed (5m)" labels) coalesce with
+    /// `?? 0`.
     var snoozeRemainingMinutes: Int? {
         guard let snoozeUntil else { return nil }
         let interval = snoozeUntil.timeIntervalSinceNow

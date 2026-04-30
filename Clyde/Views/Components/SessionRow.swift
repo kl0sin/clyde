@@ -271,7 +271,12 @@ struct SessionRow: View {
     /// running tool with elapsed seconds, and plan progress when there's
     /// a non-empty plan.
     private var rowAccessibilityLabel: String {
-        var parts: [String] = ["\(session.displayName) session", accessibilityStatusDescription]
+        let nameAlreadyMentionsSession = session.displayName
+            .range(of: "session", options: .caseInsensitive) != nil
+        let nameWithRole = nameAlreadyMentionsSession
+            ? session.displayName
+            : "\(session.displayName) session"
+        var parts: [String] = [nameWithRole, accessibilityStatusDescription]
 
         if let tool = session.activeTool, let label = session.toolDisplayLabel {
             let elapsed = max(0, Int(Date().timeIntervalSince(tool.startedAt)))

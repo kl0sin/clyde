@@ -421,7 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Snooze takes priority: show the template Clyde icon + "💤 Xm"
         // so the user clearly sees the app is muted.
         if appViewModel.notificationService.isSnoozed {
-            let remaining = appViewModel.notificationService.minutesRemaining
+            let remaining = appViewModel.notificationService.snoozeRemainingMinutes ?? 0
             button.image = ClydeMenuBarIcon.templateImage()
             let title = NSAttributedString(
                 string: " 💤 \(remaining)m",
@@ -517,7 +517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // otherwise offer the standard preset durations as a submenu.
         let notifications = appViewModel.notificationService
         if notifications.isSnoozed {
-            let remaining = notifications.minutesRemaining
+            let remaining = notifications.snoozeRemainingMinutes ?? 0
             let resume = NSMenuItem(
                 title: "Resume notifications (zzz \(remaining)m)",
                 action: #selector(resumeNotifications),
