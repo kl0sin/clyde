@@ -143,6 +143,7 @@ struct SettingsView: View {
 struct GeneralSettingsTab: View {
     @ObservedObject var appViewModel: AppViewModel
     @AppStorage("pollingInterval") private var pollingInterval: Double = AppConstants.defaultPollingInterval
+    @State private var replayQueued: Bool = false
 
     var body: some View {
         SettingsSection(title: "Appearance") {
@@ -190,6 +191,45 @@ struct GeneralSettingsTab: View {
                 ShortcutRow(keys: "⌘,",  description: "Open Settings")
                 ShortcutRow(keys: "⌘Q",  description: "Quit Clyde (from menu bar menu)")
             }
+        }
+
+        SettingsSection(title: "Welcome Tour") {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Welcome tour")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Replay the first-run tour that points out the session row, snooze, and the global hotkey.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer()
+
+                    Button("Replay welcome tour") {
+                        appViewModel.coachmarks.replay()
+                        if !appViewModel.isCollapsed {
+                            appViewModel.coachmarks.maybeStart(
+                                hasSessions: !appViewModel.processMonitor.sessions.filter { !$0.isGhost }.isEmpty
+                            )
+                        } else {
+                            replayQueued = true
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+
+                if replayQueued {
+                    Text("Tour will replay next time you open the panel.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .transition(.opacity)
+                }
+            }
+        }
+        .onReceive(appViewModel.$isCollapsed) { isCollapsed in
+            if !isCollapsed { replayQueued = false }
         }
     }
 }
