@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.3.1</title>
+            <pubDate>Thu, 30 Apr 2026 18:33:32 +0000</pubDate>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>0.3.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Onboarding plus accessibility plus a plan-badge fix on top of v0.3.0. Same feature surface — same panel, same hooks, same telemetry — just easier to discover and to use, regardless of how you read the screen.</p>
+<ul><li><strong>First-run coachmark tour.</strong> After the welcome modal Clyde now walks you through the four things that aren't obvious at a glance — what each session row shows and means, the live <code>Edit · MyFile.swift · 3s</code> tool/plan line that ticks while Claude works, the snooze button for muting alerts during meetings, and the global <code>⌃⌘C</code> hotkey for opening or hiding the panel from anywhere. Skippable mid-tour, replayable from Settings → General, and silent for anyone upgrading from a Clyde version that didn't have it.</li><li><strong>Accessibility pass.</strong> Every interactive control in Clyde now announces itself meaningfully under VoiceOver — session rows speak their name, status, current tool and plan progress as one breath, the menu-bar capsule reads its live count, and tooltips, snooze remaining time, and onboarding cards all carry semantic labels. With Reduce Motion enabled in System Settings, Clyde stops every auto-running animation: the mascot freezes on its first frame, status pills no longer pulse, and slide transitions become opacity crossfades. Drag-and-drop and color transitions stay intact.</li><li><strong>Completed plan badges no longer linger.</strong> When Claude finishes a multi-step plan (the green <code>✓ N/N</code> badge), the badge now disappears the next time you submit a prompt instead of sticking around through every subsequent unrelated turn. Partial plans still persist across turns so the progress badge keeps tracking when you type "continue" mid-execution — only fully-completed badges get cleared.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.3.1/Clyde-0.3.1.dmg"
+                length="5283448"
+                type="application/octet-stream"
+                sparkle:edSignature="Pm67hL1CQgDBg1biiz0H7KvLxadZJXhBqFHIF8WC1sDmaWkGAkpfQb68EZoeNH8LhVMJcFZlp8/P/Bs/FXy1BQ==" />
+        </item>
+        <item>
             <title>Version 0.3.0</title>
             <pubDate>Wed, 29 Apr 2026 12:41:00 +0000</pubDate>
             <sparkle:version>14</sparkle:version>
