@@ -26,10 +26,10 @@ Backlog. Pick when there's time or when community interest bumps priority. UX po
 
 ### UX polish
 
-- **Coachmarks / "how to use" tooltip on first panel expand.** Users who install via DMG and skip the README currently get no in-app guidance once Clyde is running. First-launch tour over the menu-bar icon → panel → session row → Settings. Needs a dismissed-state flag in `UserDefaults` so it doesn't replay every launch.
+Coachmark first-run tour and "Replay welcome tour" in Settings shipped 2026-04-30 — see `CHANGELOG.md` Unreleased section.
+
 - **Accessibility pass.** VoiceOver labels on every control, not just the menu-bar button. Audit `SessionRow`, `PlanBadge`, the tool-summary line, Settings panes, and the activity timeline. Cross-check Dynamic Type and reduced-motion (the `SessionRow` spring slide should fall back to a fade).
 - **Copy proofread by a second pair of eyes.** Tooltips, onboarding, settings descriptions, error banners, Sparkle release-note phrasings. Solo dev → blind spot. Bundle with the demo-video script review.
-- **Coachmark re-trigger from Settings ("Replay welcome tour").** Cheap follow-up once the coachmark itself ships — a button in Settings → General that resets the dismissed-state flag.
 
 ### Content & reach
 
