@@ -24,5 +24,14 @@ struct ExpandedRootView: View {
         .animation(.easeOut(duration: 0.2), value: appViewModel.lastError)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
+        .environmentObject(appViewModel.coachmarks)
+        .onAppear {
+            appViewModel.coachmarks.maybeStart(
+                hasSessions: !sessionViewModel.sessions.isEmpty
+            )
+        }
+        .onDisappear {
+            appViewModel.coachmarks.reset()
+        }
     }
 }
