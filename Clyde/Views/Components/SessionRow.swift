@@ -111,7 +111,6 @@ struct SessionRow: View {
                                 .truncationMode(.tail)
                         }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .coachmarkAnchor(.toolPlan, identity: AnyHashable(session.id))
                     } else {
                         Text(session.workingDirectory.isEmpty
                              ? "Unknown path"
@@ -131,6 +130,7 @@ struct SessionRow: View {
                 // with double slides.
                 .animation(.spring(response: 0.28, dampingFraction: 0.85),
                            value: session.activeTool != nil)
+                .coachmarkAnchor(.toolPlan, identity: AnyHashable(session.id))
             }
 
             Spacer()
