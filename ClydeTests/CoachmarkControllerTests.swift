@@ -182,6 +182,25 @@ final class CoachmarkControllerTests: XCTestCase {
         XCTAssertNil(controller.currentStep)
     }
 
+    func test_replay_clearsStaleStateFromPriorRun() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+
+        // Simulate: tour started, partially advanced, panel closed mid-tour
+        // (reset() does not persist `coachmarksShown`, so the flag is still
+        // false — the user can run the tour again on next expand).
+        controller.maybeStart(hasSessions: true)
+        controller.advance() // .toolPlan
+        // User explicitly hits "Replay" while the previous run's in-memory
+        // state is still around because reset() hasn't fired yet (e.g. the
+        // panel is still open and Settings is open in parallel).
+        // Without the defensive cleanup, currentStep would stay at .toolPlan.
+
+        controller.replay()
+
+        XCTAssertNil(controller.currentStep)
+    }
+
     func test_replay_thenMaybeStart_restartsTour() {
         let defaults = tempDefaults()
         defaults.set(true, forKey: "coachmarksShown")

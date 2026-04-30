@@ -52,9 +52,11 @@ enum CoachmarkStep: String, CaseIterable {
     /// The last step's primary button reads "Done ✓" instead of "Got it ›".
     var isFinal: Bool {
         switch self {
-        case .collapse: return true
-        case .snooze:   return false
-        default:        return false
+        case .collapse:   return true
+        case .sessionRow: return false
+        case .toolPlan:   return false
+        case .snooze:     return false
+        case .emptyState: return false
         }
     }
 }
@@ -166,6 +168,9 @@ final class CoachmarkController: ObservableObject {
     /// (panel collapsed).
     func replay() {
         defaults.set(false, forKey: Keys.shown)
+        currentStep = nil
+        startedBranch = nil
+        claimedAnchorID = nil
     }
 
     /// Advance one step. Called from the popover's "Got it ›" / "Done ✓"
