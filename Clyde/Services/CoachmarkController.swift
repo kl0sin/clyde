@@ -58,3 +58,43 @@ enum CoachmarkStep: String, CaseIterable {
         }
     }
 }
+
+/// Drives the first-run coachmark tour. State machine over
+/// `CoachmarkStep`, persisted as two `UserDefaults` booleans.
+///
+/// - Owned by `AppViewModel`, injected into the expanded panel and
+///   settings window via `.environmentObject`.
+/// - All UI surfaces interact through this object; there are no
+///   scattered `@AppStorage` calls or persistence in the views.
+@MainActor
+final class CoachmarkController: ObservableObject {
+    @Published private(set) var currentStep: CoachmarkStep?
+
+    private let defaults: UserDefaults
+    private let onboardingShown: () -> Bool
+
+    private var claimedAnchorID: AnyHashable?
+
+    private enum Keys {
+        static let shown = "coachmarksShown"
+        static let migrated = "coachmarksMigrated"
+    }
+
+    init(defaults: UserDefaults = .standard,
+         onboardingShown: @escaping () -> Bool) {
+        self.defaults = defaults
+        self.onboardingShown = onboardingShown
+    }
+
+    /// One-shot, idempotent. Suppresses the tour for users upgrading
+    /// from a Clyde version that didn't have coachmarks: if they had
+    /// already dismissed the onboarding modal before this version
+    /// shipped, treat the tour as already-shown so it doesn't fire.
+    func runMigrationIfNeeded() {
+        guard !defaults.bool(forKey: Keys.migrated) else { return }
+        if onboardingShown() {
+            defaults.set(true, forKey: Keys.shown)
+        }
+        defaults.set(true, forKey: Keys.migrated)
+    }
+}
