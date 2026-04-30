@@ -198,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Onboarding is deferred until the panel has been up for a moment
         // and we can present a non-blocking dialog.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.appViewModel.coachmarks.runMigrationIfNeeded()
             self?.showOnboardingIfNeeded()
         }
 
@@ -655,7 +656,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Onboarding
 
-    private static let onboardingShownKey = "onboardingShown"
+    static let onboardingShownKey = "onboardingShown"
 
     private var onboardingWindow: NSWindow?
 

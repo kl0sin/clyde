@@ -102,7 +102,7 @@ final class AppViewModel: ObservableObject {
             attentionMonitor: attentionMonitor
         )
         self.coachmarks = CoachmarkController(
-            onboardingShown: { UserDefaults.standard.bool(forKey: "onboardingShown") }
+            onboardingShown: { UserDefaults.standard.bool(forKey: AppDelegate.onboardingShownKey) }
         )
         self.widgetVisible = (UserDefaults.standard.object(forKey: Self.widgetVisibleKey) as? Bool) ?? true
 
