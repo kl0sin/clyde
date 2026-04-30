@@ -163,9 +163,9 @@ struct SessionRow: View {
         .onHover { isHovered = $0 }
         .onTapGesture { onFocus() }
         .accessibilityElement(children: isEditing ? .contain : .combine)
-        .accessibilityLabel(rowAccessibilityLabel)
-        .accessibilityHint("Double-tap to focus terminal")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(isEditing ? "" : rowAccessibilityLabel)
+        .accessibilityHint(isEditing ? "" : "Double-tap to focus terminal")
+        .accessibilityAddTraits(isEditing ? [] : .isButton)
         .contextMenu {
             Button(action: { onFocus() }) {
                 Label("Focus terminal", systemImage: "arrow.up.right.square")

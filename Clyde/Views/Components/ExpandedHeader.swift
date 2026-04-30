@@ -157,7 +157,8 @@ struct ExpandedHeader: View {
     private var statsAccessibilityLabel: String {
         let entries = visibleStats
         if entries.isEmpty { return "No active sessions" }
-        return entries.map { "\($0.count) \($0.label)" }.joined(separator: ", ")
+        let parts = entries.map { "\($0.count) \($0.label)" }
+        return "Status summary: " + parts.joined(separator: ", ")
     }
 
     /// Remaining-time announcement for the snooze button. Rendered as
