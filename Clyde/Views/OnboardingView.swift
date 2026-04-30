@@ -114,6 +114,7 @@ struct OnboardingView: View {
                 )
             }
         )
+        .accessibilityAddTraits(.isModal)
     }
 
     private func featureRow(icon: String, color: Color, title: String, description: String) -> some View {
@@ -134,5 +135,7 @@ struct OnboardingView: View {
 
             Spacer(minLength: 0)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(description)")
     }
 }
