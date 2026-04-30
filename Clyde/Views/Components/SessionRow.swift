@@ -47,6 +47,7 @@ struct SessionRow: View {
                         .padding(.vertical, 3)
                         .background(Color(white: 0.2))
                         .clipShape(RoundedRectangle(cornerRadius: 4))
+                        .accessibilityLabel("Session name")
 
                         Button(action: {
                             onRename(editName)
@@ -59,6 +60,7 @@ struct SessionRow: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Save name")
 
                         Button(action: { isEditing = false }) {
                             Image(systemName: "xmark")
@@ -68,6 +70,7 @@ struct SessionRow: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Cancel rename")
                     }
                 } else {
                     HStack(spacing: 6) {
@@ -159,8 +162,8 @@ struct SessionRow: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture { onFocus() }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(session.displayName), \(accessibilityStatusDescription)")
+        .accessibilityElement(children: isEditing ? .contain : .combine)
+        .accessibilityLabel(rowAccessibilityLabel)
         .accessibilityHint("Double-tap to focus terminal")
         .accessibilityAddTraits(.isButton)
         .contextMenu {
@@ -259,6 +262,32 @@ struct SessionRow: View {
             return tint.opacity(0.07)
         }
         return Color.clear
+    }
+
+    /// Composed VoiceOver label for the row. The previous label was just
+    /// "<name>, <status>" which dropped the active-tool line and the
+    /// plan-progress badge from the audible read-out. We rebuild it from
+    /// the same surface signals a sighted user sees: name, status, the
+    /// running tool with elapsed seconds, and plan progress when there's
+    /// a non-empty plan.
+    private var rowAccessibilityLabel: String {
+        var parts: [String] = ["\(session.displayName) session", accessibilityStatusDescription]
+
+        if let tool = session.activeTool, let label = session.toolDisplayLabel {
+            let elapsed = max(0, Int(Date().timeIntervalSince(tool.startedAt)))
+            let elapsedStr = elapsed == 1 ? "1 second elapsed" : "\(elapsed) seconds elapsed"
+            parts.append("\(label), \(elapsedStr)")
+        }
+
+        if let plan = session.activePlan, plan.taskCount > 0 {
+            if plan.isComplete {
+                parts.append("plan complete, \(plan.doneCount) of \(plan.taskCount) tasks")
+            } else {
+                parts.append("plan \(plan.doneCount) of \(plan.taskCount) tasks complete")
+            }
+        }
+
+        return parts.joined(separator: ", ")
     }
 
     private var accessibilityStatusDescription: String {
