@@ -27,6 +27,8 @@ struct SessionRow: View {
     /// Drives the ambient pulse on busy / attention status pills.
     @State private var pillPulse = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 12) {
             SessionStatusIndicator(session: session, idleIndex: idleIndex)
@@ -110,7 +112,7 @@ struct SessionRow: View {
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                     } else {
                         Text(session.workingDirectory.isEmpty
                              ? "Unknown path"
@@ -119,7 +121,7 @@ struct SessionRow: View {
                             .foregroundStyle(Color(white: 0.4))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                     }
                 }
                 .frame(height: 14, alignment: .leading)
@@ -128,7 +130,7 @@ struct SessionRow: View {
                 // identity changes but both states stay non-nil).
                 // Intentional — rapid tool chaining would look jittery
                 // with double slides.
-                .animation(.spring(response: 0.28, dampingFraction: 0.85),
+                .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.85),
                            value: session.activeTool != nil)
                 .coachmarkAnchor(.toolPlan, identity: AnyHashable(session.id))
             }
@@ -202,12 +204,19 @@ struct SessionRow: View {
         .onChange(of: session.status) { newStatus in
             if lastSeenStatus != nil && lastSeenStatus != newStatus {
                 // Flash the row on state change
-                withAnimation(.easeIn(duration: 0.15)) {
+                if reduceMotion {
                     stateFlash = true
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                    withAnimation(.easeOut(duration: 0.5)) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                         stateFlash = false
+                    }
+                } else {
+                    withAnimation(.easeIn(duration: 0.15)) {
+                        stateFlash = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        withAnimation(.easeOut(duration: 0.5)) {
+                            stateFlash = false
+                        }
                     }
                 }
             }
@@ -215,8 +224,10 @@ struct SessionRow: View {
         }
         .onAppear {
             lastSeenStatus = session.status
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                pillPulse = true
+            if !reduceMotion {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                    pillPulse = true
+                }
             }
         }
         .coachmarkAnchor(.sessionRow, identity: AnyHashable(session.id))
@@ -436,6 +447,8 @@ struct SessionStatusIndicator: View {
     @State private var bounce = false
     @State private var attentionPulse = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var isActive: Bool {
         !session.isGhost && (session.needsAttention || session.status == .busy)
     }
@@ -471,7 +484,7 @@ struct SessionStatusIndicator: View {
                 if session.status == .busy && !session.needsAttention {
                     TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
                         let t = context.date.timeIntervalSinceReferenceDate
-                        let phase = (sin(t * .pi * 2 / 1.4) + 1) / 2  // 0…1, 1.4s cycle
+                        let phase: Double = reduceMotion ? 0 : (sin(t * .pi * 2 / 1.4) + 1) / 2  // 0…1, 1.4s cycle
                         let scale = 1.0 + phase * 0.12               // 1.0 … 1.12
                         ClydeAnimationView(state: mascotState, pixelSize: 1.5, ambientIdleEnabled: false)
                             .frame(width: 24, height: 24)
@@ -503,14 +516,19 @@ struct SessionStatusIndicator: View {
             }
         }
         .onAppear {
-            if session.status == .busy {
-                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                    bounce = true
+            if reduceMotion {
+                if session.status == .busy { bounce = true }
+                if session.needsAttention { attentionPulse = true }
+            } else {
+                if session.status == .busy {
+                    withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                        bounce = true
+                    }
                 }
-            }
-            if session.needsAttention {
-                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                    attentionPulse = true
+                if session.needsAttention {
+                    withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                        attentionPulse = true
+                    }
                 }
             }
         }

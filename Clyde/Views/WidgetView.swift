@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WidgetView: View {
     @ObservedObject var viewModel: AppViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
@@ -80,6 +81,7 @@ struct WidgetView: View {
 private struct CompactStatusView: View {
     @ObservedObject var viewModel: AppViewModel
     @ObservedObject var attentionMonitor: AttentionMonitor
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Attention state animation lives inside `pulsingDominantBlock`
     // (a TimelineView-driven sine wave shared with the working state).
@@ -212,8 +214,10 @@ private struct CompactStatusView: View {
         return TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let period: TimeInterval = 1.6
-            // Sine wave 0…1, period 1.6 s.
-            let phase = (sin(t * .pi * 2 / period) + 1) / 2
+            // Sine wave 0…1, period 1.6 s. Frozen to mid-amplitude when
+            // reduce-motion is on so the block reads as a steady tinted
+            // badge instead of a continuous pulse.
+            let phase: Double = reduceMotion ? 0.5 : (sin(t * .pi * 2 / period) + 1) / 2
             let scale = 1.0 + phase * 0.06            // 1.00 … 1.06
             let borderAlpha = 0.50 + phase * 0.45     // 0.50 … 0.95
             let glowAlpha = 0.08 + phase * 0.22       // 0.08 … 0.30

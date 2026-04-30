@@ -8,6 +8,8 @@ struct SummaryBar: View {
     let idleCount: Int
     let clydeState: ClydeState
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 10) {
             ClydeAnimationView(state: clydeState, pixelSize: 0.75)
@@ -53,6 +55,7 @@ struct StatusPill: View {
     let pulse: Bool
 
     @State private var isPulsing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 4) {
@@ -70,7 +73,7 @@ struct StatusPill: View {
         .background(color.opacity(0.1))
         .clipShape(Capsule())
         .onAppear {
-            if pulse {
+            if pulse && !reduceMotion {
                 withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                     isPulsing = true
                 }

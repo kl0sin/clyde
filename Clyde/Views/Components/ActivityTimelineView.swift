@@ -5,6 +5,7 @@ import SwiftUI
 struct ActivityTimelineView: View {
     @ObservedObject var log: ActivityLog
     @State private var expanded: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,7 +23,11 @@ struct ActivityTimelineView: View {
 
     private var header: some View {
         Button(action: {
-            withAnimation(.easeInOut(duration: 0.22)) { expanded.toggle() }
+            if reduceMotion {
+                expanded.toggle()
+            } else {
+                withAnimation(.easeInOut(duration: 0.22)) { expanded.toggle() }
+            }
         }) {
             HStack(spacing: 8) {
                 Image(systemName: "clock.arrow.circlepath")

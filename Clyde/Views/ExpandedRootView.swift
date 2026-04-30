@@ -5,6 +5,7 @@ import SwiftUI
 struct ExpandedRootView: View {
     @ObservedObject var appViewModel: AppViewModel
     @ObservedObject var sessionViewModel: SessionListViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -18,10 +19,10 @@ struct ExpandedRootView: View {
                 ErrorBanner(message: error)
                     .padding(.top, 8)
                     .padding(.horizontal, 12)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.easeOut(duration: 0.2), value: appViewModel.lastError)
+        .animation(reduceMotion ? .none : .easeOut(duration: 0.2), value: appViewModel.lastError)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
         .environmentObject(appViewModel.coachmarks)
