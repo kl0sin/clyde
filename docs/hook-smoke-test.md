@@ -222,3 +222,25 @@ rm -rf ~/.clyde/state ~/.clyde/events
 ```
 
 Clyde recreates them on next launch.
+
+## Accessibility scenarios
+
+### Pre-test setup
+
+System Settings → Accessibility → VoiceOver → speech rate medium, verbosity medium. `⌘F5` toggles VoiceOver. For reduce-motion: System Settings → Accessibility → Display → Reduce motion ON.
+
+### A — Menu bar + widget
+
+VO cursor lands on the menu-bar status item. Hear: "Clyde, [stats summary], button. Click to expand panel". Stats line is dynamic (e.g. "2 working, 1 ready"). Activate with `⌃⌥space` — panel expands. Verify the widget panel itself is one combined VO element with the same label, no separate sub-elements for the mascot or count badges.
+
+### B — Expanded panel
+
+Navigate `⌃⌥→` through: header (title heading → stats summary as one element → snooze button → settings button → collapse button). Each has a label; snooze announces value when active ("Snoozed for 23 minutes"); collapse has hint "Or press Control-Command-C from anywhere". Then session rows top-to-bottom (each combined, label includes name + status + active tool + plan progress when present). Then activity timeline (expand toggle with value "[N] events", per-entry combined labels when expanded). Then summary bar (combined "Status summary: X working, Y ready. Z sessions total."). Verify the mascot in the header is skipped, no element is unlabelled.
+
+### C — Settings + onboarding + coachmark tour
+
+`⌘,` → Settings. Tab buttons reachable, the currently-selected tab announces itself as selected. General tab: polling-interval slider has label "Polling interval", value "[N] seconds", hint about adjusting; "Replay welcome tour" button has hint "Restarts the first-run tour". Defaults reset → onboarding → modal trait announced, four feature cards as combined VO elements with `title. description` content, "Get Started" / "Open Settings" buttons reachable. Replay welcome tour → four popovers, each with title-as-heading + body + counter + Skip + Got it.
+
+### D — Reduce-motion ON
+
+Tool/plan line transitions are crossfades, not slides. Status pill does not pulse on busy. Mascot freezes on its first frame (the antenna and sleeping micro-animations also stop). Activity timeline expand is instant. Error banner appears with opacity fade, not slide. Drag-and-drop animation still works. Color crossfades on header tint when status changes still work.

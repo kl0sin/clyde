@@ -44,7 +44,7 @@ Push Clyde from "monitor" toward "feed of what Claude is actually doing" by harv
 Backlog. Pick when there's time or when community interest bumps priority.
 
 - [x] Coachmark first-run tour — four anchored popovers (session row + tool/plan line + snooze + collapse with ⌃⌘C hotkey discovery) using SwiftUI's native `.popover`. Empty-state branch handles "panel opened before any session exists" with a three-step degraded tour. Migration suppresses the tour for users upgrading from a Clyde version that didn't have it !md #ux
-- [ ] Accessibility pass — VoiceOver labels on all controls !md #ux
+- [x] Accessibility pass — every interactive surface has a VoiceOver label, traits, hints, and (where relevant) values; the pixel-art mascot and inner indicators are marked decorative; reduce-motion freezes the sprite, disables auto-running pulses, and swaps slide transitions for opacity crossfades while leaving drag-and-drop and color crossfades alone !md #ux
 - [ ] Copy proofread by a second pair of eyes !lo #ux
 - [x] "Replay welcome tour" button in Settings → General. Clears the persisted flag and either fires the tour immediately (panel open) or queues it for the next expand (panel collapsed) with an inline confirmation label !lo #ux
 - [ ] Short demo video (30-60s) showing busy / ready / attention flow !md
