@@ -102,6 +102,8 @@ struct SettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
             Spacer()
         }
@@ -182,6 +184,9 @@ struct GeneralSettingsTab: View {
                         appViewModel.updatePollingInterval(pollingInterval)
                     }
                 })
+                .accessibilityLabel("Polling interval")
+                .accessibilityValue("\(Int(pollingInterval)) seconds")
+                .accessibilityHint("Drag to adjust how often Clyde polls for session changes")
             }
         }
 
@@ -215,6 +220,7 @@ struct GeneralSettingsTab: View {
                             replayQueued = true
                         }
                     }
+                    .accessibilityHint("Restarts the first-run tour")
                 }
                 .padding(.vertical, 8)
 
