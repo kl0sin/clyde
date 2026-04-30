@@ -428,6 +428,7 @@ private struct PlanBadge: View {
         .clipShape(Capsule())
         .animation(.easeInOut(duration: 0.25), value: plan.doneCount)
         .animation(.easeInOut(duration: 0.25), value: plan.isComplete)
+        .accessibilityHidden(true)
     }
 
     private var accent: Color {
@@ -532,5 +533,6 @@ struct SessionStatusIndicator: View {
                 }
             }
         }
+        .accessibilityHidden(true)
     }
 }
