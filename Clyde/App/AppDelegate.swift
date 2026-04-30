@@ -121,6 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appViewModel = AppViewModel()
+        // Run synchronously before the menu-bar item or panels exist —
+        // otherwise an upgrading user could click the icon and trigger
+        // `maybeStart` before the migration sets `coachmarksShown`.
+        appViewModel.coachmarks.runMigrationIfNeeded()
         sessionViewModel = SessionListViewModel(
             processMonitor: appViewModel.processMonitor,
             attentionMonitor: appViewModel.attentionMonitor
@@ -198,7 +202,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Onboarding is deferred until the panel has been up for a moment
         // and we can present a non-blocking dialog.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.appViewModel.coachmarks.runMigrationIfNeeded()
             self?.showOnboardingIfNeeded()
         }
 
