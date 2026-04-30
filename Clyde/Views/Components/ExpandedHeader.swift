@@ -51,16 +51,20 @@ struct ExpandedHeader: View {
                     action: onSnooze,
                     accessibilityLabel: isSnoozed ? "Resume notifications" : "Snooze notifications"
                 )
+                .coachmarkAnchor(.snooze)
+
                 headerButton(
                     icon: "gearshape",
                     action: onSettings,
                     accessibilityLabel: "Open settings"
                 )
+
                 headerButton(
                     icon: "minus",
                     action: onCollapse,
                     accessibilityLabel: "Collapse to widget"
                 )
+                .coachmarkAnchor(.collapse)
             }
         }
         .padding(.horizontal, 16)
