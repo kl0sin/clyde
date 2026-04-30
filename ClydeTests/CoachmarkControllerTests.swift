@@ -192,4 +192,31 @@ final class CoachmarkControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.currentStep, .sessionRow)
     }
+
+    // MARK: - shouldAnchor
+
+    func test_shouldAnchor_firstClaimWins() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+        controller.maybeStart(hasSessions: true)
+
+        XCTAssertTrue(controller.shouldAnchor(.sessionRow, identity: AnyHashable("a")))
+        XCTAssertFalse(controller.shouldAnchor(.sessionRow, identity: AnyHashable("b")))
+        XCTAssertTrue(controller.shouldAnchor(.sessionRow, identity: AnyHashable("a")))
+
+        controller.advance()
+
+        // After advance the claim is cleared, so a new anchor in the
+        // *next* step can win.
+        XCTAssertTrue(controller.shouldAnchor(.toolPlan, identity: AnyHashable("c")))
+    }
+
+    func test_shouldAnchor_falseWhenStepNotActive() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+        controller.maybeStart(hasSessions: true)
+
+        // Step is .sessionRow, not .snooze.
+        XCTAssertFalse(controller.shouldAnchor(.snooze, identity: AnyHashable("x")))
+    }
 }

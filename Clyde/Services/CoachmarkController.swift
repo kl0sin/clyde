@@ -126,6 +126,21 @@ final class CoachmarkController: ObservableObject {
         currentStep = sequence.first
     }
 
+    /// True if this anchor should display the popover for the given
+    /// step. The first call for an active step claims the anchor; later
+    /// calls for the same step return true only if the identity matches
+    /// the claim. Callers in `ForEach` lists pass a stable per-row
+    /// identity so SwiftUI re-renders don't flip the popover from row
+    /// to row.
+    func shouldAnchor(_ step: CoachmarkStep, identity: AnyHashable) -> Bool {
+        guard currentStep == step else { return false }
+        if let claimed = claimedAnchorID {
+            return claimed == identity
+        }
+        claimedAnchorID = identity
+        return true
+    }
+
     /// "Skip tour" link in the popover footer. Treated identically to
     /// completion — the tour does not show again until replayed.
     func skip() {
