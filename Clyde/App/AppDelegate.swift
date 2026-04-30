@@ -414,6 +414,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let working = liveSessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
         let ready = liveSessions.count - working - attention
 
+        // Refresh the accessibility value alongside the icon so VoiceOver
+        // always announces the live count summary on focus.
+        button.setAccessibilityValue(currentStatusItemValue())
+
         // Snooze takes priority: show the template Clyde icon + "💤 Xm"
         // so the user clearly sees the app is muted.
         if appViewModel.notificationService.isSnoozed {
@@ -863,6 +867,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return event
             }
         }
+    }
+
+    // MARK: - Accessibility
+
+    /// Plain-language summary of the menu-bar status item's current state,
+    /// used as the VoiceOver value so users hear e.g. "2 working, 1 ready"
+    /// alongside the static "Clyde" label and `.button` role.
+    @MainActor
+    private func currentStatusItemValue() -> String {
+        let attentionPIDs = appViewModel.attentionMonitor.attentionPIDs
+        let sessions = appViewModel.processMonitor.sessions.filter { !$0.isGhost }
+        if sessions.isEmpty { return "No active sessions" }
+        let attention = sessions.filter { attentionPIDs.contains($0.pid) }.count
+        let working = sessions.filter { $0.status == .busy && !attentionPIDs.contains($0.pid) }.count
+        let ready = sessions.count - attention - working
+        var parts: [String] = []
+        if attention > 0 { parts.append("\(attention) needs attention") }
+        if working > 0 { parts.append("\(working) working") }
+        if ready > 0 { parts.append("\(ready) ready") }
+        return parts.joined(separator: ", ")
     }
 }
 
