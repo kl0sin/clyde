@@ -146,4 +146,50 @@ final class CoachmarkControllerTests: XCTestCase {
         XCTAssertNil(controller.currentStep)
         XCTAssertTrue(defaults.bool(forKey: "coachmarksShown"))
     }
+
+    // MARK: - skip / reset / replay
+
+    func test_skip_marksAsShownAndClears() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+        controller.maybeStart(hasSessions: true)
+
+        controller.skip()
+
+        XCTAssertNil(controller.currentStep)
+        XCTAssertTrue(defaults.bool(forKey: "coachmarksShown"))
+    }
+
+    func test_reset_clearsStepWithoutPersisting() {
+        let defaults = tempDefaults()
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+        controller.maybeStart(hasSessions: true)
+
+        controller.reset()
+
+        XCTAssertNil(controller.currentStep)
+        XCTAssertFalse(defaults.bool(forKey: "coachmarksShown"))
+    }
+
+    func test_replay_clearsFlagWithoutStarting() {
+        let defaults = tempDefaults()
+        defaults.set(true, forKey: "coachmarksShown")
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+
+        controller.replay()
+
+        XCTAssertFalse(defaults.bool(forKey: "coachmarksShown"))
+        XCTAssertNil(controller.currentStep)
+    }
+
+    func test_replay_thenMaybeStart_restartsTour() {
+        let defaults = tempDefaults()
+        defaults.set(true, forKey: "coachmarksShown")
+        let controller = makeController(defaults: defaults, onboardingShown: true)
+
+        controller.replay()
+        controller.maybeStart(hasSessions: true)
+
+        XCTAssertEqual(controller.currentStep, .sessionRow)
+    }
 }

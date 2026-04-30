@@ -126,6 +126,33 @@ final class CoachmarkController: ObservableObject {
         currentStep = sequence.first
     }
 
+    /// "Skip tour" link in the popover footer. Treated identically to
+    /// completion — the tour does not show again until replayed.
+    func skip() {
+        currentStep = nil
+        startedBranch = nil
+        claimedAnchorID = nil
+        defaults.set(true, forKey: Keys.shown)
+    }
+
+    /// Called from `ExpandedRootView.onDisappear`. Clears in-memory state
+    /// without persisting — the tour starts again from step 1 next time
+    /// the panel opens.
+    func reset() {
+        currentStep = nil
+        startedBranch = nil
+        claimedAnchorID = nil
+    }
+
+    /// "Replay welcome tour" button in Settings. Clears the persisted
+    /// flag but does not touch `currentStep`. The Settings view decides
+    /// whether to call `maybeStart` immediately (panel open) or rely on
+    /// `ExpandedRootView.onAppear` to fire on the next expand
+    /// (panel collapsed).
+    func replay() {
+        defaults.set(false, forKey: Keys.shown)
+    }
+
     /// Advance one step. Called from the popover's "Got it ›" / "Done ✓"
     /// button. Crossing past the last step persists the "shown" flag and
     /// clears the in-memory step.
