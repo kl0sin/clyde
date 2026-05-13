@@ -638,4 +638,39 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertNil(monitor.sessions.first?.activePlan)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
+
+    func testActiveSubagentsListedFromAgentsDir() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        _ = writeInfoFile(in: dir, sessionId: sid)
+
+        // Create the <sid>-agents/ directory.
+        let agentsDir = dir.appendingPathComponent("\(sid)-agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+
+        let now = Date().timeIntervalSince1970
+        // toolu_a — older subagent
+        let bodyA = #"{"tool_use_id":"toolu_a","subagent_type":"Explore","summary":"find code","started_at":\#(Int(now - 20))}"#
+        try bodyA.write(to: agentsDir.appendingPathComponent("toolu_a.json"), atomically: true, encoding: .utf8)
+        // toolu_b — newer subagent
+        let bodyB = #"{"tool_use_id":"toolu_b","subagent_type":"general-purpose","summary":"research","started_at":\#(Int(now - 5))}"#
+        try bodyB.write(to: agentsDir.appendingPathComponent("toolu_b.json"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.count, 1)
+        let session = try XCTUnwrap(monitor.sessions.first)
+        // Oldest first — toolu_a (started_at = now-20) before toolu_b (started_at = now-5).
+        XCTAssertEqual(session.activeSubagents.map(\.id), ["toolu_a", "toolu_b"])
+        XCTAssertEqual(session.activeSubagents[0].type, "Explore")
+        XCTAssertEqual(session.activeSubagents[0].summary, "find code")
+        XCTAssertEqual(session.activeSubagents[1].type, "general-purpose")
+        XCTAssertEqual(session.activeSubagents[1].summary, "research")
+    }
 }
