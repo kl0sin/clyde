@@ -115,6 +115,20 @@ struct SessionRow: View {
                             "\(session.activeSubagents.count) agents running"
                         )
                         .accessibilityAddTraits(.updatesFrequently)
+                    SubagentList(
+                        session: session,
+                        isExpanded: expandedSubagentSessions.contains(session.id),
+                        onToggle: { onToggleSubagentExpansion(session.id) }
+                    )
+                    .transition(reduceMotion
+                        ? .opacity
+                        : .asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity))
+                    .animation(reduceMotion
+                        ? .easeInOut(duration: 0.12)
+                        : .spring(response: 0.28, dampingFraction: 0.85),
+                        value: session.activeSubagents.map(\.id))
                 } else {
                     ZStack(alignment: .leading) {
                         if let tool = session.activeTool, let label = session.toolDisplayLabel {
@@ -510,6 +524,97 @@ private struct SubagentSummaryLine: View {
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
         }
+    }
+}
+
+// MARK: - Subagent List
+
+private struct SubagentList: View {
+    let session: Session
+    let isExpanded: Bool
+    let onToggle: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let accent = Color(red: 0.486, green: 0.361, blue: 1.0)  // #7C5CFF
+
+    private var visible: [ActiveSubagent] {
+        isExpanded ? session.activeSubagents : Array(session.activeSubagents.prefix(3))
+    }
+
+    private var overflowCount: Int {
+        max(0, session.activeSubagents.count - 3)
+    }
+
+    private func formatElapsed(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
+        let m = seconds / 60
+        let r = seconds % 60
+        return r == 0 ? "\(m)m" : "\(m)m \(r)s"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(visible) { agent in
+                agentRow(for: agent)
+            }
+            if overflowCount > 0 || isExpanded {
+                expandLabel
+            }
+        }
+        .padding(.leading, 8)
+        .padding(.vertical, 2)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(accent.opacity(0.55))
+                .frame(width: 2)
+        }
+        .padding(.top, 6)
+        .padding(.leading, 2)
+    }
+
+    @ViewBuilder
+    private func agentRow(for agent: ActiveSubagent) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let elapsed = max(0, Int(ctx.date.timeIntervalSince(agent.startedAt)))
+            VStack(alignment: .leading, spacing: 1) {
+                HStack {
+                    Text(agent.type)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(accent)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(formatElapsed(elapsed))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                if !agent.summary.isEmpty {
+                    Text(agent.summary)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(agent.type), \(agent.summary)")
+        .accessibilityValue("running")
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    @ViewBuilder
+    private var expandLabel: some View {
+        Button(action: onToggle) {
+            Text(isExpanded ? "▴ Show less" : "+ \(overflowCount) more agents")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(isExpanded ? AnyShapeStyle(.secondary) : AnyShapeStyle(accent))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "Show less" : "\(overflowCount) more agents")
+        .accessibilityHint(isExpanded
+            ? "Double-tap to collapse the subagent list"
+            : "Double-tap to expand the subagent list")
     }
 }
 
