@@ -29,9 +29,9 @@ The `-busy` marker keeps its existing semantics; the new agents directory is ort
 
 The `-tool` marker (parent-side tool indicator from v0.3.0) keeps working as-is. When the parent's current tool is `Task`, the parent's `-tool` payload will reflect that one Task call's summary; the new list view is the richer surface for the parallel case.
 
-## Hook script changes (`clyde-hook.sh` v19)
+## Hook script changes (`clyde-hook.sh` v20)
 
-Bump `# clyde-hook-version: 19` and `HookInstaller.currentScriptVersion = 19`.
+Bump `# clyde-hook-version: 20` and `HookInstaller.currentScriptVersion = 20`.
 
 ### New state directory: `state/<sid>-agents/<tool_use_id>.json`
 
@@ -102,7 +102,7 @@ Called from the same reconcile pass that already refreshes `-tool` / `-plan` / `
 
 ### Backwards-compat: reading the legacy `-subagent` file
 
-For one release we still surface the legacy single-flag marker if a session has it AND has an empty `state/<sid>-agents/` directory (i.e. the user upgraded Clyde but the running `claude` session is still on the older hook script). In that case the panel falls back to today's behavior: tool row shows `Agent · <type> · <dur>`, no expanded list. Users restart `claude` to get the new behavior; the marker style auto-flips at the next SessionStart because `HookInstaller` reinstalls the bundled hook on v19 bump.
+For one release we still surface the legacy single-flag marker if a session has it AND has an empty `state/<sid>-agents/` directory (i.e. the user upgraded Clyde but the running `claude` session is still on the older hook script). In that case the panel falls back to today's behavior: tool row shows `Agent · <type> · <dur>`, no expanded list. Users restart `claude` to get the new behavior; the marker style auto-flips at the next SessionStart because `HookInstaller` reinstalls the bundled hook on v20 bump.
 
 ### Fingerprint
 
@@ -145,12 +145,12 @@ No change. Mascot continues to reflect parent-session busy state. We do not intr
 - **UI**: no unit tests planned (per CLAUDE.md, `ActivityLog`/UI follow the established no-coverage pattern). Manual scenarios added to the a11y / panel smoke checklist:
   - Fan-out 5 Task calls, verify list grows to 3 + `+2 more`, expand and collapse it, observe auto-collapse when count drops.
   - Reduce-motion on: verify no height animation on expand.
-  - Mid-upgrade scenario: install v19 hook, leave an old `claude` session running with the legacy single-flag marker; verify the row falls back to the v0.2 behavior until next SessionStart.
+  - Mid-upgrade scenario: install v20 hook, leave an old `claude` session running with the legacy single-flag marker; verify the row falls back to the v0.2 behavior until next SessionStart.
 
 ## Hook script version + installer
 
-- `# clyde-hook-version: 19`
-- `HookInstaller.currentScriptVersion = 19`
+- `# clyde-hook-version: 20`
+- `HookInstaller.currentScriptVersion = 20`
 - Header comment block updated to describe `state/<sid>-agents/` (sibling to `-tool`, `-plan`).
 - `SessionEnd` clear-list comment updated.
 
