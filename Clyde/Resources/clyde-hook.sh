@@ -231,13 +231,15 @@ if [ "$HOOK_EVENT" = "SessionStart" ]; then
     SOURCE=$(extract_field source)
 fi
 
-# `tool_name` ships on PreToolUse / PostToolUse / PostToolUseFailure
-# payloads. Hoist it once so the case branches don't each call
+# `tool_name` and `tool_use_id` ship on PreToolUse / PostToolUse / PostToolUseFailure
+# payloads. Hoist them once so the case branches don't each call
 # extract_field redundantly.
 TOOL_NAME=""
+TOOL_USE_ID=""
 case "$HOOK_EVENT" in
     PreToolUse|PostToolUse|PostToolUseFailure)
         TOOL_NAME=$(extract_field tool_name)
+        TOOL_USE_ID=$(extract_field tool_use_id)
         ;;
 esac
 
