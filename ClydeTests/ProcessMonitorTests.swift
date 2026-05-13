@@ -720,4 +720,31 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(session.subagentType, "general-purpose")
         XCTAssertTrue(session.activeSubagents.isEmpty)
     }
+
+    func testResetSessionStateClearsAgentsDir() throws {
+        let tempHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-resetagents-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
+        let previousOverride = AppPaths.homeOverride
+        AppPaths.homeOverride = tempHome
+        defer {
+            AppPaths.homeOverride = previousOverride
+            try? FileManager.default.removeItem(at: tempHome)
+        }
+
+        let sid = "s1"
+        try FileManager.default.createDirectory(at: AppPaths.stateDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: AppPaths.eventsDir, withIntermediateDirectories: true)
+
+        let agentsDir = AppPaths.stateDir.appendingPathComponent("\(sid)-agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+        let body = #"{"tool_use_id":"toolu_a","subagent_type":"Explore","summary":"x","started_at":\#(Int(Date().timeIntervalSince1970))}"#
+        try body.write(to: agentsDir.appendingPathComponent("toolu_a.json"), atomically: true, encoding: .utf8)
+
+        let viewModel = AppViewModel()
+        let session = Session(pid: 99999, workingDirectory: "/tmp", sessionId: sid)
+        viewModel.resetSession(session)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: agentsDir.path))
+    }
 }

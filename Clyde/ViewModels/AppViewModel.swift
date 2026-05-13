@@ -441,6 +441,9 @@ final class AppViewModel: ObservableObject {
             try? FileManager.default.removeItem(
                 at: AppPaths.eventsDir.appendingPathComponent("\(sid).json")
             )
+            try? FileManager.default.removeItem(
+                at: AppPaths.stateDir.appendingPathComponent("\(sid)-agents")
+            )
         }
         // Also clear the in-memory attention flag for this PID, in case
         // there were legacy events keyed by something else.
