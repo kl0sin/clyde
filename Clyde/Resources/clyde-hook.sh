@@ -19,7 +19,7 @@
 #   PermissionDenied    → clears event file (user denied permission)
 #   PreToolUse          → clears event file + refreshes busy mtime + writes -tool; Task also → state/<session_id>-agents/<tool_use_id>.json (subagent dispatch)
 #   PostToolUse         → removes -tool marker; Task also → removes state/<session_id>-agents/<tool_use_id>.json
-#   PostToolUseFailure  → removes -tool marker; removes busy IF is_interrupt=true
+#   PostToolUseFailure  → removes -tool marker; Task also → removes state/<session_id>-agents/<tool_use_id>.json; removes busy IF is_interrupt=true
 #   CwdChanged          → rewrites state/<session_id>-info with new cwd
 #   Elicitation         → events/<session_id>.json (MCP tool input request)
 #   ElicitationResult   → clears event file (MCP input answered)
@@ -391,6 +391,9 @@ case "$HOOK_EVENT" in
         # The tool call itself has terminated either way (interrupt or
         # error), so the active-tool indicator must clear.
         rm -f "$STATE_DIR/$KEY-tool"
+        if [ "$TOOL_NAME" = "Task" ] && [ -n "$TOOL_USE_ID" ]; then
+            rm -f "$STATE_DIR/$KEY-agents/$TOOL_USE_ID.json"
+        fi
         ;;
     PreToolUse)
         # Tools can only run after permission was granted, so clear any
@@ -437,6 +440,9 @@ case "$HOOK_EVENT" in
         # session row will slide back to the project path until the
         # next PreToolUse fires.
         rm -f "$STATE_DIR/$KEY-tool"
+        if [ "$TOOL_NAME" = "Task" ] && [ -n "$TOOL_USE_ID" ]; then
+            rm -f "$STATE_DIR/$KEY-agents/$TOOL_USE_ID.json"
+        fi
         ;;
     CwdChanged)
         # User changed directory mid-session. Rewrite -info with the
