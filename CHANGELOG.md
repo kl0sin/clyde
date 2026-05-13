@@ -6,6 +6,8 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- Panel now surfaces every parallel subagent dispatched via the built-in `Agent` (Task) tool. The session row shows `N agents · live duration`, with a left-bordered list of each subagent's type and short description underneath; lists longer than three collapse behind a `+N more agents` tap. Older `-subagent` markers from running pre-v0.3.x sessions still render the v0.2 single-agent line until the user restarts `claude`.
+
 ## [0.3.1] — 2026-04-30
 
 Onboarding plus accessibility plus a plan-badge fix on top of v0.3.0. Same feature surface — same panel, same hooks, same telemetry — just easier to discover and to use, regardless of how you read the screen.

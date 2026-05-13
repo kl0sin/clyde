@@ -47,6 +47,7 @@ Backlog. Pick when there's time or when community interest bumps priority.
 - [x] Accessibility pass — every interactive surface has a VoiceOver label, traits, hints, and (where relevant) values; the pixel-art mascot and inner indicators are marked decorative; reduce-motion freezes the sprite, disables auto-running pulses, and swaps slide transitions for opacity crossfades while leaving drag-and-drop and color crossfades alone !md #ux
 - [ ] Copy proofread by a second pair of eyes !lo #ux
 - [x] "Replay welcome tour" button in Settings → General. Clears the persisted flag and either fires the tour immediately (panel open) or queues it for the next expand (panel collapsed) with an inline confirmation label !lo #ux
+- [x] Parallel subagents in the panel — `clyde-hook` v20 writes `state/<sid>-agents/<tool_use_id>.json` on every `PreToolUse(Task)` and clears it on the matching `PostToolUse(Task)` / failure; `ProcessMonitor.refreshHookAgents` mirrors the existing `-tool` plumbing. `SessionRow` flips the second line to `<N> agents · <dur>` for N≥2 and renders a two-lines-per-agent block (type · duration, then summary) underneath, sorted oldest-first with a 3-visible cap and tap-to-expand `+N more` label. Defensive 30-min GC drops zombie rows; legacy `-subagent` fallback keeps v0.2.x sessions visible until next `claude` restart. !md #hooks #ux
 - [ ] Short demo video (30-60s) showing busy / ready / attention flow !md
 - [ ] Press kit folder — logos, screenshots, fact sheet !lo
 - [ ] Opt-in crash reporting (Sentry / KSCrash / MetricKit), off by default !lo
