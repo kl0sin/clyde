@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 19
+# clyde-hook-version: 20
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -11,20 +11,20 @@
 #
 # Handled events:
 #   SessionStart        → state/<session_id>-info (alive marker, includes source)
-#   SessionEnd          → removes info + busy + error + subagent + tool + plan + event
+#   SessionEnd          → removes info + busy + error + subagent + tool + plan + event + cleans up -agents/ dir
 #   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info, drops fully-completed -plan)
 #   Stop                → removes busy + error + subagent + tool + event marker
 #   StopFailure         → writes state/<session_id>-error with stop_reason
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
-#   PreToolUse          → clears event file + refreshes busy mtime + writes -tool
-#   PostToolUse         → removes -tool marker
+#   PreToolUse          → clears event file + refreshes busy mtime + writes -tool; Task also → state/<session_id>-agents/<tool_use_id>.json (subagent dispatch)
+#   PostToolUse         → removes -tool marker; Task also → removes state/<session_id>-agents/<tool_use_id>.json
 #   PostToolUseFailure  → removes -tool marker; removes busy IF is_interrupt=true
 #   CwdChanged          → rewrites state/<session_id>-info with new cwd
 #   Elicitation         → events/<session_id>.json (MCP tool input request)
 #   ElicitationResult   → clears event file (MCP input answered)
-#   SubagentStart       → state/<session_id>-subagent (agent type)
-#   SubagentStop        → removes subagent marker
+#   SubagentStart       → legacy state/<session_id>-subagent (deprecated, backup only)
+#   SubagentStop        → removes legacy -subagent; best-effort -agents/<id>.json removal
 #   TaskCreated         → bumps task_count in state/<session_id>-plan
 #   TaskCompleted       → bumps done_count in state/<session_id>-plan (if file exists)
 #   Notification        → log only (no state files)
@@ -413,6 +413,23 @@ case "$HOOK_EVENT" in
             ESC_SUMMARY=$(printf '%s' "$TOOL_SUMMARY" | sed 's/\\/\\\\/g; s/"/\\"/g')
             atomic_write "$STATE_DIR/$KEY-tool" \
                 "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"tool_name\": \"$ESC_TOOL\", \"summary\": \"$ESC_SUMMARY\", \"started_at\": $TIMESTAMP}"
+        fi
+        if [ "$TOOL_NAME" = "Task" ] && [ -n "$TOOL_USE_ID" ]; then
+            SUBAGENT_TYPE=$(extract_tool_input_field subagent_type)
+            [ -z "$SUBAGENT_TYPE" ] && SUBAGENT_TYPE="agent"
+            DESCRIPTION=$(extract_tool_input_field description)
+            if [ -z "$DESCRIPTION" ]; then
+                DESCRIPTION=$(extract_tool_input_field prompt | tr '\n' ' ')
+                DESCRIPTION=$(truncate_summary "$DESCRIPTION" 40)
+            else
+                DESCRIPTION=$(truncate_summary "$DESCRIPTION" 80)
+            fi
+            ESC_AGENT=$(printf '%s' "$SUBAGENT_TYPE" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            ESC_SUMMARY=$(printf '%s' "$DESCRIPTION" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            ESC_TOOLID=$(printf '%s' "$TOOL_USE_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            mkdir -p "$STATE_DIR/$KEY-agents"
+            atomic_write "$STATE_DIR/$KEY-agents/$TOOL_USE_ID.json" \
+                "{\"session_id\": \"$ESC_SID\", \"tool_use_id\": \"$ESC_TOOLID\", \"subagent_type\": \"$ESC_AGENT\", \"summary\": \"$ESC_SUMMARY\", \"started_at\": $TIMESTAMP}"
         fi
         ;;
     PostToolUse)
