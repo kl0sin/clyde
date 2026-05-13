@@ -700,4 +700,24 @@ final class ProcessMonitorTests: XCTestCase {
         // The stale file is NOT deleted on disk — UI drop only.
         XCTAssertTrue(FileManager.default.fileExists(atPath: agentsDir.appendingPathComponent("toolu_old.json").path))
     }
+
+    func testLegacySubagentMarkerCoexistsWithEmptyAgentsDir() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        let body = #"{"session_id":"\#(sid)","pid":\#(pid),"agent_type":"general-purpose","timestamp":\#(Int(Date().timeIntervalSince1970))}"#
+        try body.write(to: dir.appendingPathComponent("\(sid)-subagent"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        let session = try XCTUnwrap(monitor.sessions.first)
+        XCTAssertEqual(session.subagentType, "general-purpose")
+        XCTAssertTrue(session.activeSubagents.isEmpty)
+    }
 }

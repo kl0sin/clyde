@@ -417,6 +417,7 @@ final class ProcessMonitor: ObservableObject {
             status: newStatus,
             sessionId: info?.sessionId
         )
+        fresh.subagentType = hookSubagentByPID[pid]
         fresh.activeTool = hookToolByPID[pid]
         fresh.activePlan = hookPlanByPID[pid]
         fresh.activeSubagents = hookAgentsByPID[pid] ?? []
