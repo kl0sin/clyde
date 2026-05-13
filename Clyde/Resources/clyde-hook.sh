@@ -318,6 +318,7 @@ case "$HOOK_EVENT" in
         ;;
     SessionEnd)
         rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$EVENTS_DIR/$KEY.json"
+        rm -rf "$STATE_DIR/$KEY-agents"
         ;;
     PermissionRequest)
         atomic_write "$EVENTS_DIR/$KEY.json" \
@@ -357,8 +358,11 @@ case "$HOOK_EVENT" in
         fi
         ;;
     Stop)
-        # Clear busy, error, subagent, tool, and attention markers. Stop
+        # Clear busy, error, legacy subagent, tool, and attention markers. Stop
         # means the turn is over — everything from that turn is resolved.
+        # NOTE: -agents/ is intentionally NOT cleared here. Parallel subagents
+        # often outlive the parent's Stop event; each entry vanishes only when
+        # its own PostToolUse(Task) arrives.
         rm -f "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$EVENTS_DIR/$KEY.json"
         ;;
     StopFailure)
@@ -473,6 +477,13 @@ case "$HOOK_EVENT" in
         ;;
     SubagentStop)
         rm -f "$STATE_DIR/$KEY-subagent"
+        # Defensive backup cleanup. Pre/Post Task pairs are load-bearing,
+        # but if Claude ever ships a SubagentStop with a tool_use_id and
+        # the matching PostToolUse never arrives, this catches the orphan.
+        SUB_TOOLID=$(extract_field tool_use_id)
+        if [ -n "$SUB_TOOLID" ]; then
+            rm -f "$STATE_DIR/$KEY-agents/$SUB_TOOLID.json"
+        fi
         ;;
     TaskCreated)
         # Plan-then-execute progress. Read the existing -plan record
