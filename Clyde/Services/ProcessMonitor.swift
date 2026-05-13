@@ -406,6 +406,7 @@ final class ProcessMonitor: ObservableObject {
             }
             revived.activeTool = hookToolByPID[pid]
             revived.activePlan = hookPlanByPID[pid]
+            revived.activeSubagents = hookAgentsByPID[pid] ?? []
             return revived
         }
 

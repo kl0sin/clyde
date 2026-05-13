@@ -596,11 +596,10 @@ private struct SubagentList: View {
                         .truncationMode(.tail)
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(agent.type), \(agent.summary), running \(formatElapsed(elapsed))")
+            .accessibilityAddTraits(.updatesFrequently)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(agent.type), \(agent.summary)")
-        .accessibilityValue("running")
-        .accessibilityAddTraits(.updatesFrequently)
     }
 
     @ViewBuilder
@@ -611,6 +610,7 @@ private struct SubagentList: View {
                 .foregroundStyle(isExpanded ? AnyShapeStyle(.secondary) : AnyShapeStyle(accent))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel(isExpanded ? "Show less" : "\(overflowCount) more agents")
         .accessibilityHint(isExpanded
             ? "Double-tap to collapse the subagent list"
