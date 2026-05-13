@@ -244,3 +244,15 @@ Navigate `⌃⌥→` through: header (title heading → stats summary as one ele
 ### D — Reduce-motion ON
 
 Tool/plan line transitions are crossfades, not slides. Status pill does not pulse on busy. Mascot freezes on its first frame (the antenna and sleeping micro-animations also stop). Activity timeline expand is instant. Error banner appears with opacity fade, not slide. Drag-and-drop animation still works. Color crossfades on header tint when status changes still work.
+
+### E — Parallel subagents (v0.3.x)
+
+1. **Fan-out grows and shrinks**
+   - Trigger: send a Claude prompt that dispatches 5 parallel `Task` calls.
+   - Expect: row second line flips to `5 agents · 0:Ns`, subagent block lists 3 with `+ 2 more agents`. As each `Task` returns, lines disappear oldest-first. When 3 or fewer remain, the `+N more` label disappears automatically.
+2. **VoiceOver labels**
+   - With VO on, focus the row: should announce `<project>, busy`, then descend into the block and announce each agent as `<type>, <summary>, running, <duration>` with `updates frequently` trait.
+   - Focus the `+N more` label: announces `<N> more agents`, hint `Double-tap to expand`.
+3. **Reduce-motion**
+   - Enable System Settings → Accessibility → Display → Reduce motion.
+   - Repeat scenario 1: the block should fade in/out without sliding; expand/collapse changes height instantly with a 120 ms opacity crossfade.
