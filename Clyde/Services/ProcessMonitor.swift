@@ -72,6 +72,10 @@ final class ProcessMonitor: ObservableObject {
     /// UserPromptSubmit so a multi-turn plan keeps tracking.
     private var hookPlanByPID: [pid_t: ActivePlan] = [:]
 
+    /// Active Task-dispatched subagents per PID, populated from `-agents/*.json` markers.
+    /// Inner array is sorted by `startedAt` ascending.
+    private var hookAgentsByPID: [pid_t: [ActiveSubagent]] = [:]
+
     /// Pgrep-only PIDs (no `-info` file yet, so no `sessionId`) that we
     /// deferred for one poll tick to give the SessionStart hook a chance
     /// to fire. Used by `poll()` to ensure each PID is deferred at most
@@ -233,6 +237,7 @@ final class ProcessMonitor: ObservableObject {
         refreshHookSubagents()
         refreshHookTools()
         refreshHookPlans()
+        refreshHookAgents()
 
         let pids = await discoverPIDs()
         let now = Date()
@@ -384,6 +389,7 @@ final class ProcessMonitor: ObservableObject {
             existing.subagentType = hookSubagentByPID[pid]
             existing.activeTool = hookToolByPID[pid]
             existing.activePlan = hookPlanByPID[pid]
+            existing.activeSubagents = hookAgentsByPID[pid] ?? []
             return existing
         }
 
@@ -413,6 +419,7 @@ final class ProcessMonitor: ObservableObject {
         )
         fresh.activeTool = hookToolByPID[pid]
         fresh.activePlan = hookPlanByPID[pid]
+        fresh.activeSubagents = hookAgentsByPID[pid] ?? []
         return fresh
     }
 
@@ -663,6 +670,71 @@ final class ProcessMonitor: ObservableObject {
         return changed
     }
 
+    /// Reads `state/<sid>-agents/*.json` marker files written by PreToolUse(Task).
+    /// Returns true if the dictionary changed since last call.
+    @discardableResult
+    private func refreshHookAgents() -> Bool {
+        let cutoff = Date().addingTimeInterval(-30 * 60)
+        var byPID: [pid_t: [ActiveSubagent]] = [:]
+
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: stateDir, includingPropertiesForKeys: [.isDirectoryKey]
+        ) else {
+            let changed = !hookAgentsByPID.isEmpty
+            if changed { hookAgentsByPID = [:] }
+            return changed
+        }
+
+        for entry in entries where entry.lastPathComponent.hasSuffix("-agents") {
+            let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+            guard isDir else { continue }
+            let sid = String(entry.lastPathComponent.dropLast("-agents".count))
+            guard let parentPID = parentPIDForSessionID(sid) else { continue }
+
+            guard let files = try? FileManager.default.contentsOfDirectory(
+                at: entry, includingPropertiesForKeys: nil
+            ) else { continue }
+
+            var agents: [ActiveSubagent] = []
+            for file in files where file.pathExtension == "json" {
+                guard let data = try? Data(contentsOf: file),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let id = json["tool_use_id"] as? String,
+                      let type = json["subagent_type"] as? String,
+                      let startedAt = json["started_at"] as? Int else {
+                    ClydeLog.hooks.info("Skipping malformed -agents file \(file.lastPathComponent, privacy: .public)")
+                    continue
+                }
+                let started = Date(timeIntervalSince1970: TimeInterval(startedAt))
+                guard started >= cutoff else {
+                    ClydeLog.hooks.info("Dropping stale subagent entry id=\(id, privacy: .public)")
+                    continue
+                }
+                let summary = (json["summary"] as? String) ?? ""
+                agents.append(ActiveSubagent(id: id, type: type, summary: summary, startedAt: started))
+            }
+            if !agents.isEmpty {
+                byPID[parentPID] = agents.sorted { $0.startedAt < $1.startedAt }
+            }
+        }
+
+        let changed = byPID != hookAgentsByPID
+        if changed { hookAgentsByPID = byPID }
+        return changed
+    }
+
+    /// Maps a hook session ID (the prefix of marker filenames) to the PID
+    /// recorded by its `-info` file. Returns nil if the info file is gone or
+    /// the PID it points to is not live.
+    private func parentPIDForSessionID(_ sid: String) -> pid_t? {
+        let info = stateDir.appendingPathComponent("\(sid)-info")
+        guard let data = try? Data(contentsOf: info),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let pidValue = json["pid"] as? Int else { return nil }
+        let pid = pid_t(pidValue)
+        return isLiveClaudeProcessCheck(pid) ? pid : nil
+    }
+
     /// Watches the state dir for changes via FSEvents and triggers a re-poll.
     /// Cheap (just dir listing + mtime reads) so it runs independently of the
     /// main classification cycle.
@@ -672,6 +744,7 @@ final class ProcessMonitor: ObservableObject {
         let subagentChanged = refreshHookSubagents()
         let toolChanged = refreshHookTools()
         let planChanged = refreshHookPlans()
+        let agentsChanged = refreshHookAgents()
 
         // Detect session arrivals/departures via -info file presence so a new
         // session is reflected in the UI immediately instead of waiting for
@@ -695,11 +768,11 @@ final class ProcessMonitor: ObservableObject {
         // This avoids waiting on the full `poll()` cycle (which shells
         // out to pgrep — ~50–200 ms of latency before the UI catches
         // up to the hook event).
-        if busyChanged || errorChanged || subagentChanged || toolChanged || planChanged {
+        if busyChanged || errorChanged || subagentChanged || toolChanged || planChanged || agentsChanged {
             applyBusyStateToSessions()
         }
 
-        if busyChanged || infoChanged || errorChanged || subagentChanged || toolChanged || planChanged {
+        if busyChanged || infoChanged || errorChanged || subagentChanged || toolChanged || planChanged || agentsChanged {
             Task { await self.poll() }
         }
     }
@@ -741,6 +814,11 @@ final class ProcessMonitor: ObservableObject {
             let newPlan = hookPlanByPID[pid]
             if updated[index].activePlan != newPlan {
                 updated[index].activePlan = newPlan
+                changed = true
+            }
+            let newAgents = hookAgentsByPID[pid] ?? []
+            if updated[index].activeSubagents != newAgents {
+                updated[index].activeSubagents = newAgents
                 changed = true
             }
         }
