@@ -44,6 +44,18 @@ struct ActivePlan: Equatable {
     }
 }
 
+/// One in-flight Task-dispatched subagent inside a parent session.
+struct ActiveSubagent: Equatable, Identifiable, Sendable {
+    /// `tool_use_id` from the originating PreToolUse(Task) payload.
+    let id: String
+    /// `subagent_type` from `tool_input` (e.g. `general-purpose`, `Explore`).
+    let type: String
+    /// Trimmed `description` (or prompt fallback) from `tool_input`.
+    let summary: String
+    /// When the parent dispatched the Task call (hook write time).
+    let startedAt: Date
+}
+
 struct Session: Identifiable, Equatable {
     let id: UUID
     /// Mutable so a `claude --resume` can swap in the new Claude process
@@ -64,6 +76,10 @@ struct Session: Identifiable, Equatable {
     var errorReason: String? = nil
     /// Non-nil while a subagent is actively running inside this session.
     var subagentType: String? = nil
+    /// Currently running Task-dispatched subagents inside this session,
+    /// sorted by `startedAt` ascending (oldest first). Empty when the
+    /// session has no parallel Task fan-out in flight.
+    var activeSubagents: [ActiveSubagent] = []
     /// Non-nil while a built-in or MCP tool call is in flight. The hook
     /// writes this on PreToolUse and clears it on PostToolUse / Stop /
     /// SessionEnd, so it tracks the same per-tool-call lifecycle.
