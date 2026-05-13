@@ -13,6 +13,8 @@ struct SessionRow: View {
     let onFocus: () -> Void
     let onReset: (() -> Void)?
     let notificationService: NotificationService?
+    let expandedSubagentSessions: Set<UUID>
+    let onToggleSubagentExpansion: (UUID) -> Void
 
     static let availableSounds = [
         "Glass", "Blow", "Bottle", "Frog", "Funk", "Hero",
@@ -106,36 +108,45 @@ struct SessionRow: View {
                     }
                 }
 
-                ZStack(alignment: .leading) {
-                    if let tool = session.activeTool, let label = session.toolDisplayLabel {
-                        TimelineView(.periodic(from: tool.startedAt, by: 1)) { context in
-                            Text("\(label) · \(formatDuration(from: tool.startedAt, now: context.date))")
+                if session.activeSubagents.count >= 2 {
+                    SubagentSummaryLine(session: session)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(
+                            "\(session.activeSubagents.count) agents running"
+                        )
+                        .accessibilityAddTraits(.updatesFrequently)
+                } else {
+                    ZStack(alignment: .leading) {
+                        if let tool = session.activeTool, let label = session.toolDisplayLabel {
+                            TimelineView(.periodic(from: tool.startedAt, by: 1)) { context in
+                                Text("\(label) · \(formatDuration(from: tool.startedAt, now: context.date))")
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(Color(white: 0.65))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                        } else {
+                            Text(session.workingDirectory.isEmpty
+                                 ? "Unknown path"
+                                 : abbreviatePath(session.workingDirectory))
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(Color(white: 0.65))
+                                .foregroundStyle(Color(white: 0.4))
                                 .lineLimit(1)
-                                .truncationMode(.tail)
+                                .truncationMode(.middle)
+                                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                         }
-                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-                    } else {
-                        Text(session.workingDirectory.isEmpty
-                             ? "Unknown path"
-                             : abbreviatePath(session.workingDirectory))
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(Color(white: 0.4))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                     }
+                    .frame(height: 14, alignment: .leading)
+                    .clipped()
+                    // Bool trigger: back-to-back tools skip the slide (tool
+                    // identity changes but both states stay non-nil).
+                    // Intentional — rapid tool chaining would look jittery
+                    // with double slides.
+                    .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.85),
+                               value: session.activeTool != nil)
+                    .coachmarkAnchor(.toolPlan, identity: AnyHashable(session.id))
                 }
-                .frame(height: 14, alignment: .leading)
-                .clipped()
-                // Bool trigger: back-to-back tools skip the slide (tool
-                // identity changes but both states stay non-nil).
-                // Intentional — rapid tool chaining would look jittery
-                // with double slides.
-                .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.85),
-                           value: session.activeTool != nil)
-                .coachmarkAnchor(.toolPlan, identity: AnyHashable(session.id))
             }
 
             Spacer()
@@ -278,7 +289,9 @@ struct SessionRow: View {
             : "\(session.displayName) session"
         var parts: [String] = [nameWithRole, accessibilityStatusDescription]
 
-        if let tool = session.activeTool, let label = session.toolDisplayLabel {
+        if session.activeSubagents.count >= 2 {
+            parts.append("\(session.activeSubagents.count) agents running")
+        } else if let tool = session.activeTool, let label = session.toolDisplayLabel {
             let elapsed = max(0, Int(Date().timeIntervalSince(tool.startedAt)))
             let elapsedStr = elapsed == 1 ? "1 second elapsed" : "\(elapsed) seconds elapsed"
             parts.append("\(label), \(elapsedStr)")
@@ -469,6 +482,34 @@ private struct PlanBadge: View {
         plan.isComplete
             ? Color(red: 0.47, green: 0.78, blue: 0.55)   // soft green
             : Color(red: 0.71, green: 0.55, blue: 0.86)   // soft purple
+    }
+}
+
+// MARK: - Subagent Summary Line
+
+private struct SubagentSummaryLine: View {
+    let session: Session
+
+    private func formatElapsed(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
+        let m = seconds / 60
+        let r = seconds % 60
+        return r == 0 ? "\(m)m" : "\(m)m \(r)s"
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let oldest = session.activeSubagents.first?.startedAt ?? ctx.date
+            let elapsed = max(0, Int(ctx.date.timeIntervalSince(oldest)))
+            HStack(spacing: 4) {
+                Text("\(session.activeSubagents.count) agents")
+                Text("·")
+                Text(formatElapsed(elapsed))
+                    .monospacedDigit()
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+        }
     }
 }
 

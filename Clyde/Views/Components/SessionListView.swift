@@ -10,6 +10,8 @@ struct SessionListView: View {
     let onReset: (Session) -> Void
     let onMove: (IndexSet, Int) -> Void
     let notificationService: NotificationService?
+    let expandedSubagentSessions: Set<UUID>
+    let onToggleSubagentExpansion: (UUID) -> Void
 
     @State private var draggedSession: Session?
     /// The row the cursor is currently hovering over during a drag.
@@ -47,7 +49,9 @@ struct SessionListView: View {
                 onRename: { name in onRename(item.session.id, name) },
                 onFocus: { onFocus(item.session) },
                 onReset: { onReset(item.session) },
-                notificationService: notificationService
+                notificationService: notificationService,
+                expandedSubagentSessions: expandedSubagentSessions,
+                onToggleSubagentExpansion: onToggleSubagentExpansion
             )
             .scaleEffect(isDragging ? 0.98 : 1.0)
             .opacity(isDragging ? 0.4 : 1.0)

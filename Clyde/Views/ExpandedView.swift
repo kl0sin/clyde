@@ -51,7 +51,9 @@ struct ExpandedView: View {
                     onMove: { source, destination in
                         sessionViewModel.moveSession(from: source, to: destination)
                     },
-                    notificationService: appViewModel.notificationService
+                    notificationService: appViewModel.notificationService,
+                    expandedSubagentSessions: appViewModel.expandedSubagentSessions,
+                    onToggleSubagentExpansion: { id in appViewModel.toggleSubagentExpansion(id) }
                 )
             }
 
