@@ -8,6 +8,10 @@ final class AppViewModel: ObservableObject {
     @Published var isCollapsed = true
     @Published var lastError: String?
     @Published var hookHealthIssue: HookInstaller.HealthIssue?
+    /// Session IDs whose subagent list is currently expanded past the 3-visible cap.
+    /// In-memory only — resets on relaunch. Auto-pruned in real time when a session's
+    /// active count drops to 3 or fewer.
+    @Published var expandedSubagentSessions: Set<UUID> = []
     @Published var widgetVisible: Bool {
         didSet { UserDefaults.standard.set(widgetVisible, forKey: Self.widgetVisibleKey) }
     }
@@ -157,6 +161,17 @@ final class AppViewModel: ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
 
+        // Auto-prune expanded-subagent state when a session's active count
+        // drops to 3 or fewer — the "show more" toggle becomes irrelevant.
+        processMonitor.$sessions
+            .sink { [weak self] sessions in
+                guard let self else { return }
+                self.expandedSubagentSessions = self.expandedSubagentSessions.filter { sid in
+                    (sessions.first { $0.id == sid }?.activeSubagents.count ?? 0) > 3
+                }
+            }
+            .store(in: &cancellables)
+
         attentionMonitor.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
@@ -174,6 +189,14 @@ final class AppViewModel: ObservableObject {
 
     func toggleExpanded() {
         isCollapsed.toggle()
+    }
+
+    func toggleSubagentExpansion(_ sessionID: UUID) {
+        if expandedSubagentSessions.contains(sessionID) {
+            expandedSubagentSessions.remove(sessionID)
+        } else {
+            expandedSubagentSessions.insert(sessionID)
+        }
     }
 
     func updatePollingInterval(_ interval: Double) {
