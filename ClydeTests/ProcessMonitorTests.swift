@@ -673,4 +673,31 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(session.activeSubagents[1].type, "general-purpose")
         XCTAssertEqual(session.activeSubagents[1].summary, "research")
     }
+
+    func testActiveSubagentsGCsEntriesOlderThan30Minutes() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        let agentsDir = dir.appendingPathComponent("\(sid)-agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+
+        let now = Date().timeIntervalSince1970
+        let oldBody = #"{"tool_use_id":"toolu_old","subagent_type":"Explore","summary":"old","started_at":\#(Int(now - 31 * 60))}"#
+        try oldBody.write(to: agentsDir.appendingPathComponent("toolu_old.json"), atomically: true, encoding: .utf8)
+        let freshBody = #"{"tool_use_id":"toolu_fresh","subagent_type":"Plan","summary":"fresh","started_at":\#(Int(now - 60))}"#
+        try freshBody.write(to: agentsDir.appendingPathComponent("toolu_fresh.json"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        let session = try XCTUnwrap(monitor.sessions.first)
+        XCTAssertEqual(session.activeSubagents.map(\.id), ["toolu_fresh"])
+        // The stale file is NOT deleted on disk — UI drop only.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: agentsDir.appendingPathComponent("toolu_old.json").path))
+    }
 }
