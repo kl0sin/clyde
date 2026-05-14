@@ -6,7 +6,14 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
-- Panel now surfaces every parallel subagent dispatched via the built-in `Agent` (Task) tool. The session row shows `N agents · live duration`, with a left-bordered list of each subagent's type and short description underneath; lists longer than three collapse behind a `+N more agents` tap. Older `-subagent` markers from running pre-v0.3.x sessions still render the v0.2 single-agent line until the user restarts `claude`.
+## [0.4.0] — 2026-05-14
+
+Parallel subagents land in the panel, plus a UI polish pass and a fix for the long-standing "Home" mislabel on sessions Clyde discovered through `pgrep`.
+
+- **Parallel subagents in the panel.** When Claude fans out to several subagents at once via the built-in `Agent` tool, the session row now flips its second line to e.g. `5 agents · 0:12` and renders a lavender-accented list of each in-flight subagent underneath — type and live duration on one line, the short Claude-supplied description on the next. Each row gets a static pixel-art mini-mascot so the affordance reads as part of the same visual family as the main indicator. Lists longer than three collapse behind a `+N more agents` tap; the list auto-collapses again once activity drops to three or fewer. Defensive 30-minute GC drops zombies left behind by crashed parents, and the legacy single-subagent indicator keeps working for sessions started before this build.
+- **Real project names for sessions discovered through `pgrep`.** Clyde used to mislabel any session whose `.claude/settings` heuristic only matched the global `~/.claude/settings.json` as "Home". The new detection asks `lsof -d cwd` for the process's actual working directory first, so a `claude` running in `~/_Projects/pulse` shows up as "pulse" instead. The settings-based heuristic stays as a fallback for older Claude builds that chdir'd to `/`, and the global `~/.claude/settings.json` is now explicitly rejected from that fallback so it can no longer impersonate a real project.
+- **UI polish pass on the session row.** Design tokens for text colours unified across the row, hover states gain proper feedback, and the row no longer jumps vertically by a pixel when the rename pencil appears on hover. The subagent block spans the row's full width (so per-agent durations right-align with the trailing "Working · Ns" indicator), the mascot and right-side status both anchor to the top of the row instead of drifting down as the subagent list grows, and all secondary text in the block matches the existing 10pt monospaced typography of the tool/path indicator.
+- **Hook script v21.** Claude Code emits `tool_name="Agent"` on subagent dispatch (the older `"Task"` name no longer ships). The Pre/Post lifecycle, summary line, and defensive cleanups in `clyde-hook.sh` now match on `Agent` (with `Task` retained as a defensive fallback). Existing installs auto-upgrade on Clyde launch; no manual hook reinstall needed.
 
 ## [0.3.1] — 2026-04-30
 
