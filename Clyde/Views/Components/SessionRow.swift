@@ -586,24 +586,30 @@ private struct SubagentList: View {
     private func agentRow(for agent: ActiveSubagent) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let elapsed = max(0, Int(ctx.date.timeIntervalSince(agent.startedAt)))
-            VStack(alignment: .leading, spacing: 1) {
-                HStack {
-                    Text(agent.type)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(accent)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text(formatElapsed(elapsed))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Color(white: 0.55))
-                        .monospacedDigit()
-                }
-                if !agent.summary.isEmpty {
-                    Text(agent.summary)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Color(white: 0.45))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+            HStack(alignment: .top, spacing: 6) {
+                ClydeAnimationView(state: .busy, pixelSize: 0.75, ambientIdleEnabled: false)
+                    .frame(width: 12, height: 12)
+                    .padding(.top, 1)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack {
+                        Text(agent.type)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(accent)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(formatElapsed(elapsed))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.55))
+                            .monospacedDigit()
+                    }
+                    if !agent.summary.isEmpty {
+                        Text(agent.summary)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.45))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
             }
             .accessibilityElement(children: .combine)
