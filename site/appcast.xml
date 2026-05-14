@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.4.0</title>
+            <pubDate>Thu, 14 May 2026 07:32:37 +0000</pubDate>
+            <sparkle:version>16</sparkle:version>
+            <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Parallel subagents land in the panel, plus a UI polish pass and a fix for the long-standing "Home" mislabel on sessions Clyde discovered through <code>pgrep</code>.</p>
+<ul><li><strong>Parallel subagents in the panel.</strong> When Claude fans out to several subagents at once via the built-in <code>Agent</code> tool, the session row now flips its second line to e.g. <code>5 agents · 0:12</code> and renders a lavender-accented list of each in-flight subagent underneath — type and live duration on one line, the short Claude-supplied description on the next. Each row gets a static pixel-art mini-mascot so the affordance reads as part of the same visual family as the main indicator. Lists longer than three collapse behind a <code>+N more agents</code> tap; the list auto-collapses again once activity drops to three or fewer. Defensive 30-minute GC drops zombies left behind by crashed parents, and the legacy single-subagent indicator keeps working for sessions started before this build.</li><li><strong>Real project names for sessions discovered through <code>pgrep</code>.</strong> Clyde used to mislabel any session whose <code>.claude/settings</code> heuristic only matched the global <code>~/.claude/settings.json</code> as "Home". The new detection asks <code>lsof -d cwd</code> for the process's actual working directory first, so a <code>claude</code> running in <code>~/_Projects/pulse</code> shows up as "pulse" instead. The settings-based heuristic stays as a fallback for older Claude builds that chdir'd to <code>/</code>, and the global <code>~/.claude/settings.json</code> is now explicitly rejected from that fallback so it can no longer impersonate a real project.</li><li><strong>UI polish pass on the session row.</strong> Design tokens for text colours unified across the row, hover states gain proper feedback, and the row no longer jumps vertically by a pixel when the rename pencil appears on hover. The subagent block spans the row's full width (so per-agent durations right-align with the trailing "Working · Ns" indicator), the mascot and right-side status both anchor to the top of the row instead of drifting down as the subagent list grows, and all secondary text in the block matches the existing 10pt monospaced typography of the tool/path indicator.</li><li><strong>Hook script v21.</strong> Claude Code emits <code>tool_name="Agent"</code> on subagent dispatch (the older <code>"Task"</code> name no longer ships). The Pre/Post lifecycle, summary line, and defensive cleanups in <code>clyde-hook.sh</code> now match on <code>Agent</code> (with <code>Task</code> retained as a defensive fallback). Existing installs auto-upgrade on Clyde launch; no manual hook reinstall needed.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.4.0/Clyde-0.4.0.dmg"
+                length="5402501"
+                type="application/octet-stream"
+                sparkle:edSignature="dyDxtSt8PjXYIR1eT05svcyZ0m8BvPxcLGBtu4hF0SUnHD7ljr8dTm5Eq+hs9SU+WRKMVSx0biJf/PCinPDQBw==" />
+        </item>
+        <item>
             <title>Version 0.3.1</title>
             <pubDate>Thu, 30 Apr 2026 18:33:32 +0000</pubDate>
             <sparkle:version>15</sparkle:version>
