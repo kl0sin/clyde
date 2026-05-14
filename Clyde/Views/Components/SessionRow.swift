@@ -76,6 +76,10 @@ struct SessionRow: View {
                         .accessibilityLabel("Cancel rename")
                     }
                 } else {
+                    // Reserve the pencil-button's height (18pt) so the row
+                    // doesn't grow vertically when hover reveals the
+                    // rename affordance. Without this the HStack jumps
+                    // up by ~1–2pt as the pencil appears.
                     HStack(spacing: 6) {
                         Text(session.displayName)
                             .font(.system(size: 13, weight: .medium))
@@ -107,6 +111,7 @@ struct SessionRow: View {
                             .transition(.opacity)
                         }
                     }
+                    .frame(minHeight: 18)
                 }
 
                 if session.activeSubagents.count >= 2 {
