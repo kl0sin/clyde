@@ -82,21 +82,21 @@ struct SettingsView: View {
                     HStack(spacing: 8) {
                         Image(systemName: tab.icon)
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(isSelected ? .white : Color(white: 0.45))
+                            .foregroundStyle(isSelected ? .white : TextColor.tertiary)
                             .frame(width: 18)
                         Text(tab.label)
                             .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                            .foregroundStyle(isSelected ? .white : Color(white: 0.55))
+                            .foregroundStyle(isSelected ? .white : TextColor.tertiary)
                         Spacer()
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
                             .fill(isSelected ? Self.accentPurple.opacity(0.22) : Color.clear)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
                             .strokeBorder(isSelected ? Self.accentPurple.opacity(0.4) : Color.clear, lineWidth: 0.5)
                     )
                     .contentShape(Rectangle())
@@ -116,7 +116,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var detailContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
                 switch selectedTab {
                 case .general:
                     GeneralSettingsTab(appViewModel: appViewModel)
@@ -132,7 +132,7 @@ struct SettingsView: View {
                     AboutSettingsTab()
                 }
             }
-            .padding(20)
+            .padding(Spacing.lg)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(SettingsTheme.panelBackground)
@@ -515,7 +515,8 @@ struct PushSettingsTab: View {
     }
 
     private var testButton: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let isDisabled = !pushService.isConfigured || isTesting
+        return VStack(alignment: .leading, spacing: 8) {
             Button(action: {
                 isTesting = true
                 pushService.lastTestResult = nil
@@ -531,20 +532,22 @@ struct PushSettingsTab: View {
                             .controlSize(.small)
                             .scaleEffect(0.7)
                     } else {
-                        Image(systemName: "paperplane")
+                        Image(systemName: isDisabled ? "paperplane.slash" : "paperplane")
                             .font(.system(size: 11))
                     }
                     Text(isTesting ? "Sending..." : "Send test notification")
                         .font(.system(size: 12, weight: .medium))
                 }
-                .foregroundStyle(pushService.isConfigured ? Color(white: 0.8) : Color(white: 0.4))
+                .foregroundStyle(isDisabled ? TextColor.disabled : Color.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(Color(white: 0.18))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+                .opacity(isDisabled ? 0.5 : 1.0)
             }
             .buttonStyle(.plain)
-            .disabled(!pushService.isConfigured || isTesting)
+            .disabled(isDisabled)
+            .help(isDisabled && !isTesting ? "Configure the push provider above to enable test sending" : "")
 
             if let result = pushService.lastTestResult {
                 switch result {
@@ -619,7 +622,7 @@ struct AdvancedSettingsTab: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
                     .background(Color(white: 0.18))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.small))
                 }
                 .buttonStyle(.plain)
 
@@ -658,7 +661,7 @@ struct AdvancedSettingsTab: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
                     .background(Color(white: 0.18))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.small))
                 }
                 .buttonStyle(.plain)
             }
@@ -703,7 +706,7 @@ struct AdvancedSettingsTab: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
                     .background((resetDone ? Color.green : (resetConfirmation ? Color.orange : Color(white: 0.18))).opacity(resetConfirmation ? 0.15 : 0.6))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.small))
                 }
                 .buttonStyle(.plain)
             }
@@ -753,7 +756,7 @@ struct AboutSettingsTab: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(Color(white: 0.16))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small))
             }
             .buttonStyle(.plain)
 
@@ -778,7 +781,7 @@ struct AboutSettingsTab: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(Color(white: 0.16))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small))
             }
             .buttonStyle(.plain)
 
@@ -795,7 +798,7 @@ struct AboutSettingsTab: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(Color(white: 0.16))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small))
             }
             .buttonStyle(.plain)
             .sheet(isPresented: $showAcknowledgements) {
@@ -830,7 +833,7 @@ struct AboutSettingsTab: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(Color(white: 0.18))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.small))
                 }
                 .buttonStyle(.plain)
 
@@ -854,7 +857,7 @@ struct AboutSettingsTab: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(Color(white: 0.18))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.small))
                 }
                 .buttonStyle(.plain)
             }
@@ -873,7 +876,7 @@ struct AboutSettingsTab: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
             .background(Color.red.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.small))
         }
         .buttonStyle(.plain)
     }
@@ -917,7 +920,7 @@ struct ClaudeHooksRow: View {
                 }
                 .padding(8)
                 .background(Color.orange.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small))
             }
 
             if let errorMessage {
@@ -937,7 +940,7 @@ struct ClaudeHooksRow: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background((isInstalled ? Color.green : Color.blue).opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small))
             }
             .buttonStyle(.plain)
         }
@@ -984,18 +987,18 @@ struct SettingsSection<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Color(white: 0.4))
+                .foregroundStyle(TextColor.tertiary)
                 .tracking(0.5)
 
             VStack(alignment: .leading, spacing: 10) {
                 content
             }
-            .padding(12)
+            .padding(Spacing.sm)
             .background(Color(white: 0.13))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.medium))
         }
     }
 }
@@ -1062,7 +1065,7 @@ struct AcknowledgementsSheet: View {
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(white: 0.13))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small))
         }
     }
 

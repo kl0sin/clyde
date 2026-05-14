@@ -19,15 +19,15 @@ struct ExpandedHeader: View {
     let onCollapse: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Spacing.sm) {
             // Mascot tile — colour driven by clydeState. Halo + glow scales
             // with the state so the user can read the dominant state from
             // the header alone, even before glancing at the stats.
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
                     .fill(accentColor.opacity(0.16))
                     .frame(width: 56, height: 56)
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
                     .strokeBorder(accentColor.opacity(0.45), lineWidth: 0.75)
                     .frame(width: 56, height: 56)
                 ClydeAnimationView(state: clydeState, pixelSize: 2.625)
@@ -35,7 +35,7 @@ struct ExpandedHeader: View {
             }
             .shadow(color: accentColor.opacity(0.30), radius: 14, y: 0)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Text("Clyde")
                     .font(.system(size: 16, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
@@ -72,8 +72,8 @@ struct ExpandedHeader: View {
                 .accessibilityHint("Or press Control-Command-C from anywhere")
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
         .background(
             // Soft state-coloured gradient bleeding from the top so the
             // header sits on a hint of the dominant colour without
@@ -108,11 +108,11 @@ struct ExpandedHeader: View {
             // doesn't look empty / broken.
             HStack(spacing: 5) {
                 Circle()
-                    .fill(Color(white: 0.4))
+                    .fill(TextColor.tertiary)
                     .frame(width: 5, height: 5)
                 Text("No active sessions")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Color(white: 0.5))
+                    .foregroundStyle(TextColor.tertiary)
             }
         } else {
             HStack(spacing: 10) {
@@ -123,7 +123,7 @@ struct ExpandedHeader: View {
                             .frame(width: 5, height: 5)
                         Text("\(entry.count) \(entry.label)")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Color(white: 0.65))
+                            .foregroundStyle(TextColor.secondary)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                     }
@@ -187,18 +187,41 @@ struct ExpandedHeader: View {
         action: @escaping () -> Void,
         accessibilityLabel: String
     ) -> some View {
+        HoverableHeaderButton(
+            icon: icon,
+            action: action,
+            accessibilityLabel: accessibilityLabel
+        )
+    }
+}
+
+/// Header / title-bar icon button with a hover state. macOS users expect
+/// every clickable surface to respond to hover; the original
+/// `headerButton` rendered a static low-opacity fill regardless of
+/// cursor position, which made the gear / minus / snooze buttons read
+/// as decorative on first glance.
+private struct HoverableHeaderButton: View {
+    let icon: String
+    let action: () -> Void
+    let accessibilityLabel: String
+
+    @State private var isHovered = false
+
+    var body: some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(white: 0.6))
+                .foregroundStyle(isHovered ? Color.white : TextColor.tertiary)
                 .frame(width: 26, height: 26)
                 .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
+                    RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                        .fill(Color.white.opacity(isHovered ? 0.12 : 0.04))
                 )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
         .accessibilityLabel(accessibilityLabel)
     }
 }

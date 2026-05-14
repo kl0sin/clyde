@@ -89,7 +89,7 @@ struct SessionRow: View {
                         if let suffix = disambiguator {
                             Text(suffix)
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(Color(white: 0.35))
+                                .foregroundStyle(TextColor.tertiary)
                         }
 
                         if isHovered {
@@ -99,7 +99,7 @@ struct SessionRow: View {
                             }) {
                                 Image(systemName: "pencil")
                                     .font(.system(size: 9))
-                                    .foregroundStyle(Color(white: 0.35))
+                                    .foregroundStyle(TextColor.tertiary)
                                     .frame(width: 18, height: 18)
                                     .contentShape(Rectangle())
                             }
@@ -132,7 +132,7 @@ struct SessionRow: View {
                                  ? "Unknown path"
                                  : abbreviatePath(session.workingDirectory))
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(Color(white: 0.4))
+                                .foregroundStyle(TextColor.tertiary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
@@ -186,10 +186,10 @@ struct SessionRow: View {
         }
         }
         .opacity(session.isGhost ? 0.55 : 1.0)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, Spacing.xs)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: Radius.medium)
                 .fill(rowBackground)
         )
         .contentShape(Rectangle())
@@ -239,18 +239,21 @@ struct SessionRow: View {
         }
         .onChange(of: session.status) { newStatus in
             if lastSeenStatus != nil && lastSeenStatus != newStatus {
-                // Flash the row on state change
+                // Flash the row on state change. One easeInOut curve in
+                // each direction reads as a single calm pulse — the old
+                // split (.easeIn 0.15 → hold 0.65 → .easeOut 0.5) felt
+                // jittery because the on/off curves didn't match.
                 if reduceMotion {
                     stateFlash = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                         stateFlash = false
                     }
                 } else {
-                    withAnimation(.easeIn(duration: 0.15)) {
+                    withAnimation(.easeInOut(duration: 0.35)) {
                         stateFlash = true
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        withAnimation(.easeOut(duration: 0.5)) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                        withAnimation(.easeInOut(duration: 0.35)) {
                             stateFlash = false
                         }
                     }
@@ -340,7 +343,7 @@ struct SessionRow: View {
     private var timeColor: Color {
         if session.needsAttention { return SessionTheme.attentionColor }
         if session.status == .busy { return SessionTheme.processingColor }
-        return Color(white: 0.3)
+        return TextColor.tertiary
     }
 
     /// Status pill on the right of the row. Ghost and ready are static.
@@ -709,7 +712,7 @@ struct SessionStatusIndicator: View {
                 // Idle: numbered slot. Two-digit format keeps width stable.
                 Text(String(format: "%02d", idleIndex ?? 0))
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(white: 0.42))
+                    .foregroundStyle(TextColor.tertiary)
             }
         }
         .onAppear {

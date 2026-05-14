@@ -12,10 +12,10 @@ struct TitleBar: View {
             // Mascot tile — bigger, with a subtle tinted halo matching the
             // current Clyde state so the header carries a bit of personality.
             ZStack {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: Radius.large)
                     .fill(accentColor.opacity(0.14))
                     .frame(width: 38, height: 38)
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: Radius.large)
                     .strokeBorder(accentColor.opacity(0.25), lineWidth: 0.5)
                     .frame(width: 38, height: 38)
                 ClydeAnimationView(state: clydeState, pixelSize: 1.5)
@@ -38,8 +38,8 @@ struct TitleBar: View {
                 titleBarButton(icon: "minus", action: onCollapse)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, Spacing.xs)
         // Drag handle — moves the expanded panel by its header. The panel
         // has isMovableByWindowBackground disabled so the session list
         // below doesn't hijack row drag gestures as window drags.
@@ -74,18 +74,7 @@ struct TitleBar: View {
     }
 
     private func titleBarButton(icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(white: 0.55))
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            // Just a contentShape hover; native cursor change is enough.
-            _ = hovering
-        }
+        HoverableTitleBarButton(icon: icon, action: action)
     }
 
     /// Matches the widget + SessionTheme palette: purple when any session is
@@ -106,5 +95,29 @@ struct TitleBar: View {
         case .idle:      return "Ready"
         case .sleeping:  return "No sessions"
         }
+    }
+}
+
+private struct HoverableTitleBarButton: View {
+    let icon: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isHovered ? Color.white : TextColor.tertiary)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                        .fill(Color.white.opacity(isHovered ? 0.10 : 0.0))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 }
