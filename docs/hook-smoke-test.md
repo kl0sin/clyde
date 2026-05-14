@@ -248,8 +248,8 @@ Tool/plan line transitions are crossfades, not slides. Status pill does not puls
 ### E — Parallel subagents (v0.3.x)
 
 1. **Fan-out grows and shrinks**
-   - Trigger: send a Claude prompt that dispatches 5 parallel `Task` calls.
-   - Expect: row second line flips to `5 agents · 0:Ns`, subagent block lists 3 with `+ 2 more agents`. As each `Task` returns, lines disappear oldest-first. When 3 or fewer remain, the `+N more` label disappears automatically.
+   - Trigger: send a Claude prompt that dispatches 5 parallel `Agent` (subagent) calls — Claude Code emits these as `tool_name="Agent"` in the hook payload.
+   - Expect: row second line flips to `5 agents · 0:Ns`, subagent block lists 3 with `+ 2 more agents`. As each `Agent` returns, lines disappear oldest-first. When 3 or fewer remain, the `+N more` label disappears automatically.
 2. **VoiceOver labels**
    - With VO on, focus the row: should announce `<project>, busy`, then descend into the block and announce each agent as `<type>, <summary>, running, <duration>` with `updates frequently` trait.
    - Focus the `+N more` label: announces `<N> more agents`, hint `Double-tap to expand`.
