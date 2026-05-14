@@ -32,7 +32,7 @@ struct SessionRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             SessionStatusIndicator(session: session, idleIndex: idleIndex)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -535,7 +535,9 @@ private struct SubagentList: View {
     let onToggle: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let accent = Color(red: 0.486, green: 0.361, blue: 1.0)  // #7C5CFF
+    // Soft lavender, matching PlanBadge's in-progress accent so the
+    // subagent affordance reads as the same visual language.
+    private let accent = Color(red: 0.71, green: 0.55, blue: 0.86)
 
     private var visible: [ActiveSubagent] {
         isExpanded ? session.activeSubagents : Array(session.activeSubagents.prefix(3))
