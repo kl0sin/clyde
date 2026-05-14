@@ -32,6 +32,7 @@ struct SessionRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
         HStack(alignment: .top, spacing: 12) {
             SessionStatusIndicator(session: session, idleIndex: idleIndex)
 
@@ -115,20 +116,6 @@ struct SessionRow: View {
                             "\(session.activeSubagents.count) agents running"
                         )
                         .accessibilityAddTraits(.updatesFrequently)
-                    SubagentList(
-                        session: session,
-                        isExpanded: expandedSubagentSessions.contains(session.id),
-                        onToggle: { onToggleSubagentExpansion(session.id) }
-                    )
-                    .transition(reduceMotion
-                        ? .opacity
-                        : .asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity))
-                    .animation(reduceMotion
-                        ? .easeInOut(duration: 0.12)
-                        : .spring(response: 0.28, dampingFraction: 0.85),
-                        value: session.activeSubagents.map(\.id))
                 } else {
                     ZStack(alignment: .leading) {
                         if let tool = session.activeTool, let label = session.toolDisplayLabel {
@@ -176,6 +163,27 @@ struct SessionRow: View {
                         .foregroundStyle(timeColor)
                 }
             }
+        }
+
+        if session.activeSubagents.count >= 2 {
+            SubagentList(
+                session: session,
+                isExpanded: expandedSubagentSessions.contains(session.id),
+                onToggle: { onToggleSubagentExpansion(session.id) }
+            )
+            // Align under the title: mascot (34) + HStack spacing (12).
+            .padding(.leading, 46)
+            .padding(.top, 4)
+            .transition(reduceMotion
+                ? .opacity
+                : .asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal: .opacity))
+            .animation(reduceMotion
+                ? .easeInOut(duration: 0.12)
+                : .spring(response: 0.28, dampingFraction: 0.85),
+                value: session.activeSubagents.map(\.id))
+        }
         }
         .opacity(session.isGhost ? 0.55 : 1.0)
         .padding(.horizontal, 14)
@@ -521,8 +529,8 @@ private struct SubagentSummaryLine: View {
                 Text(formatElapsed(elapsed))
                     .monospacedDigit()
             }
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(Color(white: 0.65))
         }
     }
 }
@@ -581,19 +589,19 @@ private struct SubagentList: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack {
                     Text(agent.type)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(accent)
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     Text(formatElapsed(elapsed))
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Color(white: 0.55))
                         .monospacedDigit()
                 }
                 if !agent.summary.isEmpty {
                     Text(agent.summary)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Color(white: 0.45))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -608,8 +616,8 @@ private struct SubagentList: View {
     private var expandLabel: some View {
         Button(action: onToggle) {
             Text(isExpanded ? "▴ Show less" : "+ \(overflowCount) more agents")
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(isExpanded ? AnyShapeStyle(.secondary) : AnyShapeStyle(accent))
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(isExpanded ? AnyShapeStyle(Color(white: 0.55)) : AnyShapeStyle(accent))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isButton)
