@@ -211,19 +211,40 @@ final class ProcessMonitor: ObservableObject {
         return hookBusyPIDs.contains(pid) ? .busy : .idle
     }
 
-    /// Detect project dir from claude's open .claude/settings files via lsof.
-    /// Claude sets its cwd to /, so we can't use lsof -d cwd directly.
+    /// Detect project dir for a pgrep-discovered claude PID. The current
+    /// `claude` binary keeps its working directory pointed at the project
+    /// root, so `lsof -d cwd` gives a clean answer. Older builds (and any
+    /// future ones that chdir to `/`) fall through to the `.claude/settings`
+    /// heuristic: scan the process's open files and use the first project
+    /// whose `.claude/settings*` is loaded. The heuristic still happily
+    /// matches `~/.claude/settings.json` (the global config) which is why
+    /// it used to mislabel real project sessions as "Home" — we explicitly
+    /// reject `NSHomeDirectory()` here so the caller falls back to
+    /// "Untitled session" rather than a misleading project name.
     func detectCWD(pid: pid_t) async -> String {
+        if let output = try? await shell.run(
+            "lsof -a -p \(pid) -d cwd -Fn 2>/dev/null"
+        ) {
+            for line in output.split(separator: "\n") where line.first == "n" {
+                let path = String(line.dropFirst())
+                if !path.isEmpty && path != "/" {
+                    return path
+                }
+            }
+        }
+
         guard let output = try? await shell.run(
             "lsof -p \(pid) -Fn 2>/dev/null | grep -m1 '/.claude/settings'"
         ), !output.isEmpty else {
             return ""
         }
         let path = String(output.dropFirst()) // strip leading 'n'
-        if let range = path.range(of: "/.claude/") {
-            return String(path[path.startIndex..<range.lowerBound])
-        }
-        return ""
+        guard let range = path.range(of: "/.claude/") else { return "" }
+        let candidate = String(path[path.startIndex..<range.lowerBound])
+        // Drop the home-directory match: it's the global config, not a
+        // project, and rendering it as "Home" obscures the real cwd that
+        // pgrep-only sessions usually have somewhere under `_Projects/…`.
+        return candidate == NSHomeDirectory() ? "" : candidate
     }
 
     func poll() async {
