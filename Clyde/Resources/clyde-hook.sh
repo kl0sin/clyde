@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 21
+# clyde-hook-version: 24
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -283,7 +283,195 @@ find_claude_pid() {
     return 1
 }
 
-CLAUDE_PID=$(find_claude_pid || echo "")
+# Cleat (https://github.com/cleatdev/cleat) runs Claude Code inside a
+# Docker container and forwards hook events to host-side hook commands
+# via a bash function (`_hook_bridge_watcher`) in `bin/cleat`.
+#
+# Two host signals are available when our hook fires from cleat:
+#   1. The cleat shell process itself sits in our PPID chain — it has
+#      a real macOS PID and its working directory (via lsof -d cwd) is
+#      the host project root mounted to /workspace inside the container.
+#   2. `docker ps --filter name=cleat-` lists running containers; we
+#      match by `/workspace` mount Source to find which one owns this
+#      cleat process, recovering the canonical container name.
+#
+# We deliberately do NOT use `docker inspect .State.Pid` for the
+# session's anchor PID, even though it's the obvious choice. On macOS,
+# Docker Desktop runs containers inside a Linux VM, so .State.Pid is
+# in the VM's PID namespace — `kill -0 <that_pid>` from macOS returns
+# ESRCH (or worse, hits an unrelated Mac process). Using the cleat
+# shell PID instead gives us a real host-namespace PID that liveness
+# probes can reach. When the user closes their cleat terminal, that
+# PID dies and Clyde correctly ages the session out.
+#
+# Without this remapping, hook events from cleat are unusable: `cwd`
+# arrives as `/workspace`, `pid` is container-namespaced, and
+# find_claude_pid can't locate a `claude` ancestor because Claude
+# lives inside the container.
+
+# Walks the PPID chain looking for the cleat shell process. Sets
+# CLEAT_HOST_CWD (the cleat process's working directory = host project
+# root) and CLEAT_HOST_PID (the cleat process's real macOS PID).
+# Returns 0 on match, 1 otherwise.
+detect_cleat_host_process() {
+    CLEAT_HOST_CWD=""
+    CLEAT_HOST_PID=""
+    # Walk PPID upward, keeping the topmost ancestor whose argv looks
+    # like the cleat script. Why "topmost":
+    #
+    # Cleat's hook bridge runs the user's hook commands via
+    #     ( _execute_host_hooks "$event_json" "${settings_files[@]}" ) &
+    # inside `_execute_host_hook_bg`, itself called from the
+    # `_hook_bridge_watcher` function backgrounded with &. Both
+    # subshells fork off bash processes that *inherit cleat's argv*
+    # (bash doesn't rewrite argv when entering `( ... )` or `func &`),
+    # so any of them passes our `basename == cleat` test. But these
+    # subshells are transient — `_execute_host_hook_bg` is forked
+    # per hook event and exits within milliseconds, so its PID is
+    # unsafe to record (`kill -0` will fail by the next poll, and
+    # Clyde would mark the session as dead immediately).
+    #
+    # The cleat *main* script process at the top of the chain IS
+    # long-lived — it's the user's interactive shell session that
+    # owns the container. Its parent is the user's terminal, which
+    # does NOT match. So we walk all the way up, and the deepest
+    # cleat-matching pid is the real anchor.
+    local pid=$PPID
+    local depth=0
+    local last_cleat_pid=""
+    while [ "$pid" -gt 1 ] && [ "$depth" -lt 20 ]; do
+        # `ww` defeats macOS's default argv truncation.
+        local args
+        args=$(ps -ww -p "$pid" -o args= 2>/dev/null)
+        # cleat may be invoked as `cleat …`, `/usr/local/bin/cleat …`,
+        # or `/bin/bash /path/to/cleat …` (shebang form on macOS). In
+        # all cases either argv[0] or argv[1]'s basename is "cleat".
+        local first second
+        # shellcheck disable=SC2086
+        set -- $args
+        first=${1:-}
+        second=${2:-}
+        if [ "$(basename -- "$first" 2>/dev/null)" = cleat ] \
+           || [ "$(basename -- "$second" 2>/dev/null)" = cleat ]; then
+            last_cleat_pid=$pid
+        elif [ -n "$last_cleat_pid" ]; then
+            # We left the cleat-matching segment of the chain — the
+            # previous pid was the topmost cleat ancestor. Stop here so
+            # we don't keep climbing into the user's terminal.
+            break
+        fi
+        pid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ')
+        depth=$((depth + 1))
+    done
+
+    if [ -n "$last_cleat_pid" ]; then
+        local cwd
+        cwd=$(lsof -a -p "$last_cleat_pid" -d cwd -Fn 2>/dev/null \
+              | awk '/^n/{print substr($0,2); exit}')
+        if [ -n "$cwd" ] && [ "$cwd" != "/" ]; then
+            CLEAT_HOST_CWD=$cwd
+            CLEAT_HOST_PID=$last_cleat_pid
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Given the host path that maps to /workspace, find the matching cleat
+# container name via `docker ps` + mount Source comparison. Sets
+# CLEAT_CNAME and CLEAT_HOST_WORKSPACE (the docker-reported Source,
+# may differ from the lsof cwd by symlink resolution).
+#
+# Cached at /tmp/.clyde-cleat-<sha-of-path> so subsequent events skip
+# the ~100-300ms docker probe. Cache holds cname + cleat_pid +
+# workspace; entry is invalidated whenever the cached cleat PID is no
+# longer alive (covers `cleat stop`, terminal close, etc.) — at that
+# point we re-probe docker. The cleat_pid stored in the cache is the
+# host-process PID passed in via $2; we use it solely as a liveness
+# token, not for any subsequent operation.
+resolve_cleat_cname() {
+    local target=$1
+    local cleat_pid=$2
+    CLEAT_CNAME=""
+    CLEAT_HOST_WORKSPACE=""
+
+    local key
+    if command -v shasum >/dev/null 2>&1; then
+        key=$(printf '%s' "$target" | shasum -a 1 | awk '{print $1}')
+    else
+        key=$(printf '%s' "$target" | tr '/' '_' | tr -dc '[:alnum:]_-' | cut -c1-40)
+    fi
+    local cache_file="/tmp/.clyde-cleat-${key}"
+
+    if [ -f "$cache_file" ]; then
+        local cached cname cached_pid path
+        cached=$(cat "$cache_file" 2>/dev/null)
+        cname=$(printf '%s' "$cached" | awk -F'\t' '{print $1}')
+        cached_pid=$(printf '%s' "$cached" | awk -F'\t' '{print $2}')
+        path=$(printf '%s' "$cached" | awk -F'\t' '{print $3}')
+        if [ -n "$cname" ] && [ -n "$cached_pid" ] \
+           && kill -0 "$cached_pid" 2>/dev/null \
+           && [ "$path" = "$target" ]; then
+            CLEAT_CNAME=$cname
+            CLEAT_HOST_WORKSPACE=$path
+            return 0
+        fi
+    fi
+
+    command -v docker >/dev/null 2>&1 || return 1
+    local names
+    names=$(docker ps --filter "name=cleat-" --format '{{.Names}}' 2>/dev/null)
+    [ -n "$names" ] || return 1
+
+    local target_real
+    target_real=$(cd "$target" 2>/dev/null && pwd -P) || target_real=$target
+
+    local cname src src_real
+    while IFS= read -r cname; do
+        [ -n "$cname" ] || continue
+        src=$(docker inspect --format \
+              '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Source}}{{end}}{{end}}' \
+              "$cname" 2>/dev/null)
+        [ -n "$src" ] || continue
+        src_real=$(cd "$src" 2>/dev/null && pwd -P) || src_real=$src
+        if [ "$src" = "$target" ] || [ "$src_real" = "$target_real" ] \
+           || [ "$src" = "$target_real" ] || [ "$src_real" = "$target" ]; then
+            printf '%s\t%s\t%s\n' "$cname" "$cleat_pid" "$target" >"$cache_file" 2>/dev/null || true
+            CLEAT_CNAME=$cname
+            CLEAT_HOST_WORKSPACE=$src
+            return 0
+        fi
+    done <<< "$names"
+    return 1
+}
+
+# Detect cleat *before* find_claude_pid: in cleat-land there is no
+# `claude` ancestor on the host (claude lives in the container), so
+# find_claude_pid would just fall through and produce a `WARN no claude
+# ancestor` log line, masking the real story.
+CLEAT_CNAME=""
+CLEAT_RUNTIME=""
+CLEAT_HOST_CWD=""
+CLEAT_HOST_PID=""
+CLEAT_HOST_WORKSPACE=""
+if detect_cleat_host_process && resolve_cleat_cname "$CLEAT_HOST_CWD" "$CLEAT_HOST_PID"; then
+    CLEAT_RUNTIME="cleat"
+    # CLEAT_HOST_PID is the cleat shell process PID — a real macOS PID
+    # that `kill -0` can probe. Storing it as CLAUDE_PID lets Clyde's
+    # liveness check work without special-casing the container init
+    # PID (which lives in the Docker VM's namespace).
+    CLAUDE_PID=$CLEAT_HOST_PID
+    # Container cwd of `/workspace[/sub/path]` maps to
+    # `<host_workspace>[/sub/path]`. Anything outside /workspace is
+    # left alone — could happen if the user `cd`s out of the bind
+    # mount, but Clyde would show that path verbatim anyway.
+    case "$CWD" in
+        /workspace)     CWD=$CLEAT_HOST_WORKSPACE ;;
+        /workspace/*)   CWD="$CLEAT_HOST_WORKSPACE/${CWD#/workspace/}" ;;
+    esac
+else
+    CLAUDE_PID=$(find_claude_pid || echo "")
+fi
 log_event
 if [ -z "$CLAUDE_PID" ]; then
     printf "[%s] WARN no claude ancestor for event=%s ppid=%s\n" \
@@ -300,6 +488,18 @@ TIMESTAMP=$(date +%s)
 ESC_CWD=$(printf '%s' "$CWD" | sed 's/\\/\\\\/g; s/"/\\"/g')
 ESC_SID=$(printf '%s' "$SESSION_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
+# Optional runtime-suffix for -info JSON. Empty for regular host
+# sessions so the existing on-disk format is byte-identical. Cleat
+# sessions get `"runtime": "cleat", "container": "<cname>"` appended
+# inside the object, which Clyde uses to (a) relax its liveness check
+# (cleat sessions point at the docker init PID, which isn't named
+# "claude") and (b) decorate the row with a "cleat" badge.
+INFO_RUNTIME_FIELDS=""
+if [ -n "$CLEAT_RUNTIME" ]; then
+    ESC_CONTAINER=$(printf '%s' "$CLEAT_CNAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    INFO_RUNTIME_FIELDS=", \"runtime\": \"$CLEAT_RUNTIME\", \"container\": \"$ESC_CONTAINER\""
+fi
+
 # Atomic write helper: stage to a temp file in the same dir, then mv.
 atomic_write() {
     local target=$1
@@ -314,7 +514,7 @@ case "$HOOK_EVENT" in
     SessionStart)
         ESC_SOURCE=$(printf '%s' "$SOURCE" | sed 's/\\/\\\\/g; s/"/\\"/g')
         atomic_write "$STATE_DIR/$KEY-info" \
-            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"}"
+            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"$INFO_RUNTIME_FIELDS}"
         ;;
     SessionEnd)
         rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$EVENTS_DIR/$KEY.json"
@@ -342,7 +542,7 @@ case "$HOOK_EVENT" in
         # session "graduates" to full hook tracking from now on.
         if [ ! -f "$STATE_DIR/$KEY-info" ]; then
             atomic_write "$STATE_DIR/$KEY-info" \
-                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP}"
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$INFO_RUNTIME_FIELDS}"
         fi
         # If the previous turn finished a plan (done_count == task_count),
         # drop the -plan marker now that the user has moved on. Partial
@@ -453,7 +653,7 @@ case "$HOOK_EVENT" in
         # new cwd so Clyde's project name display stays current.
         if [ -f "$STATE_DIR/$KEY-info" ] && [ -n "$CWD" ]; then
             atomic_write "$STATE_DIR/$KEY-info" \
-                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP}"
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$INFO_RUNTIME_FIELDS}"
         fi
         ;;
     Elicitation)

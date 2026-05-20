@@ -6,6 +6,8 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **Now tracks sessions running inside [cleat](https://github.com/cleatdev/cleat).** Cleat is a Docker sandbox for Claude Code that lets you run with `--dangerously-skip-permissions` without risking your host — same productivity, zero blast radius. Clyde now detects cleat-sandboxed sessions automatically and renders them in the panel like any native session, with a small cyan **cleat** badge next to the project name so you can tell them apart. Working directories show as the real host path (no more `/workspace` mystery), and liveness tracking is wired to the cleat process on the host so sessions age out correctly when you close your cleat terminal. One-time setup on the cleat side: `cleat config --enable hooks` so cleat's host-side hook bridge is active — without that capability no host hooks fire from the container. Big thanks to the cleat team for shipping a tool that makes autonomous Claude actually safe to leave running overnight. Hook script bumped to v24; existing installs auto-upgrade on Clyde launch.
+
 ## [0.4.0] — 2026-05-14
 
 Parallel subagents land in the panel, plus a UI polish pass and a fix for the long-standing "Home" mislabel on sessions Clyde discovered through `pgrep`.

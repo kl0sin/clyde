@@ -30,6 +30,7 @@ It connects to Claude Code's native hook events, so updates are **instant** — 
 - 💤 **Snooze** — 15 / 30 / 60 / 120 minute mute when you need quiet.
 - ⌨️ **Global hotkey** — `⌃⌘C` to expand from anywhere.
 - 🛠 **Self-installs the hook** — Clyde adds and self-heals its hook script in `~/.claude/hooks/` so you never have to think about it.
+- 📦 **Sandbox-aware** — tracks Claude sessions running inside [cleat](https://github.com/cleatdev/cleat), the Docker sandbox for `--dangerously-skip-permissions`, and tags them with a **cleat** badge so you can tell them apart from native sessions. Enable cleat's host hook bridge once with `cleat config --enable hooks` and Clyde picks them up automatically.
 - 🔒 **Privacy-first** — no telemetry, no network calls, no accounts. Everything stays on your Mac.
 
 ## Install

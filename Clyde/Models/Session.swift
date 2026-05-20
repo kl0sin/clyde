@@ -92,6 +92,15 @@ struct Session: Identifiable, Equatable {
     /// Set when the underlying Claude process has exited but we're keeping
     /// the row visible briefly. Nil for live sessions.
     var endedAt: Date? = nil
+    /// "cleat" when this session runs inside a Cleat Docker sandbox,
+    /// empty for regular host sessions. Populated from the hook's
+    /// `-info` file. Drives the small badge rendered next to the
+    /// project name so the user can tell sandboxed sessions apart.
+    var runtime: String = ""
+    /// Cleat container name (e.g. `cleat-clyde-1a2b3c4d`) when
+    /// `runtime == "cleat"`. Empty otherwise. Shown as a tooltip on
+    /// the cleat badge and useful for future container-aware actions.
+    var container: String = ""
 
     var isGhost: Bool { endedAt != nil }
 

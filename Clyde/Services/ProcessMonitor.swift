@@ -124,7 +124,25 @@ final class ProcessMonitor: ObservableObject {
         /// sessions discovered via pgrep or legacy -info files that
         /// predate the source field (v15+).
         let source: String
+        /// "cleat" when the session runs inside a Cleat Docker
+        /// sandbox (https://github.com/cleatdev/cleat). Empty for
+        /// regular host sessions. Drives both the liveness check
+        /// (a cleat session's PID points at the container init
+        /// process, not at `claude`) and the row decoration.
+        let runtime: String
+        /// Cleat container name (e.g. `cleat-clyde-1a2b3c4d`) when
+        /// `runtime == "cleat"`, empty otherwise. Surfaced in the UI
+        /// and useful for tooltips / debug.
+        let container: String
     }
+
+    /// Side map of PID → runtime ("" or "cleat") populated by
+    /// `refreshPIDRuntimes()`. Used by `isLiveClaudeProcess` so the
+    /// cleat branch skips the `ps -o comm=claude` identity check —
+    /// the host PID is a `containerd-shim`-shaped process, not the
+    /// Claude binary. Refreshed before every disk-state pass so the
+    /// FSEvents-driven `pollHookState` path also sees correct values.
+    private var pidRuntimeByPID: [pid_t: String] = [:]
 
     func discoverPIDs() async -> [pid_t] {
         // Two sources, unified into one PID set:
@@ -167,7 +185,13 @@ final class ProcessMonitor: ObservableObject {
                 }
                 pids.insert(info.pid)
                 if !info.sessionId.isEmpty {
-                    hookInfo[info.pid] = HookInfo(sessionId: info.sessionId, cwd: info.cwd, source: info.source)
+                    hookInfo[info.pid] = HookInfo(
+                        sessionId: info.sessionId,
+                        cwd: info.cwd,
+                        source: info.source,
+                        runtime: info.runtime,
+                        container: info.container
+                    )
                 }
             }
         }
@@ -190,6 +214,8 @@ final class ProcessMonitor: ObservableObject {
         let sessionId: String
         let cwd: String
         let source: String
+        let runtime: String
+        let container: String
     }
 
     private func readInfoFile(file: URL) -> ParsedInfo? {
@@ -201,7 +227,33 @@ final class ProcessMonitor: ObservableObject {
         let sessionId = (json["session_id"] as? String) ?? ""
         let cwd = (json["cwd"] as? String) ?? ""
         let source = (json["source"] as? String) ?? ""
-        return ParsedInfo(pid: pid_t(pidValue), sessionId: sessionId, cwd: cwd, source: source)
+        let runtime = (json["runtime"] as? String) ?? ""
+        let container = (json["container"] as? String) ?? ""
+        return ParsedInfo(
+            pid: pid_t(pidValue),
+            sessionId: sessionId,
+            cwd: cwd,
+            source: source,
+            runtime: runtime,
+            container: container
+        )
+    }
+
+    /// Sweep `-info` files for runtime metadata. Cheap (one stat + small
+    /// JSON parse per file) and called from both poll() and
+    /// pollHookState() so the liveness check sees correct runtime
+    /// labels regardless of which code path runs first.
+    private func refreshPIDRuntimes() {
+        var next: [pid_t: String] = [:]
+        if let files = try? FileManager.default.contentsOfDirectory(
+            at: stateDir, includingPropertiesForKeys: nil
+        ) {
+            for file in files where file.lastPathComponent.hasSuffix("-info") {
+                guard let info = readInfoFile(file: file), !info.runtime.isEmpty else { continue }
+                next[info.pid] = info.runtime
+            }
+        }
+        pidRuntimeByPID = next
     }
 
     /// Classify a Claude session's state. Pure hook-driven — there's no
@@ -253,6 +305,7 @@ final class ProcessMonitor: ObservableObject {
         // current on-disk markers, without depending on the FSEvents watcher
         // having run first. This makes the function deterministic for tests
         // and removes any chance of a race on startup.
+        refreshPIDRuntimes()
         refreshHookBusyPIDs()
         refreshHookErrors()
         refreshHookSubagents()
@@ -398,6 +451,10 @@ final class ProcessMonitor: ObservableObject {
             } else if existing.workingDirectory.isEmpty {
                 existing.workingDirectory = await detectCWD(pid: pid)
             }
+            if let info {
+                existing.runtime = info.runtime
+                existing.container = info.container
+            }
 
             if existing.status != newStatus {
                 existing.status = newStatus
@@ -425,6 +482,10 @@ final class ProcessMonitor: ObservableObject {
             if let info, !info.cwd.isEmpty {
                 revived.workingDirectory = info.cwd
             }
+            if let info {
+                revived.runtime = info.runtime
+                revived.container = info.container
+            }
             revived.activeTool = hookToolByPID[pid]
             revived.activePlan = hookPlanByPID[pid]
             revived.activeSubagents = hookAgentsByPID[pid] ?? []
@@ -439,6 +500,8 @@ final class ProcessMonitor: ObservableObject {
             status: newStatus,
             sessionId: info?.sessionId
         )
+        fresh.runtime = info?.runtime ?? ""
+        fresh.container = info?.container ?? ""
         fresh.subagentType = hookSubagentByPID[pid]
         fresh.activeTool = hookToolByPID[pid]
         fresh.activePlan = hookPlanByPID[pid]
@@ -454,11 +517,22 @@ final class ProcessMonitor: ObservableObject {
     /// session arrivals/departures so we can kick the main poll immediately.
     private var lastInfoFilenames: Set<String> = []
 
-    /// True iff `pid` is alive AND looks like a Claude Code process.
-    /// Delegates to the injected `isLiveClaudeProcessCheck` so tests
-    /// can stub it out without `ps` actually running.
+    /// True iff `pid` is alive AND (for native host sessions) looks
+    /// like a Claude Code process. For Cleat-sandboxed sessions the
+    /// recorded PID is the container's init process on the host
+    /// (typically `containerd-shim` / `docker-init`), which would
+    /// fail the `argv[0] == claude` identity check; in that case we
+    /// fall back to a plain liveness probe via `kill(pid, 0)`. The
+    /// PID-recycling concern that motivated the identity check
+    /// doesn't apply: Linux/Docker keep the container init PID
+    /// pinned for the container's lifetime, and we re-derive the PID
+    /// on every hook event via the cleat resolver, so a stale PID
+    /// can't outlive its container.
     private func isLiveClaudeProcess(pid: pid_t) -> Bool {
-        isLiveClaudeProcessCheck(pid)
+        if pidRuntimeByPID[pid] == "cleat" {
+            return kill(pid, 0) == 0
+        }
+        return isLiveClaudeProcessCheck(pid)
     }
 
     /// Default identity check, used outside tests.
@@ -755,13 +829,14 @@ final class ProcessMonitor: ObservableObject {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let pidValue = json["pid"] as? Int else { return nil }
         let pid = pid_t(pidValue)
-        return isLiveClaudeProcessCheck(pid) ? pid : nil
+        return isLiveClaudeProcess(pid: pid) ? pid : nil
     }
 
     /// Watches the state dir for changes via FSEvents and triggers a re-poll.
     /// Cheap (just dir listing + mtime reads) so it runs independently of the
     /// main classification cycle.
     private func pollHookState() {
+        refreshPIDRuntimes()
         let busyChanged = refreshHookBusyPIDs()
         let errorChanged = refreshHookErrors()
         let subagentChanged = refreshHookSubagents()

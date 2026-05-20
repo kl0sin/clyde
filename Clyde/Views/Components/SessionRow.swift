@@ -90,6 +90,10 @@ struct SessionRow: View {
                             PlanBadge(plan: plan)
                         }
 
+                        if session.runtime == "cleat" {
+                            CleatBadge(container: session.container)
+                        }
+
                         if let suffix = disambiguator {
                             Text(suffix)
                                 .font(.system(size: 10, weight: .medium))
@@ -512,6 +516,38 @@ private struct PlanBadge: View {
         plan.isComplete
             ? Color(red: 0.47, green: 0.78, blue: 0.55)   // soft green
             : Color(red: 0.71, green: 0.55, blue: 0.86)   // soft purple
+    }
+}
+
+// MARK: - Cleat Runtime Badge
+
+/// Small capsule next to the project name showing that the session
+/// runs inside a Cleat Docker sandbox. The container name is exposed
+/// via `.help` so hover reveals which container the session belongs
+/// to — useful when several cleat projects are running in parallel.
+private struct CleatBadge: View {
+    let container: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "shippingbox")
+                .font(.system(size: 9, weight: .semibold))
+            Text("cleat")
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+        }
+        .foregroundStyle(accent)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(accent.opacity(0.12))
+        .clipShape(Capsule())
+        .help(container.isEmpty ? "Cleat sandbox" : container)
+        .accessibilityLabel("Cleat sandbox")
+    }
+
+    private var accent: Color {
+        // Soft cyan — distinct from the purple PlanBadge so they read
+        // as separate badges when both are present.
+        Color(red: 0.45, green: 0.75, blue: 0.85)
     }
 }
 
