@@ -64,7 +64,7 @@ enum HookInstaller {
     ///
     /// MUST stay in sync with the `clyde-hook-version` line at the top of
     /// `Clyde/Resources/clyde-hook.sh`.
-    static let currentScriptVersion = 24
+    static let currentScriptVersion = 25
 
     /// Loads the hook script source from the bundled resource. The script
     /// itself lives in `Clyde/Resources/clyde-hook.sh` so it can be edited
@@ -141,6 +141,7 @@ enum HookInstaller {
         case outdated(installed: Int, current: Int)
         case missingEvents([String])            // events that are missing from settings.json
         case autoRepairFailed(reason: String)   // we tried to fix it and write threw
+        case cleatHooksCapDisabled              // cleat installed but its hooks cap is off
 
         var bannerMessage: String {
             switch self {
@@ -158,6 +159,8 @@ enum HookInstaller {
                 return "Hook isn't registered for: \(names.joined(separator: ", ")). Reinstall to fix."
             case .autoRepairFailed(let reason):
                 return "Auto-repair failed: \(reason). Open Settings and reinstall manually."
+            case .cleatHooksCapDisabled:
+                return "Cleat is installed but its host hook bridge is off. Run `cleat config --enable hooks` so Clyde can track sandboxed sessions."
             }
         }
     }
@@ -249,6 +252,15 @@ enum HookInstaller {
         let missing = registeredHookEvents.filter { !isRegisteredInSettings(eventName: $0) }
         if !missing.isEmpty {
             return .missingEvents(missing)
+        }
+
+        // Soft advisory — Clyde's own hook install is healthy but
+        // cleat is on PATH with its `hooks` capability disabled, so
+        // any Claude session inside a cleat sandbox would silently not
+        // reach Clyde. We only surface this when the hook install is
+        // otherwise fine so the user fixes the actual problem first.
+        if CleatProbe.hooksCapStatus() == .hooksDisabled {
+            return .cleatHooksCapDisabled
         }
 
         return nil

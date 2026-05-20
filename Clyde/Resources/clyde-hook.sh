@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 24
+# clyde-hook-version: 25
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -403,6 +403,13 @@ resolve_cleat_cname() {
     fi
     local cache_file="/tmp/.clyde-cleat-${key}"
 
+    # GC stale cache files. macOS doesn't periodically prune /tmp, so
+    # entries for projects the user hasn't reopened in a week sit there
+    # forever otherwise. Done here (not at script top) because cache
+    # files only matter inside this resolver. Errors swallowed — this
+    # is best-effort cleanup, never blocks the real work.
+    find /tmp -maxdepth 1 -name '.clyde-cleat-*' -type f -mtime +7 -delete 2>/dev/null || true
+
     if [ -f "$cache_file" ]; then
         local cached cname cached_pid path
         cached=$(cat "$cache_file" 2>/dev/null)
@@ -454,21 +461,35 @@ CLEAT_RUNTIME=""
 CLEAT_HOST_CWD=""
 CLEAT_HOST_PID=""
 CLEAT_HOST_WORKSPACE=""
-if detect_cleat_host_process && resolve_cleat_cname "$CLEAT_HOST_CWD" "$CLEAT_HOST_PID"; then
-    CLEAT_RUNTIME="cleat"
-    # CLEAT_HOST_PID is the cleat shell process PID — a real macOS PID
-    # that `kill -0` can probe. Storing it as CLAUDE_PID lets Clyde's
-    # liveness check work without special-casing the container init
-    # PID (which lives in the Docker VM's namespace).
-    CLAUDE_PID=$CLEAT_HOST_PID
-    # Container cwd of `/workspace[/sub/path]` maps to
-    # `<host_workspace>[/sub/path]`. Anything outside /workspace is
-    # left alone — could happen if the user `cd`s out of the bind
-    # mount, but Clyde would show that path verbatim anyway.
-    case "$CWD" in
-        /workspace)     CWD=$CLEAT_HOST_WORKSPACE ;;
-        /workspace/*)   CWD="$CLEAT_HOST_WORKSPACE/${CWD#/workspace/}" ;;
-    esac
+if detect_cleat_host_process; then
+    if resolve_cleat_cname "$CLEAT_HOST_CWD" "$CLEAT_HOST_PID"; then
+        CLEAT_RUNTIME="cleat"
+        # CLEAT_HOST_PID is the cleat shell process PID — a real macOS PID
+        # that `kill -0` can probe. Storing it as CLAUDE_PID lets Clyde's
+        # liveness check work without special-casing the container init
+        # PID (which lives in the Docker VM's namespace).
+        CLAUDE_PID=$CLEAT_HOST_PID
+        # Container cwd of `/workspace[/sub/path]` maps to
+        # `<host_workspace>[/sub/path]`. Anything outside /workspace is
+        # left alone — could happen if the user `cd`s out of the bind
+        # mount, but Clyde would show that path verbatim anyway.
+        case "$CWD" in
+            /workspace)     CWD=$CLEAT_HOST_WORKSPACE ;;
+            /workspace/*)   CWD="$CLEAT_HOST_WORKSPACE/${CWD#/workspace/}" ;;
+        esac
+    else
+        # PPID walk found a cleat process but `docker ps` / mount-source
+        # match didn't produce a container name. Common causes: docker
+        # daemon down, `--cap hooks` not enabled (so the bridge that
+        # invoked us is from an older cleat snapshot), or the mount path
+        # differs from what lsof reports (symlink chains we can't
+        # normalise). Log so the user has a breadcrumb instead of a bare
+        # "no claude ancestor" — that warning is misleading here.
+        printf "[%s] cleat detected (pid=%s cwd=%s) but docker lookup failed for event=%s\n" \
+            "$(date "+%Y-%m-%d %H:%M:%S")" "$CLEAT_HOST_PID" "$CLEAT_HOST_CWD" "$HOOK_EVENT" \
+            >>"$HOOK_LOG" 2>/dev/null || true
+        CLAUDE_PID=$(find_claude_pid || echo "")
+    fi
 else
     CLAUDE_PID=$(find_claude_pid || echo "")
 fi

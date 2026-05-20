@@ -394,6 +394,12 @@ final class AppViewModel: ObservableObject {
                 shouldAutoInstall = true
             case .autoRepairFailed:
                 shouldAutoInstall = false
+            case .cleatHooksCapDisabled:
+                // Pure advisory — Clyde can't enable cleat's capability
+                // for the user (that requires `cleat config --enable
+                // hooks` interactively). The banner tells them what
+                // to do; reinstalling Clyde's hook wouldn't help.
+                shouldAutoInstall = false
             }
 
             let resolvedIssue: HookInstaller.HealthIssue?
