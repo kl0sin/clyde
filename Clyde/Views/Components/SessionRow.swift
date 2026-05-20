@@ -507,6 +507,12 @@ private struct PlanBadge: View {
         .padding(.vertical, 2)
         .background(accent.opacity(0.12))
         .clipShape(Capsule())
+        // Lock the badge to its intrinsic width so the parent HStack
+        // truncates `session.displayName` (which has lineLimit(1) and
+        // no layout priority) before it ever squeezes the badge. Without
+        // this, long project names eat into the badge's horizontal space
+        // and the icon + counter render visibly clipped on the right edge.
+        .fixedSize(horizontal: true, vertical: false)
         .animation(.easeInOut(duration: 0.25), value: plan.doneCount)
         .animation(.easeInOut(duration: 0.25), value: plan.isComplete)
         .accessibilityHidden(true)
@@ -540,6 +546,10 @@ private struct CleatBadge: View {
         .padding(.vertical, 2)
         .background(accent.opacity(0.12))
         .clipShape(Capsule())
+        // See PlanBadge for the same reasoning — the parent HStack
+        // would otherwise truncate this badge before truncating
+        // `session.displayName`.
+        .fixedSize(horizontal: true, vertical: false)
         .help(container.isEmpty ? "Cleat sandbox" : container)
         .accessibilityLabel("Cleat sandbox")
     }
