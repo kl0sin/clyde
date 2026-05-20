@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.5.0</title>
+            <pubDate>Wed, 20 May 2026 19:14:27 +0000</pubDate>
+            <sparkle:version>17</sparkle:version>
+            <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>First-class support for Claude Code sessions running inside <a href="https://github.com/cleatdev/cleat">cleat</a> — the Docker sandbox that lets you run <code>claude --dangerously-skip-permissions</code> without risking your host — plus a small UI fix that stops the progress and runtime badges from getting visibly clipped on long project names.</p>
+<ul><li><strong>Now tracks sessions running inside <a href="https://github.com/cleatdev/cleat">cleat</a>.</strong> Cleat sandboxes Claude Code in Docker so it can run with full autonomous permissions without touching your host — same productivity, zero blast radius. Clyde now detects cleat-sandboxed sessions automatically and renders them in the panel like any native session, with a small cyan <strong>cleat</strong> badge next to the project name so you can tell them apart. Working directories show as the real host path (no more <code>/workspace</code> mystery), and liveness tracking is wired to the cleat process on the host so sessions age out correctly when you close your cleat terminal. If you have cleat on your PATH but haven't enabled its host hook bridge yet, Clyde surfaces a one-line banner pointing at <code>cleat config --enable hooks</code> so sandboxed sessions actually reach the panel. Big thanks to the cleat team for shipping a tool that makes autonomous Claude actually safe to leave running overnight — go check it out at <a href="https://github.com/cleatdev/cleat">github.com/cleatdev/cleat</a>. Hook script bumped to v25; existing installs auto-upgrade on Clyde launch.</li><li><strong>Plan and cleat badges no longer get clipped on narrow rows.</strong> SwiftUI was happy to give the project-name label all available horizontal space and squeeze the capsules past their content box, so the progress icon or the "cleat" tag would render visibly cut off on the right edge for projects with longer names. Both badges now refuse to compress; the name takes the ellipsis instead.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.5.0/Clyde-0.5.0.dmg"
+                length="5428520"
+                type="application/octet-stream"
+                sparkle:edSignature="69kJMzzzFXrGmYfcyus4viGmohVMD+twuVeoAVwKx5Pk/dC9lUMKibZ2kLJ//ll4QDF6arF1UcXaMj7FVIH7Dg==" />
+        </item>
+        <item>
             <title>Version 0.4.0</title>
             <pubDate>Thu, 14 May 2026 07:32:37 +0000</pubDate>
             <sparkle:version>16</sparkle:version>
