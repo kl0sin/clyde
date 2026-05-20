@@ -116,4 +116,14 @@ final class SessionTests: XCTestCase {
         let session = Session(pid: 123, workingDirectory: "/tmp")
         XCTAssertNil(session.activePlan)
     }
+
+    /// New cleat-runtime fields default to empty strings so the badge
+    /// renders only for sessions that actually opted in via the hook.
+    /// Empty (not nil) keeps the API simple — SessionRow gates on
+    /// `runtime == "cleat"` rather than `runtime?.isEmpty == false`.
+    func testSessionRuntimeAndContainerDefaultsAreEmpty() {
+        let session = Session(pid: 123, workingDirectory: "/tmp")
+        XCTAssertEqual(session.runtime, "")
+        XCTAssertEqual(session.container, "")
+    }
 }

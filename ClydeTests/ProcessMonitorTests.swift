@@ -45,6 +45,25 @@ final class ProcessMonitorTests: XCTestCase {
         return pid
     }
 
+    /// Writes a cleat-flavoured `-info` file the way clyde-hook.sh v24+
+    /// does when it detects a Cleat-sandboxed session. The `pid` is the
+    /// host-side cleat process (in production), so we use the current
+    /// test process PID to satisfy `kill(pid, 0)`. The `runtime` and
+    /// `container` fields are what tell ProcessMonitor to skip the
+    /// `argv[0] == claude` identity check.
+    private func writeCleatInfoFile(
+        in dir: URL,
+        sessionId: String = UUID().uuidString,
+        cwd: String = "/Users/me/Projects/draft-zone",
+        container: String = "cleat-draft-zone-deadbeef"
+    ) -> pid_t {
+        let pid = getpid()
+        let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","started_at":0,"runtime":"cleat","container":"\#(container)"}"#
+        let url = dir.appendingPathComponent("\(sessionId)-info")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
+        return pid
+    }
+
     /// Writes a `-tool` marker the way PreToolUse hook would. Same PID
     /// semantics as `writeInfoFile` (uses the current process PID so
     /// kill(pid, 0) succeeds).
@@ -123,6 +142,67 @@ final class ProcessMonitorTests: XCTestCase {
             FileManager.default.fileExists(atPath: infoURL.path),
             "stale -info file for recycled PID must be pruned"
         )
+    }
+
+    /// Cleat regression: a session running inside a Cleat Docker sandbox
+    /// records the cleat *host-process* PID (not the in-container one),
+    /// and that process isn't named `claude` — it's a bash script. The
+    /// `argv[0] == claude` identity check therefore returns false, but
+    /// the session must NOT be pruned: `runtime: "cleat"` in the -info
+    /// file tells ProcessMonitor to fall back to a plain `kill(pid, 0)`
+    /// liveness probe. Without this branch every cleat session would
+    /// flash into the panel and immediately vanish.
+    func testCleatInfoFileSurvivesEvenWhenIdentityCheckFails() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeCleatInfoFile(in: dir, sessionId: sid)
+
+        // Stub returns false → "not the Claude binary". On a host session
+        // that would prune the file (see testDiscoverPIDsDropsRecycledPIDs…).
+        // On a cleat session it MUST be ignored — the runtime field
+        // routes liveness through kill(pid,0), which succeeds for getpid().
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in false }
+        )
+        let pids = await monitor.discoverPIDs()
+
+        XCTAssertEqual(pids, [pid], "cleat-tagged session must not be pruned by failing identity check")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: dir.appendingPathComponent("\(sid)-info").path),
+            "cleat -info file must remain on disk after discoverPIDs"
+        )
+    }
+
+    /// After `poll()` the Session row built from a cleat -info must
+    /// carry through both `runtime` and `container` so the UI can show
+    /// the "cleat" badge and tooltip. Failing this test means the badge
+    /// would never appear even if the row itself rendered.
+    func testCleatSessionExposesRuntimeAndContainerOnSession() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeCleatInfoFile(
+            in: dir,
+            sessionId: sid,
+            cwd: "/Users/me/Projects/draft-zone",
+            container: "cleat-draft-zone-1a3bc53a"
+        )
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in false }
+        )
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.count, 1)
+        let session = monitor.sessions.first
+        XCTAssertEqual(session?.runtime, "cleat")
+        XCTAssertEqual(session?.container, "cleat-draft-zone-1a3bc53a")
+        XCTAssertEqual(session?.workingDirectory, "/Users/me/Projects/draft-zone")
     }
 
     func testClassifyStatusIsBusyWhenBusyMarkerPresent() async {

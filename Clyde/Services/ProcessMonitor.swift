@@ -145,6 +145,13 @@ final class ProcessMonitor: ObservableObject {
     private var pidRuntimeByPID: [pid_t: String] = [:]
 
     func discoverPIDs() async -> [pid_t] {
+        // Self-contained: refresh the runtime side map before the
+        // liveness loop so a cleat-tagged -info is recognised even
+        // when discoverPIDs() is invoked directly (tests, or any
+        // future call site that skips the poll() preamble). In the
+        // poll() path this is a cheap duplicate dir listing.
+        refreshPIDRuntimes()
+
         // Two sources, unified into one PID set:
         //
         //  1. -info files written by the SessionStart hook. These give us
