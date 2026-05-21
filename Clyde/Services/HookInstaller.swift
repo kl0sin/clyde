@@ -143,6 +143,20 @@ enum HookInstaller {
         case autoRepairFailed(reason: String)   // we tried to fix it and write threw
         case cleatHooksCapDisabled              // cleat installed but its hooks cap is off
 
+        /// Optional short headline rendered above the body in the
+        /// banner. Use it when the long-form message has a natural
+        /// "what's wrong" → "what to do" split worth surfacing as
+        /// hierarchy. Critical issues that fit on one line return nil
+        /// and the banner renders flat as before.
+        var bannerTitle: String? {
+            switch self {
+            case .cleatHooksCapDisabled:
+                return "Cleat hook bridge is off"
+            default:
+                return nil
+            }
+        }
+
         var bannerMessage: String {
             switch self {
             case .claudeNotInstalled:
@@ -160,7 +174,23 @@ enum HookInstaller {
             case .autoRepairFailed(let reason):
                 return "Auto-repair failed: \(reason). Open Settings and reinstall manually."
             case .cleatHooksCapDisabled:
-                return "Cleat is installed but its host hook bridge is off. Run `cleat config --enable hooks` so Clyde can track sandboxed sessions."
+                return "Run this in your terminal so Clyde can track sandboxed sessions."
+            }
+        }
+
+        /// Optional shell command the user needs to run to fix the
+        /// issue. Rendered as a discrete copyable chip below the body
+        /// rather than inline in the prose — inline `code` styling
+        /// via AttributedString backgroundColor renders unreliably on
+        /// macOS SwiftUI (per-glyph gaps, no padding control), so we
+        /// surface the actionable command as its own affordance. nil
+        /// for issues whose fix isn't a one-liner.
+        var bannerCommand: String? {
+            switch self {
+            case .cleatHooksCapDisabled:
+                return "cleat config --enable hooks"
+            default:
+                return nil
             }
         }
 
@@ -185,6 +215,37 @@ enum HookInstaller {
                  .missingEvents,
                  .autoRepairFailed:
                 return true
+            }
+        }
+
+        /// True iff the banner can be dismissed with the × button.
+        /// Only advisories the user can legitimately defer (their
+        /// session won't break, they just won't get the integration's
+        /// extra feature) opt in. Critical hook-health issues — where
+        /// dismissing would leave Clyde broken until the user
+        /// rediscovers Settings — stay non-dismissable.
+        var isDismissable: Bool {
+            switch self {
+            case .cleatHooksCapDisabled:
+                return true
+            default:
+                return false
+            }
+        }
+
+        /// Stable token identifying a dismissable issue across ticks
+        /// of the health check. Held in an in-memory set on
+        /// AppViewModel — deliberately NOT persisted, so an app
+        /// restart wipes all dismissals and the user gets the next
+        /// reminder on their next launch. Pairs well with the
+        /// auto-clear on resolve: dismiss is "snooze until I either
+        /// fix it, toggle it off and on again, or relaunch Clyde".
+        var dismissalIdentity: String? {
+            switch self {
+            case .cleatHooksCapDisabled:
+                return "cleatHooksCapDisabled"
+            default:
+                return nil
             }
         }
     }

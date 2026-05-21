@@ -83,11 +83,19 @@ final class AppViewModel: ObservableObject {
     private var settingsFileFD: Int32 = -1
     private var settingsWatcherDebounce: DispatchWorkItem?
     private var hookHealTimer: Timer?
-    /// Watcher on `~/.config/cleat/` so the cleat-hooks-disabled banner
-    /// appears the moment the user toggles cleat's hooks capability,
-    /// instead of waiting for the 60-second safety-net timer to tick.
+    /// Watchers on `~/.config/cleat/` (dir) and `~/.config/cleat/config`
+    /// (file) so the cleat-hooks-disabled banner appears the moment
+    /// the user toggles cleat's hooks capability, instead of waiting
+    /// for the 60-second safety-net timer to tick. We watch BOTH
+    /// because cleat's `--disable hooks` truncates the file via
+    /// unlink+create (caught by the dir watcher) but `--enable hooks`
+    /// writes to the existing file in place (NOT caught by the dir
+    /// watcher — dir-level FSEvents only fire on add/delete/rename
+    /// inside the dir, not on content changes to existing files).
     private var cleatConfigDirSource: DispatchSourceFileSystemObject?
     private var cleatConfigDirFD: Int32 = -1
+    private var cleatConfigFileSource: DispatchSourceFileSystemObject?
+    private var cleatConfigFileFD: Int32 = -1
     private var cleatConfigRetryTimer: Timer?
 
     deinit {
@@ -100,6 +108,7 @@ final class AppViewModel: ObservableObject {
         settingsWatcherDebounce?.cancel()
         hookHealTimer?.invalidate()
         cleatConfigDirSource?.cancel()
+        cleatConfigFileSource?.cancel()
         cleatConfigRetryTimer?.invalidate()
     }
 
@@ -395,43 +404,93 @@ final class AppViewModel: ObservableObject {
     }
 
     private func attachCleatConfigWatcher() {
-        // Already attached and the underlying fd is valid → nothing to do.
-        if cleatConfigDirSource != nil { return }
-
         let configDir = URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent(".config/cleat", isDirectory: true)
         guard FileManager.default.fileExists(atPath: configDir.path) else {
             return
         }
 
-        let fd = open(configDir.path, O_EVTONLY)
-        guard fd >= 0 else { return }
-        cleatConfigDirFD = fd
+        // Dir watcher catches `cleat config --disable hooks` (which
+        // truncates the file via unlink+create on cleat ≥ 0.x) plus
+        // first-time creation of the config file by `cleat config`.
+        if cleatConfigDirSource == nil {
+            let fd = open(configDir.path, O_EVTONLY)
+            if fd >= 0 {
+                cleatConfigDirFD = fd
+                let source = DispatchSource.makeFileSystemObjectSource(
+                    fileDescriptor: fd,
+                    eventMask: [.write, .delete, .rename, .extend, .attrib],
+                    queue: DispatchQueue.main
+                )
+                source.setEventHandler { [weak self] in
+                    // The dir changed — could be add/delete/rename of
+                    // the `config` file. Re-bind the file watcher so
+                    // it tracks the (possibly new) inode, then trigger
+                    // a recheck.
+                    self?.rebindCleatConfigFileWatcher()
+                    self?.scheduleCleatConfigRecheck()
+                }
+                // Capture the fd locally so we close the file
+                // descriptor THIS handler was created for, not
+                // whatever value `cleatConfigDirFD` happens to hold
+                // when the cancel handler runs later. Belt-and-braces
+                // even though the dir watcher isn't rebound today —
+                // future-proofs against the file-watcher's rebind
+                // pattern leaking into here.
+                source.setCancelHandler { [weak self] in
+                    close(fd)
+                    if self?.cleatConfigDirFD == fd { self?.cleatConfigDirFD = -1 }
+                }
+                source.resume()
+                cleatConfigDirSource = source
+            }
+        }
 
+        // File watcher catches in-place content modifications, which
+        // `cleat config --enable hooks` performs (writes the new caps
+        // list into the existing inode without unlink+create). Without
+        // this, enable→banner-clears never fires automatically.
+        rebindCleatConfigFileWatcher()
+    }
+
+    /// (Re)bind the file-level watcher to the current `config` inode.
+    /// Called both during initial attach and whenever the dir watcher
+    /// fires, since the file we were tracking may have been deleted
+    /// and re-created (a different inode → our old fd is stale).
+    private func rebindCleatConfigFileWatcher() {
+        cleatConfigFileSource?.cancel()
+        cleatConfigFileSource = nil
+
+        let configFile = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".config/cleat/config")
+        guard FileManager.default.fileExists(atPath: configFile.path) else {
+            // File doesn't exist (yet) — the dir watcher will catch
+            // its eventual creation and call us back here.
+            return
+        }
+        let fd = open(configFile.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        cleatConfigFileFD = fd
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
-            eventMask: [.write, .delete, .rename, .extend, .attrib],
+            eventMask: [.write, .extend, .attrib, .delete, .rename],
             queue: DispatchQueue.main
         )
         source.setEventHandler { [weak self] in
-            // Same debounce as the settings.json watcher: cleat
-            // writes the file in two steps (truncate then content),
-            // so we coalesce events on a short timer to avoid
-            // running the check against an intermediate state.
             self?.scheduleCleatConfigRecheck()
         }
+        // Capture the fd locally — the file watcher gets rebound on
+        // every dir event, so by the time an old source's cancel
+        // handler fires, `cleatConfigFileFD` may already point at a
+        // newer fd belonging to a different watcher. Reading the
+        // instance var would silently close the wrong fd and leak
+        // the original one.
         source.setCancelHandler { [weak self] in
-            if let fd = self?.cleatConfigDirFD, fd >= 0 {
-                close(fd)
-                self?.cleatConfigDirFD = -1
-            }
+            close(fd)
+            if self?.cleatConfigFileFD == fd { self?.cleatConfigFileFD = -1 }
         }
         source.resume()
-        cleatConfigDirSource = source
-        // Now that we're attached, the retry timer is no longer
-        // needed — keep it running but harmless (each tick will
-        // short-circuit on the `cleatConfigDirSource != nil` guard
-        // above), so we don't have to coordinate teardown.
+        cleatConfigFileSource = source
     }
 
     private var cleatConfigDebounce: DispatchWorkItem?
@@ -457,6 +516,24 @@ final class AppViewModel: ObservableObject {
         Task.detached(priority: .utility) {
             let issue = HookInstaller.healthCheck()
             guard let issue else {
+                // No issue → clear the in-memory dismiss set so
+                // banners reappear if the underlying state flips
+                // back later in this same session.
+                await MainActor.run {
+                    self.dismissedBannerIdentities.removeAll()
+                    self.hookHealthIssue = nil
+                }
+                return
+            }
+            // User clicked × on THIS issue's banner this session →
+            // keep hidden until the issue resolves or Clyde restarts.
+            // The detection itself still ticks normally, so the
+            // moment it clears and recurs the banner is back.
+            let identity = issue.dismissalIdentity
+            let dismissed = await MainActor.run {
+                identity.map { self.dismissedBannerIdentities.contains($0) } ?? false
+            }
+            if dismissed {
                 await MainActor.run { self.hookHealthIssue = nil }
                 return
             }
@@ -501,6 +578,31 @@ final class AppViewModel: ObservableObject {
             await MainActor.run { self.hookHealthIssue = finalIssue }
         }
     }
+
+    /// Dismiss the currently visible banner (× button). Snoozes the
+    /// banner for the rest of this Clyde session — the issue keeps
+    /// being detected, but the banner stays hidden until either:
+    ///  • the issue resolves once (e.g. user enables the cap), then
+    ///    reoccurs (set is cleared on resolve), or
+    ///  • the user relaunches Clyde (set lives in memory only).
+    /// No-op for non-dismissable issues.
+    func dismissCurrentBanner() {
+        guard let issue = hookHealthIssue,
+              issue.isDismissable,
+              let identity = issue.dismissalIdentity else {
+            return
+        }
+        dismissedBannerIdentities.insert(identity)
+        hookHealthIssue = nil
+    }
+
+    /// Banners the user clicked × on during the current session.
+    /// Deliberately not persisted: relaunching Clyde is a fresh
+    /// start, and the user gets the next reminder cheaply. Cleared
+    /// inside `ensureHookHealthy` whenever the health check returns
+    /// nil so an on/off toggle re-surfaces the banner without
+    /// requiring a relaunch.
+    private var dismissedBannerIdentities: Set<String> = []
 
     /// Re-runs the hook installer's health check. Call this after the user
     /// toggles the install button in Settings.

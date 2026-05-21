@@ -387,4 +387,98 @@ final class HookInstallerTests: XCTestCase {
             XCTAssertEqual(ourCount, 1, "Duplicate Clyde entry for \(event) after second install()")
         }
     }
+
+    // MARK: - Cleat advisory (HealthIssue properties + healthCheck order)
+
+    /// Healthy hook install + cleat installed with hooks cap disabled
+    /// → healthCheck returns the cleat advisory. This is the
+    /// integration test for the new advisory branch.
+    func testHealthCheckDetectsCleatHooksCapDisabled() throws {
+        try HookInstaller.install()
+        CleatProbe.cleatOnPathOverride = true
+        CleatProbe.configPathOverride = URL(fileURLWithPath: "/tmp/clyde-test-noconfig-\(UUID().uuidString)")
+        // No config file → hooks cap is treated as disabled (default).
+        XCTAssertEqual(HookInstaller.healthCheck(), .cleatHooksCapDisabled)
+    }
+
+    /// Cleat advisory is intentionally LAST in the priority chain —
+    /// a critical hook-health issue must be surfaced first because
+    /// fixing it is a prerequisite for any tracking working at all,
+    /// cleat-sandboxed or otherwise.
+    func testHealthCheckSurfacesCriticalIssueBeforeCleatAdvisory() throws {
+        try HookInstaller.install()
+        // Make the install outdated AND mark cleat hooks cap as disabled.
+        // The outdated issue should win.
+        let scriptURL = AppPaths.clydeHookScript
+        var script = try String(contentsOf: scriptURL, encoding: .utf8)
+        script = script.replacingOccurrences(
+            of: "# clyde-hook-version: \(HookInstaller.currentScriptVersion)",
+            with: "# clyde-hook-version: 1"
+        )
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        CleatProbe.cleatOnPathOverride = true
+        CleatProbe.configPathOverride = URL(fileURLWithPath: "/tmp/clyde-test-noconfig-\(UUID().uuidString)")
+
+        let issue = HookInstaller.healthCheck()
+        if case .outdated = issue {
+            // good — critical issue wins over advisory
+        } else {
+            XCTFail("expected .outdated to win over .cleatHooksCapDisabled, got \(String(describing: issue))")
+        }
+    }
+
+    /// Cleat advisory must NOT fire when the probe says hooks is on
+    /// — even if a fresh `cleat config --enable hooks` happens
+    /// mid-session. Belt-and-suspenders on the inverse direction.
+    func testHealthCheckClearsCleatAdvisoryWhenCapEnabled() throws {
+        try HookInstaller.install()
+        let configURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-cleat-enabled-\(UUID().uuidString)")
+        try "[caps]\nhooks\n".write(to: configURL, atomically: true, encoding: .utf8)
+        CleatProbe.cleatOnPathOverride = true
+        CleatProbe.configPathOverride = configURL
+
+        XCTAssertNil(HookInstaller.healthCheck())
+    }
+
+    // MARK: - HealthIssue properties
+
+    func testCleatAdvisoryHasTitleMessageAndCommand() {
+        let issue = HookInstaller.HealthIssue.cleatHooksCapDisabled
+        XCTAssertEqual(issue.bannerTitle, "Cleat hook bridge is off")
+        XCTAssertFalse(issue.bannerMessage.isEmpty)
+        XCTAssertEqual(issue.bannerCommand, "cleat config --enable hooks")
+    }
+
+    func testCleatAdvisoryIsDismissableAndNotActionable() {
+        let issue = HookInstaller.HealthIssue.cleatHooksCapDisabled
+        // Settings has no button that flips cleat's capability — only
+        // the user's terminal does. So it's NOT actionable (no
+        // "Click to open Settings" affordance) but IS dismissable
+        // (user can defer it from the panel).
+        XCTAssertFalse(issue.isActionable)
+        XCTAssertTrue(issue.isDismissable)
+        XCTAssertNotNil(issue.dismissalIdentity)
+    }
+
+    func testCriticalIssuesAreActionableAndNotDismissable() {
+        // Sample one of each shape — bare cases and an associated-value
+        // case — so the property isn't accidentally tied to switch order.
+        let cases: [HookInstaller.HealthIssue] = [
+            .claudeNotInstalled,
+            .notInstalled,
+            .scriptMissing,
+            .scriptNotExecutable,
+            .outdated(installed: 1, current: 2),
+            .missingEvents(["PreToolUse"]),
+            .autoRepairFailed(reason: "boom"),
+        ]
+        for issue in cases {
+            XCTAssertTrue(issue.isActionable, "\(issue) must be actionable — Settings can repair it")
+            XCTAssertFalse(issue.isDismissable, "\(issue) must NOT be dismissable — critical state")
+            XCTAssertNil(issue.dismissalIdentity, "\(issue) must not produce a dismissal identity")
+            XCTAssertNil(issue.bannerCommand, "\(issue) must not surface a CLI command — its fix lives in Settings")
+        }
+    }
 }

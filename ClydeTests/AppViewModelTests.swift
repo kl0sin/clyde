@@ -96,4 +96,59 @@ final class AppViewModelTests: XCTestCase {
             )
         )
     }
+
+    // MARK: - Banner dismiss behaviour
+
+    /// User clicks × on the cleat advisory → the banner immediately
+    /// disappears. The dismiss state lives in memory on AppViewModel
+    /// so an app restart will surface it again (covered by
+    /// `testDismissDoesNotPersistAcrossAppViewModelInstances`).
+    func testDismissCurrentBannerClearsCleatAdvisory() {
+        let vm = AppViewModel()
+        vm.hookHealthIssue = .cleatHooksCapDisabled
+        vm.dismissCurrentBanner()
+        XCTAssertNil(vm.hookHealthIssue, "× on a dismissable banner must hide it")
+    }
+
+    /// Critical issues (anything that breaks tracking) must NOT be
+    /// dismissable — the × isn't even rendered for them, but
+    /// defence-in-depth: calling dismissCurrentBanner with one set
+    /// must be a no-op so we never accidentally hide a real problem.
+    func testDismissCurrentBannerIsNoOpForCriticalIssue() {
+        let vm = AppViewModel()
+        vm.hookHealthIssue = .outdated(installed: 1, current: 2)
+        vm.dismissCurrentBanner()
+        XCTAssertEqual(
+            vm.hookHealthIssue,
+            .outdated(installed: 1, current: 2),
+            "non-dismissable issues must survive dismissCurrentBanner"
+        )
+    }
+
+    /// dismissCurrentBanner without any issue set is also a no-op —
+    /// shouldn't crash or change state. Trivial but cheap.
+    func testDismissCurrentBannerIsNoOpWhenNoIssue() {
+        let vm = AppViewModel()
+        vm.hookHealthIssue = nil
+        vm.dismissCurrentBanner()
+        XCTAssertNil(vm.hookHealthIssue)
+    }
+
+    /// The dismiss set lives on the AppViewModel instance, not in
+    /// UserDefaults. So creating a fresh AppViewModel (the equivalent
+    /// of relaunching the app) and assigning the same issue must
+    /// surface it again — no spillover from a previous instance's
+    /// dismissals.
+    func testDismissDoesNotPersistAcrossAppViewModelInstances() {
+        let vm1 = AppViewModel()
+        vm1.hookHealthIssue = .cleatHooksCapDisabled
+        vm1.dismissCurrentBanner()
+        XCTAssertNil(vm1.hookHealthIssue)
+
+        // Fresh instance — represents an app relaunch.
+        let vm2 = AppViewModel()
+        vm2.hookHealthIssue = .cleatHooksCapDisabled
+        // No call to dismiss; the banner stays visible.
+        XCTAssertEqual(vm2.hookHealthIssue, .cleatHooksCapDisabled)
+    }
 }

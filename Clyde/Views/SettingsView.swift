@@ -910,13 +910,26 @@ struct ClaudeHooksRow: View {
             .padding(.vertical, 4)
 
             if let issue = appViewModel.hookHealthIssue, isInstalled {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.orange)
-                    Text(issue.bannerMessage)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let title = issue.bannerTitle {
+                                Text(title)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.orange)
+                            }
+                            Text(issue.bannerMessage)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if let command = issue.bannerCommand {
+                        CopyableCommandChip(command: command)
+                    }
                 }
                 .padding(8)
                 .background(Color.orange.opacity(0.1))
