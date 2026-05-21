@@ -76,13 +76,13 @@ final class HookScriptTests: XCTestCase {
 
     // MARK: - Notification → attention event
 
-    /// Hook v26: a `Notification` whose `message` says Claude is
-    /// waiting for the user must produce an `events/<sid>.json`
-    /// attention marker. Without this, sessions running in
-    /// `--dangerously-skip-permissions` mode (cleat's default) sit
-    /// idle in the panel with no badge, exactly as the user reported
-    /// after v0.5.0 shipped.
-    func testNotificationWaitingForInputWritesAttentionFile() throws {
+    /// Hook v27 regression: `"Claude is waiting for your input"` is
+    /// the IDLE-state marker Claude fires after every Stop in
+    /// bypass-permissions mode — not an attention signal. v26 had
+    /// (mistakenly) treated it as attention, which lit up the "Needs
+    /// Input" badge after every routine turn. The match must NOT
+    /// produce an event file for this message.
+    func testNotificationWaitingForInputDoesNotWriteAttentionFile() throws {
         let home = tempHome()
         let sid = "aaaaaaaa-1111-2222-3333-444444444444"
         let payload = #"{"hook_event_name":"Notification","session_id":"\#(sid)","cwd":"/tmp","message":"Claude is waiting for your input"}"#
@@ -90,21 +90,10 @@ final class HookScriptTests: XCTestCase {
         let exit = try runHook(payload: payload, home: home)
         XCTAssertEqual(exit, 0, "hook must always exit 0")
 
-        let url = eventFile(in: home, sessionId: sid)
-        XCTAssertTrue(
-            FileManager.default.fileExists(atPath: url.path),
-            "Notification('waiting for your input') must write \(url.lastPathComponent)"
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path),
+            #"idle-state Notification ("waiting for your input") must NOT write an attention event — that would false-positive the Needs Input badge after every turn"#
         )
-
-        // Sanity-check the shape the AttentionMonitor consumes. The
-        // `pid` field is what kill(pid, 0) is called against; the
-        // `message` field is what future UI surfaces could display.
-        let data = try Data(contentsOf: url)
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        XCTAssertEqual(json["session_id"] as? String, sid)
-        XCTAssertNotNil(json["pid"] as? Int)
-        XCTAssertEqual(json["event"] as? String, "Notification")
-        XCTAssertEqual(json["message"] as? String, "Claude is waiting for your input")
     }
 
     /// The match is intentionally conservative: only known

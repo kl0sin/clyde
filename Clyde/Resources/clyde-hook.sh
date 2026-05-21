@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 26
+# clyde-hook-version: 27
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -744,26 +744,35 @@ case "$HOOK_EVENT" in
         ;;
     Notification)
         # Claude Code fires Notification with a human-readable `message`
-        # for several reasons; most are informational (build output
-        # truncation, etc.) but two carry actual user-attention semantics
-        # and have no other hook representation:
-        #   • "Claude is waiting for your input" — fired after Stop in
-        #     `--dangerously-skip-permissions` mode (cleat's default),
-        #     since PermissionRequest never fires in that mode.
-        #   • "Claude needs your permission to use <tool>" — alternate
-        #     surface for permission gates in some Claude builds.
-        # Match conservatively: a permissive heuristic risks pinning the
-        # attention flag on benign info messages. Anything we don't match
-        # stays log-only, preserving prior behaviour.
+        # for several reasons. Most are informational (build output
+        # truncation, etc.). Importantly, in bypass-permissions mode
+        # (cleat's default) Claude fires
+        #     "Claude is waiting for your input"
+        # after *every* `Stop` — it's the idle-state marker, not an
+        # attention signal. v26 mis-mapped it onto the attention event
+        # file, which lit up the "Needs Input" badge after every
+        # routine turn. v27 drops that string from the match.
+        #
+        # We still match the permission-flavoured forms:
+        #     "Claude needs your permission to use <tool>"
+        #     "permission to use ..."
+        # In non-bypass mode some Claude builds surface a permission
+        # gate via Notification instead of (or in addition to)
+        # PermissionRequest. Keeping these as triggers means we won't
+        # silently miss a genuine gate if that's the only signal — and
+        # they don't fire in bypass mode, so they can't false-positive
+        # the way "waiting for your input" did.
         NOTIFY_MSG=$(extract_field message)
         case "$NOTIFY_MSG" in
-            *"waiting for your input"*|*"needs your permission"*|*"permission to use"*)
+            *"needs your permission"*|*"permission to use"*)
                 ESC_MSG=$(printf '%s' "$NOTIFY_MSG" | sed 's/\\/\\\\/g; s/"/\\"/g')
                 atomic_write "$EVENTS_DIR/$KEY.json" \
                     "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"event\": \"$HOOK_EVENT\", \"message\": \"$ESC_MSG\", \"timestamp\": $TIMESTAMP}"
                 ;;
             *)
-                # Informational notifications fall through to log-only.
+                # Idle markers and informational notifications fall
+                # through to log-only. Specifically: "Claude is waiting
+                # for your input" lands here in v27+.
                 :
                 ;;
         esac
