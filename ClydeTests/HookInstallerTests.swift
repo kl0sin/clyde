@@ -22,11 +22,18 @@ final class HookInstallerTests: XCTestCase {
         // ahead of every assertion. Tests that exercise the missing-
         // Claude path explicitly flip this back to false.
         HookInstaller.claudeInstalledOverride = true
+        // Neutralise the cleat probe so healthCheck() doesn't pick up
+        // the developer-machine's actual cleat config and bleed into
+        // assertions that expect "fully healthy" or specific issues.
+        // Tests covering the cleat advisory path set their own overrides.
+        CleatProbe.cleatOnPathOverride = false
     }
 
     override func tearDown() async throws {
         AppPaths.homeOverride = nil
         HookInstaller.claudeInstalledOverride = nil
+        CleatProbe.cleatOnPathOverride = nil
+        CleatProbe.configPathOverride = nil
         if let tempHome {
             try? FileManager.default.removeItem(at: tempHome)
         }

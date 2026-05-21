@@ -97,38 +97,57 @@ private struct HookHealthBanner: View {
     let onOpenSettings: () -> Void
 
     var body: some View {
-        Button(action: onOpenSettings) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.orange)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(issue.bannerMessage)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.leading)
+        if issue.isActionable {
+            Button(action: onOpenSettings) {
+                bannerContent(showAffordance: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(issue.bannerMessage)
+            .accessibilityHint("Click to open Settings")
+            .accessibilityAddTraits(.isButton)
+        } else {
+            // Informational banner — no in-app action would help
+            // (e.g. `cleat config --enable hooks` runs interactively
+            // in the user's terminal, not from inside Clyde). Render
+            // as a static row so we don't promise an interaction we
+            // can't deliver.
+            bannerContent(showAffordance: false)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(issue.bannerMessage)
+        }
+    }
+
+    private func bannerContent(showAffordance: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(issue.bannerMessage)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.leading)
+                if showAffordance {
                     Text("Click to open Settings")
                         .font(.system(size: 9))
                         .foregroundStyle(Color(white: 0.6))
                 }
-                Spacer(minLength: 0)
+            }
+            Spacer(minLength: 0)
+            if showAffordance {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Color(white: 0.5))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.orange.opacity(0.12))
-            .overlay(
-                Rectangle().frame(height: 1).foregroundStyle(Color.orange.opacity(0.25)),
-                alignment: .bottom
-            )
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(issue.bannerMessage)
-        .accessibilityHint("Click to open Settings")
-        .accessibilityAddTraits(.isButton)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.12))
+        .overlay(
+            Rectangle().frame(height: 1).foregroundStyle(Color.orange.opacity(0.25)),
+            alignment: .bottom
+        )
+        .contentShape(Rectangle())
     }
 }

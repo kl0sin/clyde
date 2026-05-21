@@ -163,6 +163,30 @@ enum HookInstaller {
                 return "Cleat is installed but its host hook bridge is off. Run `cleat config --enable hooks` so Clyde can track sandboxed sessions."
             }
         }
+
+        /// True iff opening Settings can actually help the user fix
+        /// the issue. Most issues route through the "Reinstall hook"
+        /// button in Settings, so the banner doubles as a one-click
+        /// shortcut. A few advisories — notably `.cleatHooksCapDisabled`,
+        /// which the user can only resolve by running a command in
+        /// their terminal — have no in-app action, so their banner is
+        /// rendered informational (icon + text, no button, no
+        /// "Click to open Settings" affordance that wouldn't lead
+        /// anywhere useful).
+        var isActionable: Bool {
+            switch self {
+            case .cleatHooksCapDisabled:
+                return false
+            case .claudeNotInstalled,
+                 .notInstalled,
+                 .scriptMissing,
+                 .scriptNotExecutable,
+                 .outdated,
+                 .missingEvents,
+                 .autoRepairFailed:
+                return true
+            }
+        }
     }
 
     /// Test override for `isClaudeCodeInstalled`. When non-nil, the
