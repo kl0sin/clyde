@@ -6,6 +6,12 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-05-21
+
+Quick follow-up to v0.5.0 — the "needs your input" badge now lights up for sessions running in `--dangerously-skip-permissions` mode (most commonly [cleat](https://github.com/cleatdev/cleat)-sandboxed ones), which previously sat dark in the panel even when Claude was waiting on you.
+
+- **"Needs your input" badge now fires in bypass-permissions mode.** Claude Code doesn't fire `PermissionRequest` when running under `--dangerously-skip-permissions` (cleat's default, and the whole point of the sandbox). It fires `Notification` with `message: "Claude is waiting for your input"` instead. Clyde used to treat every Notification as log-only; hook v26 now matches that message (plus the alternate "Claude needs your permission to use …" form) and surfaces the same orange attention indicator you'd see for a regular permission gate. The badge drops the moment you reply — `UserPromptSubmit` now sweeps the attention flag too, so it doesn't linger on plan-mode or pure-text turns where no tool call fires immediately afterwards.
+
 ## [0.5.0] — 2026-05-20
 
 First-class support for Claude Code sessions running inside [cleat](https://github.com/cleatdev/cleat) — the Docker sandbox that lets you run `claude --dangerously-skip-permissions` without risking your host — plus a small UI fix that stops the progress and runtime badges from getting visibly clipped on long project names.
