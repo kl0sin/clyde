@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.5.3</title>
+            <pubDate>Thu, 21 May 2026 12:08:41 +0000</pubDate>
+            <sparkle:version>20</sparkle:version>
+            <sparkle:shortVersionString>0.5.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Iteration on the cleat advisory banner introduced in v0.5.0 — it now refreshes live as you toggle cleat's host hook bridge, splits the message into a readable title + body, surfaces the fix command as a one-click copyable chip, and gains an × button if you want to silence it for the session.</p>
+<ul><li><strong>The cleat advisory banner is now a proper card.</strong> Title-bold headline ("Cleat hook bridge is off"), softer body underneath, and the fix command lives in a discrete copyable chip — click it to drop <code>cleat config --enable hooks</code> straight into your clipboard, with a brief ✓ confirmation. The old inline-backtick rendering was hard to read against the orange banner; the chip has a proper rounded background, clipboard icon, and tap-to-copy affordance.</li><li><strong>Banner appears and disappears live.</strong> Toggling cleat's <code>hooks</code> capability via <code>cleat config --enable/--disable hooks</code> now reflects in the panel within ~0.3s instead of waiting up to 60s for the safety-net timer. Implemented via a pair of FSEvents watchers on <code>~/.config/cleat/</code> — one on the directory (catches the disable path, which recreates the file) and one on the config file itself (catches the enable path, which writes in place — the dir watcher alone would miss it).</li><li><strong>Dismiss button on advisory banners.</strong> A small × in the banner's top-right snoozes the cleat advisory for the current Clyde session. The banner reappears on relaunch, or if you toggle the cap on and then off again — handy for "I'll deal with it later" without losing the reminder permanently. Critical hook-health banners (script missing, outdated, etc.) stay non-dismissable since they break tracking entirely. Dismiss state lives in memory only — no settings to clear, no persisted state to debug.</li><li><strong>No more misleading "Click to open Settings" on the cleat banner.</strong> Settings can't run <code>cleat config</code> for you, so the affordance pointed nowhere useful. Actionable banners (the ones whose fix lives in Settings) keep their click target; advisories render as informational rows. Internal: hook script bumped to v27 (no behaviour change — just version-stamped with the latest fix from v0.5.2).</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.5.3/Clyde-0.5.3.dmg"
+                length="5493076"
+                type="application/octet-stream"
+                sparkle:edSignature="MS5b2MQKP4Pjt5gWiMtCw4VPiaOu+D3cYnKk4LjOmp7kepUaiBcjDHweIm6w86ftHVN/gEN7lXsNmkPZQSc+Dg==" />
+        </item>
+        <item>
             <title>Version 0.5.2</title>
             <pubDate>Thu, 21 May 2026 07:32:35 +0000</pubDate>
             <sparkle:version>19</sparkle:version>
