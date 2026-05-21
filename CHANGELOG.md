@@ -6,6 +6,15 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-05-21
+
+Iteration on the cleat advisory banner introduced in v0.5.0 — it now refreshes live as you toggle cleat's host hook bridge, splits the message into a readable title + body, surfaces the fix command as a one-click copyable chip, and gains an × button if you want to silence it for the session.
+
+- **The cleat advisory banner is now a proper card.** Title-bold headline ("Cleat hook bridge is off"), softer body underneath, and the fix command lives in a discrete copyable chip — click it to drop `cleat config --enable hooks` straight into your clipboard, with a brief ✓ confirmation. The old inline-backtick rendering was hard to read against the orange banner; the chip has a proper rounded background, clipboard icon, and tap-to-copy affordance.
+- **Banner appears and disappears live.** Toggling cleat's `hooks` capability via `cleat config --enable/--disable hooks` now reflects in the panel within ~0.3s instead of waiting up to 60s for the safety-net timer. Implemented via a pair of FSEvents watchers on `~/.config/cleat/` — one on the directory (catches the disable path, which recreates the file) and one on the config file itself (catches the enable path, which writes in place — the dir watcher alone would miss it).
+- **Dismiss button on advisory banners.** A small × in the banner's top-right snoozes the cleat advisory for the current Clyde session. The banner reappears on relaunch, or if you toggle the cap on and then off again — handy for "I'll deal with it later" without losing the reminder permanently. Critical hook-health banners (script missing, outdated, etc.) stay non-dismissable since they break tracking entirely. Dismiss state lives in memory only — no settings to clear, no persisted state to debug.
+- **No more misleading "Click to open Settings" on the cleat banner.** Settings can't run `cleat config` for you, so the affordance pointed nowhere useful. Actionable banners (the ones whose fix lives in Settings) keep their click target; advisories render as informational rows. Internal: hook script bumped to v27 (no behaviour change — just version-stamped with the latest fix from v0.5.2).
+
 ## [0.5.2] — 2026-05-21
 
 Follow-up to v0.5.1: the "Needs Input" badge no longer false-positives on every routine reply. Turns out `Notification("Claude is waiting for your input")` isn't an attention signal — Claude fires it after every `Stop` in bypass-permissions mode as a plain idle marker, so v0.5.1 lit the badge up on every turn including the most boring "here's your answer" ones.
