@@ -6,6 +6,12 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-05-21
+
+Follow-up to v0.5.1: the "Needs Input" badge no longer false-positives on every routine reply. Turns out `Notification("Claude is waiting for your input")` isn't an attention signal — Claude fires it after every `Stop` in bypass-permissions mode as a plain idle marker, so v0.5.1 lit the badge up on every turn including the most boring "here's your answer" ones.
+
+- **"Needs Input" badge no longer fires on idle replies.** v0.5.1 mapped `Notification("Claude is waiting for your input")` onto the attention indicator on the theory that it's Claude explicitly saying it's waiting for you. In practice Claude fires that exact message after every `Stop` in bypass-permissions mode (cleat's default), including routine turns where nothing actually needs your attention — so the badge ended up showing on every reply. v0.5.2 drops that string from the match. The permission-flavoured forms ("needs your permission to use …") still trigger the badge as a safety net for non-bypass builds where they could be the only attention surface. Existing stale badges from v0.5.1 clear themselves the next time you reply in the affected session — no manual cleanup. Hook script bumped to v27.
+
 ## [0.5.1] — 2026-05-21
 
 Quick follow-up to v0.5.0 — the "needs your input" badge now lights up for sessions running in `--dangerously-skip-permissions` mode (most commonly [cleat](https://github.com/cleatdev/cleat)-sandboxed ones), which previously sat dark in the panel even when Claude was waiting on you.
