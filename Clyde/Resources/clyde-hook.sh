@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 25
+# clyde-hook-version: 26
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -558,6 +558,12 @@ case "$HOOK_EVENT" in
     UserPromptSubmit)
         atomic_write "$STATE_DIR/$KEY-busy" \
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"timestamp\": $TIMESTAMP}"
+        # User typed a reply — any attention flag from a prior
+        # `Notification("waiting for your input")` is resolved. Without
+        # this, the badge would linger until PreToolUse fires (could
+        # be several seconds for plan-mode or pure-text turns) even
+        # though Claude is already working again.
+        rm -f "$EVENTS_DIR/$KEY.json"
         # If this is an existing session that predates Clyde, the
         # SessionStart hook never fired for it. Backfill -info so the
         # session "graduates" to full hook tracking from now on.
@@ -736,7 +742,33 @@ case "$HOOK_EVENT" in
                 "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"task_count\": $PLAN_TASK_COUNT, \"done_count\": $PLAN_DONE_COUNT, \"started_at\": $PLAN_STARTED_AT}"
         fi
         ;;
-    Notification|PreCompact|PostCompact)
+    Notification)
+        # Claude Code fires Notification with a human-readable `message`
+        # for several reasons; most are informational (build output
+        # truncation, etc.) but two carry actual user-attention semantics
+        # and have no other hook representation:
+        #   • "Claude is waiting for your input" — fired after Stop in
+        #     `--dangerously-skip-permissions` mode (cleat's default),
+        #     since PermissionRequest never fires in that mode.
+        #   • "Claude needs your permission to use <tool>" — alternate
+        #     surface for permission gates in some Claude builds.
+        # Match conservatively: a permissive heuristic risks pinning the
+        # attention flag on benign info messages. Anything we don't match
+        # stays log-only, preserving prior behaviour.
+        NOTIFY_MSG=$(extract_field message)
+        case "$NOTIFY_MSG" in
+            *"waiting for your input"*|*"needs your permission"*|*"permission to use"*)
+                ESC_MSG=$(printf '%s' "$NOTIFY_MSG" | sed 's/\\/\\\\/g; s/"/\\"/g')
+                atomic_write "$EVENTS_DIR/$KEY.json" \
+                    "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"event\": \"$HOOK_EVENT\", \"message\": \"$ESC_MSG\", \"timestamp\": $TIMESTAMP}"
+                ;;
+            *)
+                # Informational notifications fall through to log-only.
+                :
+                ;;
+        esac
+        ;;
+    PreCompact|PostCompact)
         # Log-only events. The always-on event log at the top of this
         # script captures them for diagnostics. Future versions may
         # add state files for richer UI (e.g. "Compacting..." badge).
