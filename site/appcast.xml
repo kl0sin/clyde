@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.5.2</title>
+            <pubDate>Thu, 21 May 2026 07:32:35 +0000</pubDate>
+            <sparkle:version>19</sparkle:version>
+            <sparkle:shortVersionString>0.5.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Follow-up to v0.5.1: the "Needs Input" badge no longer false-positives on every routine reply. Turns out <code>Notification("Claude is waiting for your input")</code> isn't an attention signal — Claude fires it after every <code>Stop</code> in bypass-permissions mode as a plain idle marker, so v0.5.1 lit the badge up on every turn including the most boring "here's your answer" ones.</p>
+<ul><li><strong>"Needs Input" badge no longer fires on idle replies.</strong> v0.5.1 mapped <code>Notification("Claude is waiting for your input")</code> onto the attention indicator on the theory that it's Claude explicitly saying it's waiting for you. In practice Claude fires that exact message after every <code>Stop</code> in bypass-permissions mode (cleat's default), including routine turns where nothing actually needs your attention — so the badge ended up showing on every reply. v0.5.2 drops that string from the match. The permission-flavoured forms ("needs your permission to use …") still trigger the badge as a safety net for non-bypass builds where they could be the only attention surface. Existing stale badges from v0.5.1 clear themselves the next time you reply in the affected session — no manual cleanup. Hook script bumped to v27.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.5.2/Clyde-0.5.2.dmg"
+                length="5429375"
+                type="application/octet-stream"
+                sparkle:edSignature="InsfeyPbHzSczdENL6SBoCgQZcDeJ4MganaoHo9MrwB/pn9Rua2DPrL8iJ+tOVwoR8ExJWcTkdgAzsaIsIK0Aw==" />
+        </item>
+        <item>
             <title>Version 0.5.1</title>
             <pubDate>Thu, 21 May 2026 07:14:06 +0000</pubDate>
             <sparkle:version>18</sparkle:version>
