@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.5.1</title>
+            <pubDate>Thu, 21 May 2026 07:14:06 +0000</pubDate>
+            <sparkle:version>18</sparkle:version>
+            <sparkle:shortVersionString>0.5.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Quick follow-up to v0.5.0 — the "needs your input" badge now lights up for sessions running in <code>--dangerously-skip-permissions</code> mode (most commonly <a href="https://github.com/cleatdev/cleat">cleat</a>-sandboxed ones), which previously sat dark in the panel even when Claude was waiting on you.</p>
+<ul><li><strong>"Needs your input" badge now fires in bypass-permissions mode.</strong> Claude Code doesn't fire <code>PermissionRequest</code> when running under <code>--dangerously-skip-permissions</code> (cleat's default, and the whole point of the sandbox). It fires <code>Notification</code> with <code>message: "Claude is waiting for your input"</code> instead. Clyde used to treat every Notification as log-only; hook v26 now matches that message (plus the alternate "Claude needs your permission to use …" form) and surfaces the same orange attention indicator you'd see for a regular permission gate. The badge drops the moment you reply — <code>UserPromptSubmit</code> now sweeps the attention flag too, so it doesn't linger on plan-mode or pure-text turns where no tool call fires immediately afterwards.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.5.1/Clyde-0.5.1.dmg"
+                length="5429109"
+                type="application/octet-stream"
+                sparkle:edSignature="GG71m8oBQ0Olp/wbAzhZGYAt+RCDMcsZMlyYCujA3xoXzUt45Mh9w7BkSDWGoQ6UyI70xF9S3xRYztCpvq5NAw==" />
+        </item>
+        <item>
             <title>Version 0.5.0</title>
             <pubDate>Wed, 20 May 2026 19:14:27 +0000</pubDate>
             <sparkle:version>17</sparkle:version>
