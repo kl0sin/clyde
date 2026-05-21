@@ -83,6 +83,12 @@ final class AppViewModel: ObservableObject {
     private var settingsFileFD: Int32 = -1
     private var settingsWatcherDebounce: DispatchWorkItem?
     private var hookHealTimer: Timer?
+    /// Watcher on `~/.config/cleat/` so the cleat-hooks-disabled banner
+    /// appears the moment the user toggles cleat's hooks capability,
+    /// instead of waiting for the 60-second safety-net timer to tick.
+    private var cleatConfigDirSource: DispatchSourceFileSystemObject?
+    private var cleatConfigDirFD: Int32 = -1
+    private var cleatConfigRetryTimer: Timer?
 
     deinit {
         // Release everything we own. The class is @MainActor but deinit runs
@@ -93,6 +99,8 @@ final class AppViewModel: ObservableObject {
         settingsFileSource?.cancel()
         settingsWatcherDebounce?.cancel()
         hookHealTimer?.invalidate()
+        cleatConfigDirSource?.cancel()
+        cleatConfigRetryTimer?.invalidate()
     }
 
     convenience init() {
@@ -243,6 +251,7 @@ final class AppViewModel: ObservableObject {
         HookInstaller.migrateLegacyHookIfNeeded()
         ensureHookHealthy()
         startHookSelfHealing()
+        startCleatConfigWatching()
         startSettingsWatcher()
         ClydeLog.general.info("Clyde started")
     }
@@ -361,6 +370,78 @@ final class AppViewModel: ObservableObject {
             // Task boundary implicitly.
             Task { @MainActor [weak self] in self?.ensureHookHealthy() }
         }
+    }
+
+    /// Watch `~/.config/cleat/` for changes. When the user toggles
+    /// cleat's `hooks` capability with `cleat config --enable/disable
+    /// hooks`, cleat rewrites the `config` file in that directory; the
+    /// `cleatHooksCapDisabled` advisory needs to fire (or clear)
+    /// immediately, not after the 60-second `hookHealTimer` ticks.
+    ///
+    /// The dir may not exist yet if the user has never run cleat. In
+    /// that case we set up a one-minute retry timer that keeps trying
+    /// to attach until either the dir appears or the app exits — once
+    /// attached, the timer is invalidated and the FSEvents source
+    /// carries the load.
+    private func startCleatConfigWatching() {
+        attachCleatConfigWatcher()
+        // If attach failed (dir didn't exist), retry on a slow tick.
+        // 60 s matches `hookHealTimer` — same trade-off between
+        // freshness and wakeups when the user is idle.
+        cleatConfigRetryTimer?.invalidate()
+        cleatConfigRetryTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.attachCleatConfigWatcher() }
+        }
+    }
+
+    private func attachCleatConfigWatcher() {
+        // Already attached and the underlying fd is valid → nothing to do.
+        if cleatConfigDirSource != nil { return }
+
+        let configDir = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".config/cleat", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: configDir.path) else {
+            return
+        }
+
+        let fd = open(configDir.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        cleatConfigDirFD = fd
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .delete, .rename, .extend, .attrib],
+            queue: DispatchQueue.main
+        )
+        source.setEventHandler { [weak self] in
+            // Same debounce as the settings.json watcher: cleat
+            // writes the file in two steps (truncate then content),
+            // so we coalesce events on a short timer to avoid
+            // running the check against an intermediate state.
+            self?.scheduleCleatConfigRecheck()
+        }
+        source.setCancelHandler { [weak self] in
+            if let fd = self?.cleatConfigDirFD, fd >= 0 {
+                close(fd)
+                self?.cleatConfigDirFD = -1
+            }
+        }
+        source.resume()
+        cleatConfigDirSource = source
+        // Now that we're attached, the retry timer is no longer
+        // needed — keep it running but harmless (each tick will
+        // short-circuit on the `cleatConfigDirSource != nil` guard
+        // above), so we don't have to coordinate teardown.
+    }
+
+    private var cleatConfigDebounce: DispatchWorkItem?
+    private func scheduleCleatConfigRecheck() {
+        cleatConfigDebounce?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.ensureHookHealthy()
+        }
+        cleatConfigDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     /// Auto-install or auto-repair the hook on startup.
