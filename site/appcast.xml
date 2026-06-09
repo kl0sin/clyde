@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.6.0</title>
+            <pubDate>Tue, 09 Jun 2026 20:19:41 +0000</pubDate>
+            <sparkle:version>21</sparkle:version>
+            <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Clyde can now start itself. A new "Launch at login" toggle in Settings → General registers Clyde with macOS so it's already sitting in your menu bar when you sign in — no more remembering to launch it before kicking off a Claude session.</p>
+<ul><li><strong>Launch at login.</strong> Settings → General gains a Startup section with a single switch. Flip it on and macOS starts Clyde automatically at sign-in, using the system's native login-items registration (<code>SMAppService</code>, macOS 13+) — the same mechanism you see under System Settings → General → Login Items, where Clyde shows up and can be managed too. If macOS requires your explicit approval for the registration, Clyde shows an inline "Approval needed" hint with a button that jumps straight to the Login Items pane instead of pretending the toggle worked. State stays in sync both ways: flip it in System Settings and Clyde's toggle reflects the change the next time you open Settings.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.6.0/Clyde-0.6.0.dmg"
+                length="5533262"
+                type="application/octet-stream"
+                sparkle:edSignature="mxSrJBmAul8jJNeDCvsQVEIAKfkEE410cPq5sURzmas+aWdg1N393tuuXocbE/ZTqAUHkWSBfr2JCfhXoTs6DA==" />
+        </item>
+        <item>
             <title>Version 0.5.3</title>
             <pubDate>Thu, 21 May 2026 12:08:41 +0000</pubDate>
             <sparkle:version>20</sparkle:version>
