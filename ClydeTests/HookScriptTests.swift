@@ -27,6 +27,36 @@ final class HookScriptTests: XCTestCase {
             .appendingPathComponent("Clyde/Resources/clyde-hook.sh")
     }()
 
+    /// A symlink named `claude` pointing at `/bin/bash`, interposed as
+    /// the hook's parent process. The hook's `find_claude_pid` walks
+    /// the PPID chain looking for a process whose comm basename is
+    /// `claude` and exits early ("WARN no claude ancestor") when none
+    /// exists — so without this interposer, every positive assertion
+    /// (file written / file removed) only passed when `swift test`
+    /// itself happened to run under a Claude Code session, and failed
+    /// in a plain terminal or CI. Negative assertions passed either
+    /// way, masking the gap.
+    ///
+    /// Why a symlink: macOS `ps -o comm=` reports the process's
+    /// argv[0] (via KERN_PROCARGS2), which Process sets to the
+    /// executable path it was given — the symlink path, ending in
+    /// `claude`. The kernel meanwhile executes the real `/bin/bash`
+    /// from its blessed location, so Apple Silicon's code-signing
+    /// enforcement has nothing to kill. The two rejected designs:
+    /// a renamed *copy* of `/bin/bash` gets SIGKILLed on Apple Silicon
+    /// (platform binary outside its original location), and a shebang
+    /// wrapper script reports the *interpreter* as argv[0], so comm
+    /// reads `bash`, not `claude`.
+    private static let fakeClaudeURL: URL = {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-hook-tests-bin-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let claude = dir.appendingPathComponent("claude")
+        try? FileManager.default.createSymbolicLink(
+            at: claude, withDestinationURL: URL(fileURLWithPath: "/bin/bash"))
+        return claude
+    }()
+
     /// Fresh `$HOME`-equivalent per test so `~/.clyde/state/` and
     /// `~/.clyde/events/` start empty and don't leak between cases or
     /// pollute the developer's real Clyde install.
@@ -46,8 +76,13 @@ final class HookScriptTests: XCTestCase {
     @discardableResult
     private func runHook(payload: String, home: URL) throws -> Int32 {
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/bash")
-        task.arguments = [Self.hookScriptURL.path]
+        // Launch as `claude → bash → hook` so the hook process has a
+        // `claude` ancestor at its immediate PPID. The `; exit $?`
+        // matters: with a single simple command bash tail-exec()s it,
+        // replacing the `claude` process and losing the ancestor; the
+        // explicit exit also propagates the hook's status.
+        task.executableURL = Self.fakeClaudeURL
+        task.arguments = ["-c", #"/bin/bash "$0"; exit $?"#, Self.hookScriptURL.path]
         var env = ProcessInfo.processInfo.environment
         env["HOME"] = home.path
         task.environment = env
