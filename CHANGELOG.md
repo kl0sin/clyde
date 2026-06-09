@@ -6,6 +6,12 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-06-09
+
+Clyde can now start itself. A new "Launch at login" toggle in Settings → General registers Clyde with macOS so it's already sitting in your menu bar when you sign in — no more remembering to launch it before kicking off a Claude session.
+
+- **Launch at login.** Settings → General gains a Startup section with a single switch. Flip it on and macOS starts Clyde automatically at sign-in, using the system's native login-items registration (`SMAppService`, macOS 13+) — the same mechanism you see under System Settings → General → Login Items, where Clyde shows up and can be managed too. If macOS requires your explicit approval for the registration, Clyde shows an inline "Approval needed" hint with a button that jumps straight to the Login Items pane instead of pretending the toggle worked. State stays in sync both ways: flip it in System Settings and Clyde's toggle reflects the change the next time you open Settings.
+
 ## [0.5.3] — 2026-05-21
 
 Iteration on the cleat advisory banner introduced in v0.5.0 — it now refreshes live as you toggle cleat's host hook bridge, splits the message into a readable title + body, surfaces the fix command as a one-click copyable chip, and gains an × button if you want to silence it for the session.
