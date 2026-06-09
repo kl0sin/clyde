@@ -146,6 +146,14 @@ struct GeneralSettingsTab: View {
     @ObservedObject var appViewModel: AppViewModel
     @AppStorage("pollingInterval") private var pollingInterval: Double = AppConstants.defaultPollingInterval
     @State private var replayQueued: Bool = false
+    // Login-at-launch state. We bind the toggle to a local @State
+    // mirror because the underlying SMAppService.status is a
+    // snapshot — toggling the binding immediately while the system
+    // call runs avoids a one-frame flicker if registration takes a
+    // few milliseconds, and we refresh from the system on appear.
+    @State private var launchAtLogin: Bool = LoginItemService.isEnabled
+    @State private var launchAtLoginError: String?
+    @State private var launchAtLoginRequiresApproval: Bool = false
 
     var body: some View {
         SettingsSection(title: "Appearance") {
@@ -161,6 +169,78 @@ struct GeneralSettingsTab: View {
                 }
             }
             .toggleStyle(.switch)
+        }
+
+        SettingsSection(title: "Startup") {
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle(isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { newValue in
+                        // Optimistic update — flips the UI immediately,
+                        // then reconciles with the system status once
+                        // the SMAppService call returns.
+                        launchAtLogin = newValue
+                        do {
+                            try LoginItemService.setEnabled(newValue)
+                            launchAtLoginError = nil
+                        } catch {
+                            launchAtLoginError = error.localizedDescription
+                            // Reconcile back to the truth so the
+                            // toggle doesn't lie to the user.
+                            launchAtLogin = LoginItemService.isEnabled
+                        }
+                        launchAtLoginRequiresApproval = (LoginItemService.currentStatus == .requiresApproval)
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Launch at login")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white)
+                        Text("Start Clyde automatically when you sign in to your Mac.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.45))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+
+                if launchAtLoginRequiresApproval {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Approval needed")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.orange)
+                            Text("macOS hasn't approved Clyde as a login item yet. Open Login Items in System Settings to enable it.")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Button("Open Login Items") {
+                            LoginItemService.openSystemLoginItemsSettings()
+                        }
+                    }
+                    .padding(8)
+                    .background(Color.orange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+                }
+
+                if let error = launchAtLoginError {
+                    Text(error)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .onAppear {
+                // Refresh from the system in case the user changed it
+                // via System Settings while we were running.
+                launchAtLogin = LoginItemService.isEnabled
+                launchAtLoginRequiresApproval = (LoginItemService.currentStatus == .requiresApproval)
+            }
         }
 
         SettingsSection(title: "Monitoring") {
