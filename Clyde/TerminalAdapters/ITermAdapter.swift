@@ -7,7 +7,7 @@ struct ITermAdapter: TerminalAdapter {
     func focusSession(parentPID: pid_t) async throws {
         guard isInstalled else { throw TerminalError.terminalNotInstalled }
         try runAppleScript("""
-            tell application "iTerm2"
+            tell application id "com.googlecode.iterm2"
                 activate
                 repeat with w in windows
                     repeat with t in tabs of w

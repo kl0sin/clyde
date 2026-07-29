@@ -22,7 +22,7 @@ struct TerminalAppAdapter: TerminalAdapter {
         let fullTTY = tty.hasPrefix("/dev/") ? tty : "/dev/\(tty)"
 
         try runAppleScript("""
-            tell application "Terminal"
+            tell application id "com.apple.Terminal"
                 activate
                 repeat with w in windows
                     repeat with t in tabs of w
