@@ -64,7 +64,7 @@ enum HookInstaller {
     ///
     /// MUST stay in sync with the `clyde-hook-version` line at the top of
     /// `Clyde/Resources/clyde-hook.sh`.
-    static let currentScriptVersion = 30
+    static let currentScriptVersion = 31
 
     /// Loads the hook script source from the bundled resource. The script
     /// itself lives in `Clyde/Resources/clyde-hook.sh` so it can be edited
@@ -130,6 +130,8 @@ enum HookInstaller {
         "TeammateIdle",
         // v30 additions:
         "PostToolBatch",
+        // v31 additions:
+        "UserPromptExpansion",
     ]
 
     static var isInstalled: Bool {

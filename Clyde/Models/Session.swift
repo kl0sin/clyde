@@ -94,6 +94,10 @@ struct Session: Identifiable, Equatable {
     /// and runs them in parallel, so this is routinely > 1; the row shows
     /// `N tools` instead of a single label in that case. 0 when idle.
     var activeToolCount: Int = 0
+    /// Name of the slash command driving this turn, from
+    /// `UserPromptExpansion`. Cleared when the turn ends. Nil for
+    /// ordinary typed prompts.
+    var activeCommand: String? = nil
     /// Non-nil while a plan-then-execute run is in progress. Populated
     /// by ProcessMonitor from -plan marker files written by the
     /// TaskCreated / TaskCompleted hook events. Cleared on SessionEnd

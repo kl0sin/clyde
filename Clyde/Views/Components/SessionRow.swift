@@ -94,6 +94,10 @@ struct SessionRow: View {
                             CleatBadge(container: session.container)
                         }
 
+                        if let command = session.activeCommand {
+                            CommandBadge(name: command)
+                        }
+
                         if let suffix = disambiguator {
                             Text(suffix)
                                 .font(.system(size: 10, weight: .medium))
@@ -552,6 +556,34 @@ private struct PlanBadge: View {
 /// runs inside a Cleat Docker sandbox. The container name is exposed
 /// via `.help` so hover reveals which container the session belongs
 /// to — useful when several cleat projects are running in parallel.
+/// The slash command driving the current turn. Long autonomous runs
+/// (`/loop`, `/code-review`) otherwise render as an anonymous "Working".
+private struct CommandBadge: View {
+    let name: String
+
+    var body: some View {
+        Text("/\(name)")
+            .font(.system(size: 9, weight: .semibold, design: .rounded))
+            .foregroundStyle(accent)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(accent.opacity(0.12))
+            .clipShape(Capsule())
+            // Same reasoning as PlanBadge: the name takes the ellipsis,
+            // not the badge.
+            .fixedSize(horizontal: true, vertical: false)
+            .help("Running /\(name)")
+            .accessibilityLabel("running slash command \(name)")
+    }
+
+    private var accent: Color {
+        // Soft amber — distinct from the purple plan badge and the cyan
+        // cleat capsule so three badges stay tellable apart.
+        Color(red: 0.88, green: 0.72, blue: 0.42)
+    }
+}
+
 private struct CleatBadge: View {
     let container: String
 

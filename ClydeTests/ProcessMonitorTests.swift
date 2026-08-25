@@ -904,6 +904,21 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(session.activeToolCount, 1)
     }
 
+    func testActiveCommandIsReadFromMarker() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        try #"{"session_id":"\#(sid)","pid":\#(pid),"command":"code-review","at":\#(Int(Date().timeIntervalSince1970))}"#
+            .write(to: dir.appendingPathComponent("\(sid)-command"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        XCTAssertEqual(try XCTUnwrap(monitor.sessions.first).activeCommand, "code-review")
+    }
+
     func testActiveSubagentsGCsEntriesOlderThan30Minutes() async throws {
         let dir = tempStateDir()
         let sid = "s1"

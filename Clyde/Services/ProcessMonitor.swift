@@ -73,6 +73,7 @@ final class ProcessMonitor: ObservableObject {
     private var hookPlanByPID: [pid_t: ActivePlan] = [:]
     private var hookLastMessageByPID: [pid_t: String] = [:]
     private var hookToolCountByPID: [pid_t: Int] = [:]
+    private var hookCommandByPID: [pid_t: String] = [:]
 
     /// Active Task-dispatched subagents per PID, populated from `-agents/*.json` markers.
     /// Inner array is sorted by `startedAt` ascending.
@@ -321,6 +322,7 @@ final class ProcessMonitor: ObservableObject {
         refreshHookTools()
         refreshHookPlans()
         refreshHookLastMessages()
+        refreshHookCommands()
         refreshHookAgents()
 
         let pids = await discoverPIDs()
@@ -479,6 +481,7 @@ final class ProcessMonitor: ObservableObject {
             existing.activePlan = hookPlanByPID[pid]
             existing.activeToolCount = hookToolCountByPID[pid] ?? 0
             existing.lastMessage = hookLastMessageByPID[pid]
+            existing.activeCommand = hookCommandByPID[pid]
             existing.activeSubagents = hookAgentsByPID[pid] ?? []
             return existing
         }
@@ -502,6 +505,7 @@ final class ProcessMonitor: ObservableObject {
             revived.activePlan = hookPlanByPID[pid]
             revived.activeToolCount = hookToolCountByPID[pid] ?? 0
             revived.lastMessage = hookLastMessageByPID[pid]
+            revived.activeCommand = hookCommandByPID[pid]
             revived.activeSubagents = hookAgentsByPID[pid] ?? []
             return revived
         }
@@ -521,6 +525,7 @@ final class ProcessMonitor: ObservableObject {
         fresh.activePlan = hookPlanByPID[pid]
         fresh.activeToolCount = hookToolCountByPID[pid] ?? 0
         fresh.lastMessage = hookLastMessageByPID[pid]
+        fresh.activeCommand = hookCommandByPID[pid]
         fresh.activeSubagents = hookAgentsByPID[pid] ?? []
         return fresh
     }
@@ -826,6 +831,38 @@ final class ProcessMonitor: ObservableObject {
         return changed
     }
 
+    /// Reads `state/<sid>-command` markers written by UserPromptExpansion.
+    @discardableResult
+    private func refreshHookCommands() -> Bool {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: stateDir, includingPropertiesForKeys: nil
+        ) else {
+            let changed = !hookCommandByPID.isEmpty
+            if changed { hookCommandByPID = [:] }
+            return changed
+        }
+        var commands: [pid_t: String] = [:]
+        for file in files where file.lastPathComponent.hasSuffix("-command") {
+            guard let data = try? Data(contentsOf: file),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let pidValue = json["pid"] as? Int,
+                  let command = json["command"] as? String,
+                  !command.isEmpty else {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            let pid = pid_t(pidValue)
+            if kill(pid, 0) != 0 {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            commands[pid] = command
+        }
+        let changed = commands != hookCommandByPID
+        if changed { hookCommandByPID = commands }
+        return changed
+    }
+
     /// Reads `state/<sid>-lastmsg` markers written by Stop. Returns true
     /// if the dictionary changed since last call.
     @discardableResult
@@ -940,6 +977,7 @@ final class ProcessMonitor: ObservableObject {
         let toolChanged = refreshHookTools()
         let planChanged = refreshHookPlans()
         let lastMsgChanged = refreshHookLastMessages()
+        _ = refreshHookCommands()
         let agentsChanged = refreshHookAgents()
         _ = lastMsgChanged
 
@@ -1021,6 +1059,11 @@ final class ProcessMonitor: ObservableObject {
             let newLastMessage = hookLastMessageByPID[pid]
             if updated[index].lastMessage != newLastMessage {
                 updated[index].lastMessage = newLastMessage
+                changed = true
+            }
+            let newCommand = hookCommandByPID[pid]
+            if updated[index].activeCommand != newCommand {
+                updated[index].activeCommand = newCommand
                 changed = true
             }
             let newAgents = hookAgentsByPID[pid] ?? []

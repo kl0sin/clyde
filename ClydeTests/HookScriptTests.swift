@@ -512,6 +512,46 @@ final class HookScriptTests: XCTestCase {
         )
     }
 
+    // MARK: - Slash command badge
+
+    /// Payload shape per the documented `UserPromptExpansion` fields —
+    /// NOT confirmed against a live session, because the event only
+    /// fires when a human types a slash command.
+    func testUserPromptExpansionRecordsCommandName() throws {
+        let home = tempHome()
+        let sid = "99999999-aaaa-bbbb-cccc-000000000001"
+        let payload = #"{"hook_event_name":"UserPromptExpansion","session_id":"\#(sid)","cwd":"/tmp","command_name":"code-review","command_input":"high"}"#
+
+        try runHook(payload: payload, home: home)
+
+        let url = home.appendingPathComponent(".clyde/state/\(sid)-command")
+        let data = try XCTUnwrap(try? Data(contentsOf: url))
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["command"] as? String, "code-review")
+    }
+
+    /// The command belongs to the turn — when the turn ends, so does it.
+    func testStopClearsCommandBadge() throws {
+        let home = tempHome()
+        let sid = "99999999-aaaa-bbbb-cccc-000000000002"
+        let url = home.appendingPathComponent(".clyde/state/\(sid)-command")
+
+        try runHook(payload: #"{"hook_event_name":"UserPromptExpansion","session_id":"\#(sid)","cwd":"/tmp","command_name":"loop"}"#, home: home)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "precondition")
+
+        try runHook(payload: #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/tmp"}"#, home: home)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    /// A malformed expansion with no name must not leave an empty badge.
+    func testUserPromptExpansionWithoutNameWritesNothing() throws {
+        let home = tempHome()
+        let sid = "99999999-aaaa-bbbb-cccc-000000000003"
+        try runHook(payload: #"{"hook_event_name":"UserPromptExpansion","session_id":"\#(sid)","cwd":"/tmp"}"#, home: home)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: home.appendingPathComponent(".clyde/state/\(sid)-command").path))
+    }
+
     // MARK: - Parallel tool calls
 
     /// The `-tool` marker was a single file, so a batch of parallel

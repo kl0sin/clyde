@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 30
+# clyde-hook-version: 31
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -18,6 +18,7 @@
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
 #   PreToolUse          → clears event file + refreshes busy mtime + writes -tool; Agent/Task also → merges the description into the subagent's -agents/ record (pending-<tool_use_id>.json if SubagentStart hasn't landed yet)
+#   UserPromptExpansion → state/<session_id>-command (slash command name for the row badge)
 #   PostToolBatch       → sweeps every tool_use_id in the batch from state/<session_id>-tools/
 #   PostToolUse         → removes its own state/<session_id>-tools/<tool_use_id>.json slot; Agent/Task also → removes an UNCLAIMED state/<session_id>-agents/pending-<tool_use_id>.json only
 #   PostToolUseFailure  → removes -tool marker; Agent/Task also → removes an UNCLAIMED pending- entry; IF is_interrupt=true also removes busy + every -agents/ record (an interrupted agent never emits SubagentStop)
@@ -724,6 +725,7 @@ case "$HOOK_EVENT" in
     SessionEnd)
         rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$STATE_DIR/$KEY-lastmsg" "$EVENTS_DIR/$KEY.json"
         rm -rf "$STATE_DIR/$KEY-agents" "$STATE_DIR/$KEY-tools"
+        rm -f "$STATE_DIR/$KEY-command"
         ;;
     PermissionRequest)
         atomic_write "$EVENTS_DIR/$KEY.json" \
@@ -778,6 +780,7 @@ case "$HOOK_EVENT" in
         # its own PostToolUse(Agent) arrives.
         rm -f "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$EVENTS_DIR/$KEY.json"
         rm -rf "$STATE_DIR/$KEY-tools"
+        rm -f "$STATE_DIR/$KEY-command"
         # Record a one-line preview of what Claude just said, so an idle
         # session can show its last reply instead of only a project path.
         # Deliberately a short prefix: the row renders one line, and this
@@ -943,6 +946,21 @@ case "$HOOK_EVENT" in
         SUB_AGENT_ID=$(extract_field agent_id)
         if [ -n "$SUB_AGENT_ID" ]; then
             rm -f "$STATE_DIR/$KEY-agents/$SUB_AGENT_ID.json"
+        fi
+        ;;
+    UserPromptExpansion)
+        # A slash command expanded into a prompt. Record its name so the
+        # row can say `/code-review` instead of an anonymous "Working"
+        # for the length of a long autonomous run.
+        #
+        # NOTE: payload shape follows the documented `command_name`
+        # field and is NOT confirmed against a live session — the event
+        # only fires when a human types a slash command.
+        CMD_NAME=$(extract_field command_name)
+        if [ -n "$CMD_NAME" ]; then
+            ESC_CMD=$(printf '%s' "$CMD_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            atomic_write "$STATE_DIR/$KEY-command" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"command\": \"$ESC_CMD\", \"at\": $TIMESTAMP}"
         fi
         ;;
     PostToolBatch)
