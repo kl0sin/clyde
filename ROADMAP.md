@@ -47,6 +47,44 @@ Bug-fix and polish pass after v0.4.0, plus first-class integration with [cleat](
 - [x] Stop plan + cleat badges from getting clipped on narrow rows — `fixedSize` on both capsules so the project name takes the ellipsis instead !lo #ux
 - [x] Healthcheck advisory when `cleat` is on PATH but its `hooks` capability is disabled — `CleatProbe` reads `~/.config/cleat/config` (cleat stores enabled caps as a `[caps]` section, one per line) and reports its `hooks` cap status; `HookInstaller.healthCheck()` returns a new `.cleatHooksCapDisabled` issue (non-auto-repairable — Clyde can't run `cleat config --enable hooks` for the user, only the banner can) so the existing banner pipeline picks it up. Surfaces only when Clyde's own install is otherwise healthy, so the user fixes the actual problem first !md #ux
 
+## Phase: v0.7.0 — Agent teams + faithful subagent lifecycle
+
+Clyde's hook coverage stopped growing at v0.4.0 while Claude Code kept shipping events. Clyde subscribes to 20 of the 31 documented hook events, and the gap sits exactly where Claude Code got more autonomous: agent teams, batched tool calls, slash-command expansion. This phase closes that gap and fixes the one place where the current model is provably wrong — subagent lifecycle keyed on the dispatching tool call instead of on the agent itself.
+
+- [ ] Key subagent lifecycle on `agent_id` from `SubagentStart` / `SubagentStop` instead of `tool_use_id` from `PreToolUse(Agent)` — background agents return from `PostToolUse` immediately while the agent keeps running, so their rows vanish from the panel mid-work !hi #hooks
+- [ ] Subscribe to `TeammateIdle` — first agent-teams awareness; a teammate about to go idle is the same "someone is waiting on you" signal the attention indicator already exists for !hi #hooks #ux
+- [ ] Surface the running slash command in the session row via `UserPromptExpansion` (`command_name`) — `/code-review` beats an anonymous "Working" during long autonomous runs !md #hooks #ux
+- [ ] Make parallel tool calls honest via `PostToolBatch` — the `-tool` marker is single-slot and last-writer-wins, so concurrent calls render as a random one of them !md #hooks #ux
+- [ ] One-line preview of Claude's last reply from `Stop.last_assistant_message` — the field already arrives and the hook discards it !lo #hooks #ux
+- [ ] Worktree badge driven by `WorktreeCreate` / `WorktreeRemove`, styled like the existing cleat capsule — worktree sessions currently show an opaque temp path !lo #hooks #ux
+- [ ] Extend the tool-summary whitelist to `Skill`, `Workflow` and `Artifact` — all three are common now and all three render with an empty summary !lo #hooks
+
+## Phase: v0.7.x — Stabilization
+
+The stability work that does *not* need special hardware, split out from the sprint above so features never block on a Ventura VM. Sibling phase to `Testing backlog`, which keeps the hardware- and wall-time-gated items.
+
+- [ ] Regression coverage per hook event — `HookScriptTests` exercises a fraction of the 20 handled events; every event that writes or clears a state file deserves a case !hi #qa #hooks
+- [ ] First `ActivityLog` test coverage — mirror the integration style in `ProcessMonitorTests` (real instance + temp `stateDir`, driven by writing marker files) !md #qa
+- [ ] Audit zombie / GC paths in `state/<sid>-agents/` — the 30-minute defensive sweep predates the `agent_id` rework and needs revisiting alongside it !md #qa #hooks
+- [ ] Error-path audit of `HookInstaller` — healthcheck, repair, and version-bump branches are the least-exercised code in the app and the most user-visible when they misfire !md #qa
+
+## Phase: v0.8.0 — Session stats & review
+
+Clyde answers "what is Claude doing right now" well. It answers "what did Claude do today" not at all, even though `ActivityLog` already records most of the raw material. A local review surface is the natural next step and the most screenshot-friendly feature on this roadmap.
+
+- [ ] Daily / weekly session review — time spent working, turns taken, most-used tools, how often a session sat waiting on you !hi #ux
+- [ ] Per-project breakdown, so multi-repo days are legible !md #ux
+- [ ] Decide the retention window and make it configurable — stats need history, and history is the one thing Clyde has so far avoided keeping !md #ux
+- [ ] Stays local by construction — no telemetry, no accounts, no network, matching the privacy-first promise in the README !hi #ux
+
+## Phase: v0.9.0 — Panel actions (two-way channel)
+
+The biggest draw for new users and the biggest architectural jump on this roadmap: approving a permission request or sending a prompt straight from Clyde, without switching to the terminal. Clyde's hook bus is deliberately one-way and advisory today — every design note in `clyde-hook.sh` depends on that. Reversing it touches the trust model, not just the plumbing, so this phase gets its own spec before any code.
+
+- [ ] Write the design spec first — brainstorming → `docs/superpowers/specs/` → writing-plans. Do not start with the transport !hi
+- [ ] Map the landmines up front: hooks must never block or fail noisily, `PreToolUse` decisions are time-boxed by Claude's hook timeout, and any inbound channel is a new local attack surface !hi
+- [ ] Decide the mechanism — `PreToolUse` `permissionDecision` returned from the hook vs. an out-of-band channel — before committing to a UI !hi
+
 ## Phase: v0.3.0+ — UX polish, content & reach
 
 Backlog. Pick when there's time or when community interest bumps priority.
@@ -59,6 +97,8 @@ Backlog. Pick when there's time or when community interest bumps priority.
 - [x] Parallel subagents in the panel — `clyde-hook` v20 writes `state/<sid>-agents/<tool_use_id>.json` on every `PreToolUse(Task)` and clears it on the matching `PostToolUse(Task)` / failure; `ProcessMonitor.refreshHookAgents` mirrors the existing `-tool` plumbing. `SessionRow` flips the second line to `<N> agents · <dur>` for N≥2 and renders a two-lines-per-agent block (type · duration, then summary) underneath, sorted oldest-first with a 3-visible cap and tap-to-expand `+N more` label. Defensive 30-min GC drops zombie rows; legacy `-subagent` fallback keeps v0.2.x sessions visible until next `claude` restart. !md #hooks #ux
 - [ ] Short demo video (30-60s) showing busy / ready / attention flow !md
 - [ ] Press kit folder — logos, screenshots, fact sheet !lo
+- [ ] Launch post on Product Hunt and r/ClaudeAI — hold until the v0.8.0 review surface exists, so the post has a screenshot worth clicking !md
+- [ ] Refresh the landing page around agent teams and session stats — it still sells the v0.2.x feature set !md #ux
 - [ ] Opt-in crash reporting (Sentry / KSCrash / MetricKit), off by default !lo
 - [ ] Opt-in anonymous usage analytics, off by default !lo
 - [ ] App Store yes/no decision (likely no — sandbox + StoreKit cost) !lo

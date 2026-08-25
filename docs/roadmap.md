@@ -20,6 +20,64 @@ Shipped 2026-04-29. Live tool indicator on the session row (hook v17, `-tool` st
 
 ---
 
+## Phase: v0.3.1 — Onboarding + accessibility ✅
+
+Shipped 2026-04-30. First-run coachmark tour, replayable from Settings; VoiceOver and reduce-motion pass across every interactive surface; completed plan badges stop lingering across turns. Detail in `CHANGELOG.md` §0.3.1.
+
+## Phase: v0.4.0 — Parallel subagents ✅
+
+Shipped 2026-05-14. `state/<sid>-agents/<tool_use_id>.json` per in-flight subagent (hook v20/v21), the `N agents · duration` row treatment, real project names via `lsof -d cwd`, and a session-row polish pass. Detail in `CHANGELOG.md` §0.4.0.
+
+## Phase: v0.4.x — UI polish + sandbox awareness ✅
+
+Shipped across v0.5.0 – v0.5.3 (2026-05-20 and 2026-05-21). cleat-sandboxed session tracking (hook v25), the cleat advisory banner and its live FSEvents refresh, and the bypass-permissions attention fix that v0.5.1 got wrong and v0.5.2 corrected. Detail in `CHANGELOG.md` §0.5.0 – §0.5.3.
+
+## Phase: v0.6.0 — Launch at login ✅
+
+Shipped 2026-06-09. `LoginItemService` over `SMAppService.mainApp` behind an injectable backend, plus the Settings → General Startup section with its approval-needed branch. Detail in `CHANGELOG.md` §0.6.0.
+
+---
+
+## Phase: v0.7.0 — Agent teams + faithful subagent lifecycle
+
+Hook coverage stopped growing at v0.4.0 while Claude Code kept shipping events. Clyde subscribes to 20 of the 31 documented events, and the eleven it ignores are not evenly spread — they cluster around everything Claude Code gained as it got more autonomous. This phase is the catch-up, and it opens with a correctness fix rather than a feature.
+
+- **Subagent lifecycle keyed on `agent_id`.** Today `clyde-hook.sh` tracks in-flight subagents through `PreToolUse(Agent)` → `state/<sid>-agents/<tool_use_id>.json`, cleared by the matching `PostToolUse`. That model assumes the `Agent` tool call and the agent share a lifetime. Background agents break the assumption: the tool call returns as soon as the agent is dispatched, so Clyde tears the row down while the agent is still working. `SubagentStart` / `SubagentStop` carry `agent_id`, which is the agent's own identity and independent of the dispatching tool call. The existing `SubagentStart` branch already fires — it just writes the deprecated single-agent `-subagent` marker and reads only `agent_type`. Landmine: the two keying schemes must coexist for one release so sessions started under an older `claude` stay visible, exactly like the legacy `-subagent` fallback shipped in v0.4.0.
+- **`TeammateIdle`.** Agent teams are entirely invisible to Clyde right now. "A teammate is about to go idle" is the same class of signal Clyde was built around — someone is waiting on you — so it maps onto the existing attention indicator rather than needing new UI. Decide early whether a teammate is its own panel row or a decoration on the parent session's row; that choice drives everything else.
+- **`UserPromptExpansion`.** Gives `command_name` before Claude sees the expanded prompt. During a long `/loop` or `/code-review` run the session row currently says "Working" and nothing else. Cheap to wire — it is one more state field on the same one-way bus.
+- **`PostToolBatch`.** The `-tool` marker is a single file, so parallel tool calls overwrite each other and the panel shows whichever `PreToolUse` landed last. `batch_id` plus `tool_calls` makes an honest "3 tools" possible. Open design question to settle before coding: does `-tool` become a directory keyed by `tool_use_id` the way `-agents/` already is, or does the batch event alone carry enough to keep it single-file? The directory shape is more consistent with existing code; the single-file shape is less churn.
+- **`Stop.last_assistant_message`.** The field already arrives on every `Stop` and the hook drops it. A one-line preview is the cheapest possible "what did it actually say" affordance. Deliberately *not* `MessageDisplay`: full message text on every displayed message is noise, and writing it to disk raises a privacy question this app has so far been able to answer with "we don't".
+- **Worktree badge.** `WorktreeCreate` / `WorktreeRemove` carry `worktree_path` and `worktree_name`. Sessions in a worktree currently render an opaque temp path. Visually this is the cleat capsule again, so it is mostly plumbing.
+- **Tool-summary whitelist.** `clyde-hook.sh` summarises Edit/Write/Read/Bash/Glob/Grep/Agent/WebFetch/WebSearch and gives everything else an empty summary. `Skill`, `Workflow` and `Artifact` are common enough now to deserve entries — skill name, workflow name, artifact title respectively.
+
+## Phase: v0.7.x — Stabilization
+
+Split out from v0.7.0 deliberately: none of this needs a Ventura VM or an Intel Mac, so it must never be what a feature release waits on. `Testing backlog` below stays the home for the hardware- and wall-time-gated matrix.
+
+- **Per-event regression coverage.** `HookScriptTests` covers a fraction of the 20 handled events. Every event that writes or clears a state file should have a case that pipes a representative payload through the script with a temp `HOME` and asserts on the resulting files — the same shape the existing tests already use, just applied exhaustively.
+- **First `ActivityLog` coverage.** `CLAUDE.md` records that `ActivityLog` has no unit tests and that shipping without them is the established pattern. The v0.7.0 subagent rework touches its inputs, which makes this the right moment to break that pattern. Mirror `ProcessMonitorTests`: real instance, temp `stateDir`, drive it by writing marker files.
+- **Zombie / GC audit in `-agents/`.** The defensive 30-minute sweep from v0.4.0 assumes `tool_use_id` keying. Re-derive it once `agent_id` lands rather than porting it blindly.
+- **`HookInstaller` error paths.** Healthcheck, repair and version-bump branches are the least-exercised code in the app and the most visible when they misfire — a bad healthcheck shows the user a banner about a problem they do not have.
+
+## Phase: v0.8.0 — Session stats & review
+
+Clyde answers "what is Claude doing right now" well and "what did Claude do today" not at all, despite `ActivityLog` already recording most of the raw material. This is the phase that turns a live monitor into something you open on purpose, and it produces the screenshots the content work below has been missing.
+
+- **Daily / weekly review.** Time Claude spent working, turns taken, most-used tools, and how often a session sat waiting on you. That last number is the interesting one — it is the metric nobody else surfaces and the one that justifies having a monitor at all.
+- **Per-project breakdown.** Multi-repo days are common and currently illegible after the fact.
+- **Retention window.** Stats need history, and history is the one thing Clyde has so far avoided keeping. Pick a default, make it configurable, and make deleting it a single obvious action.
+- **Local by construction.** No telemetry, no accounts, no network. The README promises this and the promise is a genuine differentiator, not a limitation to work around.
+
+## Phase: v0.9.0 — Panel actions (two-way channel)
+
+Approving a permission request or sending a prompt straight from Clyde, without switching to the terminal. The biggest draw for new users on this roadmap and the biggest architectural jump — every design note in `clyde-hook.sh` rests on the bus being one-way and advisory, so reversing it changes the trust model and not just the plumbing.
+
+- **Spec before code.** brainstorming → `docs/superpowers/specs/` → writing-plans. Starting from a transport choice is how this phase goes wrong.
+- **Known landmines.** The hook must never block or fail noisily, or Claude raises a hook error in the user's session every turn. `PreToolUse` decisions are bounded by Claude's hook timeout, so anything that waits on a human has to fit inside it or fall back cleanly. And any inbound channel is new local attack surface in an app whose current security story is "it only ever writes files".
+- **Mechanism first.** Returning `permissionDecision` from the `PreToolUse` hook and an out-of-band channel are meaningfully different products, not two implementations of one. Settle that before designing any UI.
+
+---
+
 ## Phase: v0.3.0+ — UX polish, content & reach
 
 Backlog. Pick when there's time or when community interest bumps priority. UX polish items moved here from v0.2.x once the v0.3.0 telemetry work landed — they're not blocking anything, and rolling them into a content/reach push makes more sense than gating a point release on copy review.
@@ -35,6 +93,8 @@ Coachmark first-run tour and "Replay welcome tour" in Settings shipped 2026-04-3
 
 - **Short demo video (30-60s)** showing busy / ready / attention flow. Primary distribution: landing page hero, README, launch tweet, GitHub social preview.
 - **Press kit folder** — logo variants, screenshots at common dimensions, one-paragraph app description, fact sheet.
+- **Launch post on Product Hunt and r/ClaudeAI.** Worth holding until the v0.8.0 review surface exists — a monitor is hard to screenshot compellingly, a weekly review is not. Pair with the demo video so both land at once.
+- **Refresh the landing page.** It still sells the v0.2.x feature set. Agent teams and session stats are the two things that will bring people in; neither is mentioned.
 - **Opt-in crash reporting** (Sentry / KSCrash / Apple MetricKit). Off by default, clear toggle in Settings, plain-language explanation of what gets sent.
 - **Opt-in anonymous usage analytics** with the same defaults. Decide first whether it's worth the privacy-policy surface area before wiring anything.
 - **App Store yes/no decision.** Implications: sandboxing rewrite of the hook installer (can't write to `~/.claude/` from a sandboxed app without user-granted scoped access), StoreKit instead of Sponsor links, Apple's cut on any paid tier. Likely answer: **no**, stay DMG+Homebrew.
