@@ -46,7 +46,8 @@ struct ActivePlan: Equatable {
 
 /// One in-flight Task-dispatched subagent inside a parent session.
 struct ActiveSubagent: Equatable, Identifiable, Sendable {
-    /// `tool_use_id` from the originating PreToolUse(Task) payload.
+    /// The subagent's `agent_id` once SubagentStart has claimed the
+    /// entry; the dispatching `tool_use_id` while it is still pending.
     let id: String
     /// `subagent_type` from `tool_input` (e.g. `general-purpose`, `Explore`).
     let type: String

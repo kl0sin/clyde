@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 27
+# clyde-hook-version: 28
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -17,14 +17,14 @@
 #   StopFailure         → writes state/<session_id>-error with stop_reason
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
-#   PreToolUse          → clears event file + refreshes busy mtime + writes -tool; Agent/Task also → state/<session_id>-agents/<tool_use_id>.json (subagent dispatch)
-#   PostToolUse         → removes -tool marker; Agent/Task also → removes state/<session_id>-agents/<tool_use_id>.json
-#   PostToolUseFailure  → removes -tool marker; Agent/Task also → removes state/<session_id>-agents/<tool_use_id>.json; removes busy IF is_interrupt=true
+#   PreToolUse          → clears event file + refreshes busy mtime + writes -tool; Agent/Task also → merges the description into the subagent's -agents/ record (pending-<tool_use_id>.json if SubagentStart hasn't landed yet)
+#   PostToolUse         → removes -tool marker; Agent/Task also → removes an UNCLAIMED state/<session_id>-agents/pending-<tool_use_id>.json only
+#   PostToolUseFailure  → removes -tool marker; Agent/Task also → removes an UNCLAIMED pending- entry; IF is_interrupt=true also removes busy + every -agents/ record (an interrupted agent never emits SubagentStop)
 #   CwdChanged          → rewrites state/<session_id>-info with new cwd
 #   Elicitation         → events/<session_id>.json (MCP tool input request)
 #   ElicitationResult   → clears event file (MCP input answered)
-#   SubagentStart       → legacy state/<session_id>-subagent (deprecated, backup only)
-#   SubagentStop        → removes legacy -subagent; best-effort -agents/<id>.json removal
+#   SubagentStart       → merges with PreToolUse's record into state/<session_id>-agents/<agent_id>.json (either event may arrive first); also legacy -subagent (deprecated)
+#   SubagentStop        → removes legacy -subagent + state/<session_id>-agents/<agent_id>.json (the agent outlives its dispatching tool call)
 #   TaskCreated         → bumps task_count in state/<session_id>-plan
 #   TaskCompleted       → bumps done_count in state/<session_id>-plan (if file exists)
 #   Notification        → log only (no state files)
@@ -531,6 +531,146 @@ atomic_write() {
     mv -f "$tmp" "$target"
 }
 
+# --- Subagent record merging -------------------------------------------
+#
+# A running subagent is described by two hook events that share NO
+# identifier: PreToolUse(Agent) carries tool_use_id and the description,
+# SubagentStart carries agent_id and agent_type. Claude fires them as
+# separate processes with no ordering guarantee, and measurements show
+# the PreToolUse hook is the slower of the two (it probes cleat and
+# shells out to lsof), so SubagentStart frequently runs FIRST.
+#
+# So the merge is symmetric: whichever event arrives second completes
+# the record the first one opened, correlating on agent type and taking
+# the oldest unmatched candidate. The record always ends up keyed on
+# agent_id, which is what SubagentStop tears down.
+#
+# Both directions are a read-modify-write over a shared directory, so
+# they run under an mkdir-based lock — mkdir is atomic on every POSIX
+# filesystem and needs no cleanup beyond rmdir. The wait is bounded and
+# the hook proceeds regardless: never block Claude, ever.
+AGENTS_LOCK=""
+
+acquire_agents_lock() {
+    local dir="$STATE_DIR/$KEY-agents"
+    mkdir -p "$dir" 2>/dev/null || return 1
+    local lock="$dir/.claim.lock"
+    local i=0
+    while [ "$i" -lt 50 ]; do
+        if mkdir "$lock" 2>/dev/null; then
+            AGENTS_LOCK="$lock"
+            return 0
+        fi
+        # A hook that died holding the lock would wedge every later one.
+        # Anything older than a minute is by definition abandoned.
+        if [ -d "$lock" ] && [ -z "$(find "$lock" -maxdepth 0 -mmin -1 2>/dev/null)" ]; then
+            rmdir "$lock" 2>/dev/null
+        fi
+        sleep 0.01
+        i=$((i + 1))
+    done
+    return 1
+}
+
+release_agents_lock() {
+    [ -n "$AGENTS_LOCK" ] && rmdir "$AGENTS_LOCK" 2>/dev/null
+    AGENTS_LOCK=""
+}
+
+# merge_agent_record <mode> <id> <type> <summary>
+#   mode=start : id is agent_id  — adopt a pending- entry of this type,
+#                or open a record awaiting its description.
+#   mode=pre   : id is tool_use_id — fill the description into a record
+#                SubagentStart already opened, or write pending-<id>.
+merge_agent_record() {
+    command -v python3 >/dev/null 2>&1 || return 1
+    acquire_agents_lock || return 1
+    MERGE_MODE=$1 MERGE_ID=$2 MERGE_TYPE=$3 MERGE_SUMMARY=$4 \
+    MERGE_DIR="$STATE_DIR/$KEY-agents" MERGE_SID="$SESSION_ID" \
+    MERGE_PID="$CLAUDE_PID" MERGE_TS="$TIMESTAMP" python3 -c "
+import json, os, glob, tempfile
+
+d = os.environ['MERGE_DIR']
+mode = os.environ['MERGE_MODE']
+ident = os.environ['MERGE_ID']
+atype = os.environ['MERGE_TYPE']
+summary = os.environ['MERGE_SUMMARY']
+ts = int(os.environ['MERGE_TS'] or 0)
+
+def load(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def save(path, rec):
+    fd, tmp = tempfile.mkstemp(dir=d, prefix='.clyde-tmp.')
+    with os.fdopen(fd, 'w') as f:
+        json.dump(rec, f)
+        f.write('\n')
+    os.replace(tmp, path)
+
+def oldest(paths, want_pending):
+    best = None
+    for path in paths:
+        rec = load(path)
+        if rec is None:
+            continue
+        if atype and rec.get('subagent_type') != atype:
+            continue
+        if want_pending is False and not rec.get('awaiting_summary'):
+            continue
+        started = rec.get('started_at') or 0
+        if best is None or started < best[0]:
+            best = (started, path, rec)
+    return best
+
+pending = sorted(glob.glob(os.path.join(d, 'pending-*.json')))
+claimed = sorted(p for p in glob.glob(os.path.join(d, '*.json'))
+                 if not os.path.basename(p).startswith('pending-'))
+
+if mode == 'start':
+    hit = oldest(pending, True)
+    if hit:
+        _, path, rec = hit
+        rec['agent_id'] = ident
+        rec.pop('awaiting_summary', None)
+        save(os.path.join(d, ident + '.json'), rec)
+        os.remove(path)
+    else:
+        save(os.path.join(d, ident + '.json'), {
+            'session_id': os.environ['MERGE_SID'],
+            'pid': int(os.environ['MERGE_PID'] or 0),
+            'agent_id': ident,
+            'subagent_type': atype,
+            'summary': '',
+            'started_at': ts,
+            'awaiting_summary': True,
+        })
+else:
+    hit = oldest(claimed, False)
+    if hit:
+        _, path, rec = hit
+        rec['summary'] = summary
+        rec['tool_use_id'] = ident
+        rec.pop('awaiting_summary', None)
+        save(path, rec)
+    else:
+        save(os.path.join(d, 'pending-' + ident + '.json'), {
+            'session_id': os.environ['MERGE_SID'],
+            'pid': int(os.environ['MERGE_PID'] or 0),
+            'tool_use_id': ident,
+            'subagent_type': atype,
+            'summary': summary,
+            'started_at': ts,
+        })
+" 2>/dev/null
+    MERGE_RC=$?
+    release_agents_lock
+    return $MERGE_RC
+}
+
 case "$HOOK_EVENT" in
     SessionStart)
         ESC_SOURCE=$(printf '%s' "$SOURCE" | sed 's/\\/\\\\/g; s/"/\\"/g')
@@ -618,12 +758,20 @@ case "$HOOK_EVENT" in
         # leave the busy marker alone in that case.
         if printf '%s' "$INPUT" | grep -q '"is_interrupt"[[:space:]]*:[[:space:]]*true'; then
             rm -f "$STATE_DIR/$KEY-busy"
+            # Ctrl+C tears down every subagent in the turn, and an
+            # interrupted agent never emits SubagentStop — without this
+            # its record would linger as a phantom row until the
+            # 30-minute GC. Leaves .claim.lock (a directory) alone.
+            rm -f "$STATE_DIR/$KEY-agents"/*.json 2>/dev/null
         fi
         # The tool call itself has terminated either way (interrupt or
         # error), so the active-tool indicator must clear.
         rm -f "$STATE_DIR/$KEY-tool"
         if { [ "$TOOL_NAME" = "Agent" ] || [ "$TOOL_NAME" = "Task" ]; } && [ -n "$TOOL_USE_ID" ]; then
-            rm -f "$STATE_DIR/$KEY-agents/$TOOL_USE_ID.json"
+            # Only sweeps an entry SubagentStart never claimed. A claimed
+            # entry is keyed on agent_id and belongs to SubagentStop —
+            # the agent routinely outlives this tool call.
+            rm -f "$STATE_DIR/$KEY-agents/pending-$TOOL_USE_ID.json"
         fi
         ;;
     PreToolUse)
@@ -662,8 +810,16 @@ case "$HOOK_EVENT" in
             ESC_SUMMARY=$(printf '%s' "$DESCRIPTION" | sed 's/\\/\\\\/g; s/"/\\"/g')
             ESC_TOOLID=$(printf '%s' "$TOOL_USE_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
             mkdir -p "$STATE_DIR/$KEY-agents"
-            atomic_write "$STATE_DIR/$KEY-agents/$TOOL_USE_ID.json" \
-                "{\"session_id\": \"$ESC_SID\", \"tool_use_id\": \"$ESC_TOOLID\", \"subagent_type\": \"$ESC_AGENT\", \"summary\": \"$ESC_SUMMARY\", \"started_at\": $TIMESTAMP}"
+            # Completes a record SubagentStart may already have opened —
+            # the description arrives only here, so it has to reach the
+            # record no matter which of the two events won the race.
+            if ! merge_agent_record pre "$TOOL_USE_ID" "$SUBAGENT_TYPE" "$DESCRIPTION"; then
+                # python3 missing — degrade to the pre-v28 shape. The
+                # background-agent fix needs a real JSON parser; the
+                # PostToolUse sweep below still cleans this up.
+                atomic_write "$STATE_DIR/$KEY-agents/pending-$TOOL_USE_ID.json" \
+                    "{\"session_id\": \"$ESC_SID\", \"tool_use_id\": \"$ESC_TOOLID\", \"subagent_type\": \"$ESC_AGENT\", \"summary\": \"$ESC_SUMMARY\", \"started_at\": $TIMESTAMP}"
+            fi
         fi
         ;;
     PostToolUse)
@@ -672,7 +828,10 @@ case "$HOOK_EVENT" in
         # next PreToolUse fires.
         rm -f "$STATE_DIR/$KEY-tool"
         if { [ "$TOOL_NAME" = "Agent" ] || [ "$TOOL_NAME" = "Task" ]; } && [ -n "$TOOL_USE_ID" ]; then
-            rm -f "$STATE_DIR/$KEY-agents/$TOOL_USE_ID.json"
+            # Only sweeps an entry SubagentStart never claimed. A claimed
+            # entry is keyed on agent_id and belongs to SubagentStop —
+            # the agent routinely outlives this tool call.
+            rm -f "$STATE_DIR/$KEY-agents/pending-$TOOL_USE_ID.json"
         fi
         ;;
     CwdChanged)
@@ -695,21 +854,27 @@ case "$HOOK_EVENT" in
         rm -f "$EVENTS_DIR/$KEY.json"
         ;;
     SubagentStart)
-        # Claude spawned a subagent. Write a marker so Clyde can
-        # surface "Working (subagent: Explore)" or similar.
+        # The subagent is now actually running. Adopt the pending entry
+        # PreToolUse(Agent) wrote so the row is keyed on the agent's own
+        # identity from here on — PostToolUse can then stop deleting it.
+        AGENT_ID=$(extract_field agent_id)
         AGENT_TYPE=$(extract_field agent_type)
+        if [ -n "$AGENT_ID" ]; then
+            merge_agent_record start "$AGENT_ID" "$AGENT_TYPE" "" || true
+        fi
         ESC_AGENT=$(printf '%s' "$AGENT_TYPE" | sed 's/\\/\\\\/g; s/"/\\"/g')
         atomic_write "$STATE_DIR/$KEY-subagent" \
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"agent_type\": \"$ESC_AGENT\", \"timestamp\": $TIMESTAMP}"
         ;;
     SubagentStop)
         rm -f "$STATE_DIR/$KEY-subagent"
-        # Defensive backup cleanup. Pre/Post Task pairs are load-bearing,
-        # but if Claude ever ships a SubagentStop with a tool_use_id and
-        # the matching PostToolUse never arrives, this catches the orphan.
-        SUB_TOOLID=$(extract_field tool_use_id)
-        if [ -n "$SUB_TOOLID" ]; then
-            rm -f "$STATE_DIR/$KEY-agents/$SUB_TOOLID.json"
+        # The agent is genuinely finished — this is the only event that
+        # says so. Verified against a live session: SubagentStop carries
+        # agent_id and agent_type but no tool_use_id, so the entry it
+        # tears down is the one SubagentStart re-keyed under agent_id.
+        SUB_AGENT_ID=$(extract_field agent_id)
+        if [ -n "$SUB_AGENT_ID" ]; then
+            rm -f "$STATE_DIR/$KEY-agents/$SUB_AGENT_ID.json"
         fi
         ;;
     TaskCreated)

@@ -801,9 +801,13 @@ final class ProcessMonitor: ObservableObject {
 
             var agents: [ActiveSubagent] = []
             for file in files where file.pathExtension == "json" {
+                // `agent_id` once SubagentStart has claimed the entry,
+                // `tool_use_id` while it is still pending. The two hook
+                // events share no identifier, so a claimed record has no
+                // tool_use_id to fall back on.
                 guard let data = try? Data(contentsOf: file),
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let id = json["tool_use_id"] as? String,
+                      let id = (json["agent_id"] as? String) ?? (json["tool_use_id"] as? String),
                       let type = json["subagent_type"] as? String,
                       let startedAt = json["started_at"] as? Int else {
                     ClydeLog.hooks.info("Skipping malformed -agents file \(file.lastPathComponent, privacy: .public)")

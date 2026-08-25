@@ -75,6 +75,17 @@ final class HookScriptTests: XCTestCase {
     /// avoid raising "Stop hook error" in Claude's session.
     @discardableResult
     private func runHook(payload: String, home: URL) throws -> Int32 {
+        let task = try startHook(payload: payload, home: home)
+        task.waitUntilExit()
+        return task.terminationStatus
+    }
+
+    /// Launches the hook without waiting for it. Claude Code fires each
+    /// hook event as its OWN process with no ordering guarantee between
+    /// them, so any test that runs events strictly one-after-another is
+    /// modelling an execution order production does not provide. Tests
+    /// that care about inter-event ordering use this to overlap them.
+    private func startHook(payload: String, home: URL) throws -> Process {
         let task = Process()
         // Launch as `claude → bash → hook` so the hook process has a
         // `claude` ancestor at its immediate PPID. The `; exit $?`
@@ -97,12 +108,50 @@ final class HookScriptTests: XCTestCase {
             stdin.fileHandleForWriting.write(data)
         }
         try? stdin.fileHandleForWriting.close()
-        task.waitUntilExit()
-        return task.terminationStatus
+        return task
     }
 
     private func eventsDir(in home: URL) -> URL {
         home.appendingPathComponent(".clyde/events")
+    }
+
+    private func agentsDir(in home: URL, sessionId: String) -> URL {
+        home.appendingPathComponent(".clyde/state/\(sessionId)-agents")
+    }
+
+    /// Filenames inside `-agents/`, sorted for stable assertions.
+    private func agentFiles(in home: URL, sessionId: String) -> [String] {
+        let dir = agentsDir(in: home, sessionId: sessionId)
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        return files.filter { $0.hasSuffix(".json") }.sorted()
+    }
+
+    private func agentJSON(in home: URL, sessionId: String, file: String) -> [String: Any] {
+        let url = agentsDir(in: home, sessionId: sessionId).appendingPathComponent(file)
+        guard let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [:] }
+        return json
+    }
+
+    // MARK: - Subagent payload builders (shapes captured from a real
+    // Claude Code session — SubagentStart/Stop carry `agent_id` and
+    // `agent_type` but NO `tool_use_id`, and no description.)
+
+    private func preToolUseAgent(sid: String, toolUseID: String, type: String, description: String) -> String {
+        #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/tmp","tool_name":"Agent","tool_use_id":"\#(toolUseID)","tool_input":{"subagent_type":"\#(type)","description":"\#(description)","prompt":"do the thing"}}"#
+    }
+
+    private func postToolUseAgent(sid: String, toolUseID: String, type: String, description: String) -> String {
+        #"{"hook_event_name":"PostToolUse","session_id":"\#(sid)","cwd":"/tmp","tool_name":"Agent","tool_use_id":"\#(toolUseID)","duration_ms":5750,"tool_input":{"subagent_type":"\#(type)","description":"\#(description)","prompt":"do the thing"}}"#
+    }
+
+    private func subagentStart(sid: String, agentID: String, type: String) -> String {
+        #"{"hook_event_name":"SubagentStart","session_id":"\#(sid)","cwd":"/tmp","agent_id":"\#(agentID)","agent_type":"\#(type)"}"#
+    }
+
+    private func subagentStop(sid: String, agentID: String, type: String) -> String {
+        #"{"hook_event_name":"SubagentStop","session_id":"\#(sid)","cwd":"/tmp","agent_id":"\#(agentID)","agent_type":"\#(type)","last_assistant_message":"done"}"#
     }
 
     private func eventFile(in home: URL, sessionId: String) -> URL {
@@ -188,6 +237,173 @@ final class HookScriptTests: XCTestCase {
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: stale.path),
             "UserPromptSubmit must clear events/<sid>.json so the attention badge drops the moment the user replies"
+        )
+    }
+
+    // MARK: - Subagent lifecycle keyed on agent_id
+
+    /// `SubagentStart` must adopt the pending entry written by
+    /// `PreToolUse(Agent)` and re-key it under `agent_id`. The two
+    /// events share no identifier — `SubagentStart` carries no
+    /// `tool_use_id` — so the claim correlates on `agent_type`, and
+    /// the description (which only ever arrives on `PreToolUse`) has
+    /// to survive the transition or the panel loses its second line.
+    func testSubagentStartClaimsPendingEntryUnderAgentID() throws {
+        let home = tempHome()
+        let sid = "11111111-aaaa-bbbb-cccc-000000000001"
+
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_alpha", type: "Explore", description: "Locate hook log rotation"), home: home)
+        try runHook(payload: subagentStart(sid: sid, agentID: "a83da9190f4523b09", type: "Explore"), home: home)
+
+        XCTAssertEqual(
+            agentFiles(in: home, sessionId: sid), ["a83da9190f4523b09.json"],
+            "SubagentStart must re-key the pending entry under agent_id"
+        )
+        let json = agentJSON(in: home, sessionId: sid, file: "a83da9190f4523b09.json")
+        XCTAssertEqual(json["agent_id"] as? String, "a83da9190f4523b09")
+        XCTAssertEqual(json["subagent_type"] as? String, "Explore")
+        XCTAssertEqual(
+            json["summary"] as? String, "Locate hook log rotation",
+            "the description only arrives on PreToolUse — it must survive the claim"
+        )
+    }
+
+    /// The bug this rework exists for. `PostToolUse(Agent)` fires when
+    /// the dispatch returns, which for a background agent is long
+    /// before the agent finishes — measured at 5s ahead of
+    /// `SubagentStop` on a real session. Deleting the entry there tore
+    /// the row out of the panel mid-work, so once an entry is claimed
+    /// `PostToolUse` must leave it alone.
+    func testPostToolUseAgentLeavesClaimedSubagentRunning() throws {
+        let home = tempHome()
+        let sid = "11111111-aaaa-bbbb-cccc-000000000002"
+
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_beta", type: "Explore", description: "Find the thing"), home: home)
+        try runHook(payload: subagentStart(sid: sid, agentID: "agent_beta", type: "Explore"), home: home)
+        try runHook(payload: postToolUseAgent(sid: sid, toolUseID: "toolu_beta", type: "Explore", description: "Find the thing"), home: home)
+
+        XCTAssertEqual(
+            agentFiles(in: home, sessionId: sid), ["agent_beta.json"],
+            "PostToolUse(Agent) must not remove a claimed subagent — the agent outlives its dispatching tool call"
+        )
+    }
+
+    /// `SubagentStop` is the only event that means the agent is
+    /// actually done, so it owns the teardown.
+    func testSubagentStopRemovesClaimedEntry() throws {
+        let home = tempHome()
+        let sid = "11111111-aaaa-bbbb-cccc-000000000003"
+
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_gamma", type: "Explore", description: "Find the thing"), home: home)
+        try runHook(payload: subagentStart(sid: sid, agentID: "agent_gamma", type: "Explore"), home: home)
+        try runHook(payload: postToolUseAgent(sid: sid, toolUseID: "toolu_gamma", type: "Explore", description: "Find the thing"), home: home)
+        try runHook(payload: subagentStop(sid: sid, agentID: "agent_gamma", type: "Explore"), home: home)
+
+        XCTAssertEqual(
+            agentFiles(in: home, sessionId: sid), [],
+            "SubagentStop must remove the claimed entry"
+        )
+    }
+
+    /// Safety net for the case where `SubagentStart` never arrives —
+    /// an older `claude`, or a dispatch that fails before the agent
+    /// runs. Without this the pending entry would linger until the
+    /// 30-minute GC and show a phantom agent in the panel.
+    func testPostToolUseAgentRemovesUnclaimedPendingEntry() throws {
+        let home = tempHome()
+        let sid = "11111111-aaaa-bbbb-cccc-000000000004"
+
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_delta", type: "Explore", description: "Find the thing"), home: home)
+        try runHook(payload: postToolUseAgent(sid: sid, toolUseID: "toolu_delta", type: "Explore", description: "Find the thing"), home: home)
+
+        XCTAssertEqual(
+            agentFiles(in: home, sessionId: sid), [],
+            "an unclaimed pending entry must still be swept by PostToolUse"
+        )
+    }
+
+    /// Two agents of the same type dispatched together: both rows must
+    /// survive the claim, keyed on their own agent_ids. Summaries can
+    /// legitimately swap between same-type siblings — the count cannot.
+    func testParallelSameTypeAgentsEachGetTheirOwnEntry() throws {
+        let home = tempHome()
+        let sid = "11111111-aaaa-bbbb-cccc-000000000005"
+
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_one", type: "Explore", description: "First job"), home: home)
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_two", type: "Explore", description: "Second job"), home: home)
+        try runHook(payload: subagentStart(sid: sid, agentID: "agent_one", type: "Explore"), home: home)
+        try runHook(payload: subagentStart(sid: sid, agentID: "agent_two", type: "Explore"), home: home)
+
+        XCTAssertEqual(
+            agentFiles(in: home, sessionId: sid), ["agent_one.json", "agent_two.json"],
+            "each concurrently dispatched agent must claim its own pending entry"
+        )
+    }
+
+    /// The defect live testing caught. `PreToolUse` and `SubagentStart`
+    /// are separate processes fired at the same moment, and the
+    /// `PreToolUse` hook is the slower of the two (~490ms vs ~390ms
+    /// measured — it probes cleat and shells out to lsof), so
+    /// `SubagentStart` routinely runs FIRST. A claim that only ever
+    /// looks backwards finds nothing, `PostToolUse` then sweeps the
+    /// late-arriving pending entry, and the agent never appears at all.
+    func testSubagentStartArrivingBeforePreToolUseStillYieldsOneEntry() throws {
+        let home = tempHome()
+        let sid = "22222222-aaaa-bbbb-cccc-000000000001"
+
+        try runHook(payload: subagentStart(sid: sid, agentID: "agent_early", type: "Explore"), home: home)
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_late", type: "Explore", description: "Late description"), home: home)
+        try runHook(payload: postToolUseAgent(sid: sid, toolUseID: "toolu_late", type: "Explore", description: "Late description"), home: home)
+
+        XCTAssertEqual(
+            agentFiles(in: home, sessionId: sid), ["agent_early.json"],
+            "SubagentStart landing first must not lose the agent — the merge has to work in both directions"
+        )
+        XCTAssertEqual(
+            agentJSON(in: home, sessionId: sid, file: "agent_early.json")["summary"] as? String,
+            "Late description",
+            "PreToolUse arriving second must fill in the description it alone carries"
+        )
+    }
+
+    /// Both hooks launched at once, which is what Claude Code actually
+    /// does. Whoever wins, the session must end up with exactly one row
+    /// for one agent — never two.
+    func testConcurrentPreToolUseAndSubagentStartYieldExactlyOneEntry() throws {
+        for attempt in 0..<5 {
+            let home = tempHome()
+            let sid = "33333333-aaaa-bbbb-cccc-00000000000\(attempt)"
+
+            let a = try startHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_race", type: "Explore", description: "Racy job"), home: home)
+            let b = try startHook(payload: subagentStart(sid: sid, agentID: "agent_race", type: "Explore"), home: home)
+            a.waitUntilExit()
+            b.waitUntilExit()
+
+            XCTAssertEqual(
+                agentFiles(in: home, sessionId: sid), ["agent_race.json"],
+                "attempt \(attempt): concurrent dispatch must converge on exactly one entry keyed by agent_id"
+            )
+        }
+    }
+
+    /// An interrupted agent never gets a SubagentStop, so nothing would
+    /// tear its entry down — it would sit in the panel as a phantom row
+    /// until the 30-minute GC. v27 swept it via PostToolUse; the
+    /// agent_id rework has to keep that guarantee.
+    func testInterruptSweepsClaimedAgents() throws {
+        let home = tempHome()
+        let sid = "44444444-aaaa-bbbb-cccc-000000000001"
+
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_doomed", type: "Explore", description: "Doomed job"), home: home)
+        try runHook(payload: subagentStart(sid: sid, agentID: "agent_doomed", type: "Explore"), home: home)
+        XCTAssertEqual(agentFiles(in: home, sessionId: sid), ["agent_doomed.json"], "precondition: agent is tracked")
+
+        let interrupt = #"{"hook_event_name":"PostToolUseFailure","session_id":"\#(sid)","cwd":"/tmp","tool_name":"Agent","tool_use_id":"toolu_doomed","is_interrupt":true,"tool_input":{"subagent_type":"Explore"}}"#
+        try runHook(payload: interrupt, home: home)
+
+        XCTAssertEqual(
+            agentFiles(in: home, sessionId: sid), [],
+            "a user interrupt kills the whole turn — no agent row may survive it"
         )
     }
 }

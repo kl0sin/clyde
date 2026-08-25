@@ -754,6 +754,42 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(session.activeSubagents[1].summary, "research")
     }
 
+    /// Once SubagentStart claims a pending entry the record is keyed on
+    /// `agent_id` and carries no `tool_use_id` at all — the two events
+    /// share no identifier. Requiring `tool_use_id` would make every
+    /// claimed entry read as malformed and drop the row.
+    func testActiveSubagentsAcceptClaimedEntriesKeyedOnAgentID() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        _ = writeInfoFile(in: dir, sessionId: sid)
+
+        let agentsDir = dir.appendingPathComponent("\(sid)-agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+
+        let now = Date().timeIntervalSince1970
+        // Claimed — SubagentStart re-keyed it and dropped tool_use_id.
+        let claimed = #"{"agent_id":"agent_x","subagent_type":"Explore","summary":"find code","started_at":\#(Int(now - 20))}"#
+        try claimed.write(to: agentsDir.appendingPathComponent("agent_x.json"), atomically: true, encoding: .utf8)
+        // Still pending — dispatched, SubagentStart not in yet.
+        let pending = #"{"tool_use_id":"toolu_y","subagent_type":"general-purpose","summary":"research","started_at":\#(Int(now - 5))}"#
+        try pending.write(to: agentsDir.appendingPathComponent("pending-toolu_y.json"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        let session = try XCTUnwrap(monitor.sessions.first)
+        XCTAssertEqual(
+            session.activeSubagents.map(\.id), ["agent_x", "toolu_y"],
+            "both a claimed (agent_id) and a still-pending (tool_use_id) entry must render"
+        )
+        XCTAssertEqual(session.activeSubagents[0].summary, "find code")
+    }
+
     func testActiveSubagentsGCsEntriesOlderThan30Minutes() async throws {
         let dir = tempStateDir()
         let sid = "s1"

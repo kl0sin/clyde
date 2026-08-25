@@ -6,6 +6,8 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **Subagents no longer disappear from the panel while they're still working.** Clyde tracked each in-flight subagent through the tool call that dispatched it, which held up right until Claude started running agents in the background — those calls return the moment the agent is handed off, so Clyde tore the row out of the panel while the agent carried on working. On a real session the gap measured five seconds; for a long-running agent it's minutes of the panel claiming nothing is in flight. Clyde now follows the agent's own identity instead, so a row appears when the agent is dispatched and disappears when the agent actually finishes. Hook script bumped to v28; existing installs auto-upgrade on Clyde launch.
+
 ## [0.6.0] — 2026-06-09
 
 Clyde can now start itself. A new "Launch at login" toggle in Settings → General registers Clyde with macOS so it's already sitting in your menu bar when you sign in — no more remembering to launch it before kicking off a Claude session.
