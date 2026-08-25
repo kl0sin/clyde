@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 33
+# clyde-hook-version: 34
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -18,8 +18,7 @@
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
 #   PreToolUse          → clears event file + refreshes busy mtime + writes -tool; Agent/Task also → merges the description into the subagent's -agents/ record (pending-<tool_use_id>.json if SubagentStart hasn't landed yet)
-#   WorktreeCreate      → state/<session_id>-worktree (name + path for the row badge)
-#   WorktreeRemove      → removes state/<session_id>-worktree
+#   (any event)         → state/<session_id>-worktree, derived from cwd
 #   UserPromptExpansion → state/<session_id>-command (slash command name for the row badge)
 #   PostToolBatch       → sweeps every tool_use_id in the batch from state/<session_id>-tools/
 #   PostToolUse         → removes its own state/<session_id>-tools/<tool_use_id>.json slot; Agent/Task also → removes an UNCLAIMED state/<session_id>-agents/pending-<tool_use_id>.json only
@@ -718,6 +717,39 @@ else:
     return $MERGE_RC
 }
 
+# --- Worktree badge -------------------------------------------------
+# Derived from the cwd every event carries, deliberately NOT from the
+# WorktreeCreate event. That event is a *delegating* hook: Claude Code
+# hands worktree creation to whatever subscribes to it and requires the
+# created path back on stdout. Clyde is advisory and prints nothing, so
+# subscribing made every EnterWorktree call fail with "hook succeeded
+# but returned no worktree path" — caught on a live session before the
+# v0.7.0 release, hence v32's subscription never shipping. Claude Code
+# puts worktrees under
+# <repo>/.claude/worktrees/<name> and moves the session there, and it
+# does NOT emit CwdChanged when it does, so cwd on the events we already
+# receive is the only live signal. Re-deriving on every event also makes
+# the marker self-correcting: leaving the worktree drops the badge
+# without depending on a teardown event firing at all.
+case "$CWD" in
+    */.claude/worktrees/*)
+        WT_NAME=${CWD#*/.claude/worktrees/}
+        WT_NAME=${WT_NAME%%/*}
+        if [ -n "$WT_NAME" ]; then
+            WT_PATH="${CWD%/.claude/worktrees/*}/.claude/worktrees/$WT_NAME"
+            ESC_WTN=$(printf '%s' "$WT_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            ESC_WTP=$(printf '%s' "$WT_PATH" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            atomic_write "$STATE_DIR/$KEY-worktree" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"name\": \"$ESC_WTN\", \"path\": \"$ESC_WTP\", \"at\": $TIMESTAMP}"
+        else
+            rm -f "$STATE_DIR/$KEY-worktree"
+        fi
+        ;;
+    *)
+        rm -f "$STATE_DIR/$KEY-worktree"
+        ;;
+esac
+
 case "$HOOK_EVENT" in
     SessionStart)
         ESC_SOURCE=$(printf '%s' "$SOURCE" | sed 's/\\/\\\\/g; s/"/\\"/g')
@@ -945,25 +977,6 @@ case "$HOOK_EVENT" in
         if [ -n "$SUB_AGENT_ID" ]; then
             rm -f "$STATE_DIR/$KEY-agents/$SUB_AGENT_ID.json"
         fi
-        ;;
-    WorktreeCreate)
-        # The session moved into a git worktree. Record it so the row can
-        # name the worktree instead of showing an opaque temp path.
-        #
-        # NOTE: payload shape follows the documented worktree_path /
-        # worktree_name fields and is NOT confirmed against a live
-        # session.
-        WT_NAME=$(extract_field worktree_name)
-        WT_PATH=$(extract_field worktree_path)
-        if [ -n "$WT_NAME" ] || [ -n "$WT_PATH" ]; then
-            ESC_WTN=$(printf '%s' "$WT_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
-            ESC_WTP=$(printf '%s' "$WT_PATH" | sed 's/\\/\\\\/g; s/"/\\"/g')
-            atomic_write "$STATE_DIR/$KEY-worktree" \
-                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"name\": \"$ESC_WTN\", \"path\": \"$ESC_WTP\", \"at\": $TIMESTAMP}"
-        fi
-        ;;
-    WorktreeRemove)
-        rm -f "$STATE_DIR/$KEY-worktree"
         ;;
     UserPromptExpansion)
         # A slash command expanded into a prompt. Record its name so the

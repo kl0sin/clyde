@@ -514,33 +514,60 @@ final class HookScriptTests: XCTestCase {
 
     // MARK: - Worktree marker
 
-    /// Payload shape per the documented `WorktreeCreate` fields — NOT
-    /// confirmed live, since firing it means entering a worktree, which
-    /// the EnterWorktree tool forbids without an explicit instruction.
-    func testWorktreeCreateRecordsNameAndPath() throws {
+    /// Derived from the `cwd` that every event carries — NOT from
+    /// `WorktreeCreate`. That event is a *delegating* hook: Claude Code
+    /// hands worktree creation to whatever subscribes and demands the
+    /// created path on stdout, so Clyde subscribing to it broke
+    /// `EnterWorktree` outright (v32, fixed before release). Measured
+    /// live: with the subscription
+    /// gone, entering a worktree lands the session in
+    /// `<repo>/.claude/worktrees/<name>` and every subsequent event
+    /// carries that cwd.
+    func testWorktreeMarkerDerivedFromSessionCwd() throws {
         let home = tempHome()
         let sid = "aaaabbbb-aaaa-bbbb-cccc-000000000001"
-        let payload = #"{"hook_event_name":"WorktreeCreate","session_id":"\#(sid)","cwd":"/tmp","worktree_path":"/repo/.claude/worktrees/fix-race","worktree_name":"fix-race"}"#
+        let cwd = "/repo/.claude/worktrees/fix-race"
 
-        try runHook(payload: payload, home: home)
+        try runHook(
+            payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"\#(cwd)"}"#,
+            home: home)
 
         let url = home.appendingPathComponent(".clyde/state/\(sid)-worktree")
         let data = try XCTUnwrap(try? Data(contentsOf: url))
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(json["name"] as? String, "fix-race")
-        XCTAssertEqual(json["path"] as? String, "/repo/.claude/worktrees/fix-race")
+        XCTAssertEqual(json["path"] as? String, cwd)
     }
 
-    func testWorktreeRemoveClearsMarker() throws {
+    /// The marker is re-derived on every event, so leaving the worktree
+    /// drops the badge without depending on `WorktreeRemove` firing.
+    func testWorktreeMarkerClearedWhenSessionLeavesWorktree() throws {
         let home = tempHome()
         let sid = "aaaabbbb-aaaa-bbbb-cccc-000000000002"
         let url = home.appendingPathComponent(".clyde/state/\(sid)-worktree")
 
-        try runHook(payload: #"{"hook_event_name":"WorktreeCreate","session_id":"\#(sid)","cwd":"/tmp","worktree_path":"/repo/wt","worktree_name":"wt"}"#, home: home)
+        try runHook(
+            payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo/.claude/worktrees/wt","tool_name":"Read","tool_use_id":"toolu_wt1"}"#,
+            home: home)
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "precondition")
 
-        try runHook(payload: #"{"hook_event_name":"WorktreeRemove","session_id":"\#(sid)","cwd":"/tmp","worktree_path":"/repo/wt","worktree_name":"wt"}"#, home: home)
+        try runHook(
+            payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Read","tool_use_id":"toolu_wt2"}"#,
+            home: home)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    /// An ordinary project cwd must not manufacture a badge.
+    func testOrdinaryCwdWritesNoWorktreeMarker() throws {
+        let home = tempHome()
+        let sid = "aaaabbbb-aaaa-bbbb-cccc-000000000003"
+
+        try runHook(
+            payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/Users/dev/_Projects/clyde"}"#,
+            home: home)
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: home.appendingPathComponent(".clyde/state/\(sid)-worktree").path))
     }
 
     // MARK: - Slash command badge

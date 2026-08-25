@@ -64,7 +64,7 @@ enum HookInstaller {
     ///
     /// MUST stay in sync with the `clyde-hook-version` line at the top of
     /// `Clyde/Resources/clyde-hook.sh`.
-    static let currentScriptVersion = 33
+    static let currentScriptVersion = 34
 
     /// Loads the hook script source from the bundled resource. The script
     /// itself lives in `Clyde/Resources/clyde-hook.sh` so it can be edited
@@ -132,7 +132,22 @@ enum HookInstaller {
         "PostToolBatch",
         // v31 additions:
         "UserPromptExpansion",
-        // v32 additions:
+    ]
+
+    /// Events Clyde used to subscribe to and must now actively unsubscribe
+    /// from. `install()` only prunes entries for events in
+    /// `registeredHookEvents`, so dropping a name from that list leaves
+    /// existing installs registered forever — this list is what actually
+    /// removes them on the next launch.
+    ///
+    /// `WorktreeCreate` / `WorktreeRemove` (added in v32, retired in v34
+    /// before either shipped — but dev builds have them on disk):
+    /// `WorktreeCreate` is a *delegating* hook — Claude Code hands worktree
+    /// creation to whatever subscribes to it and requires the created path
+    /// back on stdout. Clyde is advisory and prints nothing, so subscribing
+    /// made every `EnterWorktree` call fail outright. The badge now derives
+    /// from the session's cwd instead.
+    static let retiredHookEvents: [String] = [
         "WorktreeCreate",
         "WorktreeRemove",
     ]
@@ -149,6 +164,7 @@ enum HookInstaller {
         case scriptNotExecutable
         case outdated(installed: Int, current: Int)
         case missingEvents([String])            // events that are missing from settings.json
+        case staleEvents([String])              // retired events still registered in settings.json
         case autoRepairFailed(reason: String)   // we tried to fix it and write threw
         case cleatHooksCapDisabled              // cleat installed but its hooks cap is off
 
@@ -180,6 +196,8 @@ enum HookInstaller {
                 return "Hook script is outdated (v\(installed) → v\(current)). Reinstall to upgrade."
             case .missingEvents(let names):
                 return "Hook isn't registered for: \(names.joined(separator: ", ")). Reinstall to fix."
+            case .staleEvents(let names):
+                return "Hook is still registered for retired events: \(names.joined(separator: ", ")). Reinstall to fix."
             case .autoRepairFailed(let reason):
                 return "Auto-repair failed: \(reason). Open Settings and reinstall manually."
             case .cleatHooksCapDisabled:
@@ -222,6 +240,7 @@ enum HookInstaller {
                  .scriptNotExecutable,
                  .outdated,
                  .missingEvents,
+                 .staleEvents,
                  .autoRepairFailed:
                 return true
             }
@@ -346,6 +365,16 @@ enum HookInstaller {
         let missing = registeredHookEvents.filter { !isRegisteredInSettings(eventName: $0) }
         if !missing.isEmpty {
             return .missingEvents(missing)
+        }
+
+        // Retired events are the mirror image: nothing is missing, so
+        // without this the install reads as healthy and the repair that
+        // prunes them never runs. A `WorktreeCreate` entry left behind
+        // by v0.7.0 keeps breaking the user's EnterWorktree until it is
+        // gone, so it has to count as an unhealthy install.
+        let stale = retiredHookEvents.filter { isRegisteredInSettings(eventName: $0) }
+        if !stale.isEmpty {
+            return .staleEvents(stale)
         }
 
         // Soft advisory — Clyde's own hook install is healthy but
@@ -476,7 +505,7 @@ enum HookInstaller {
         // registered.
         // Notification moved from legacyEvents into registeredHookEvents
         // in v15, so no extra legacy cleanup needed.
-        for eventName in Self.registeredHookEvents {
+        for eventName in Self.registeredHookEvents + Self.retiredHookEvents {
             removeClydeHook(&hooks, eventName: eventName)
         }
         for eventName in Self.registeredHookEvents {
@@ -510,7 +539,7 @@ enum HookInstaller {
             if var hooks = settings["hooks"] as? [String: Any] {
                 // Clean up all registered events (Notification moved from
                 // legacy into registeredHookEvents in v15).
-                for eventName in Self.registeredHookEvents {
+                for eventName in Self.registeredHookEvents + Self.retiredHookEvents {
                     removeClydeHook(&hooks, eventName: eventName)
                 }
                 settings["hooks"] = hooks

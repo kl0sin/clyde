@@ -208,6 +208,48 @@ final class HookInstallerTests: XCTestCase {
         }
     }
 
+    /// A retired event left over in settings is not "missing", so the
+    /// health check reported the install as perfectly healthy and
+    /// `install()` — the only thing that prunes it — never ran. Measured
+    /// live: a machine carrying the v32 registration kept it — and its
+    /// broken `EnterWorktree` — after upgrading to the fixed build,
+    /// because nothing was missing and the repair never ran.
+    func testHealthCheckDetectsRetiredEventStillRegistered() throws {
+        try HookInstaller.install()
+
+        var settings = try JSONSerialization.jsonObject(
+            with: try Data(contentsOf: AppPaths.claudeSettingsFile)) as! [String: Any]
+        var hooks = settings["hooks"] as! [String: Any]
+        hooks["WorktreeCreate"] = [
+            ["hooks": [["type": "command", "command": AppPaths.clydeHookScript.path]]]
+        ]
+        settings["hooks"] = hooks
+        try JSONSerialization.data(withJSONObject: settings).write(to: AppPaths.claudeSettingsFile)
+
+        guard case .staleEvents(let names) = HookInstaller.healthCheck() else {
+            return XCTFail("Expected .staleEvents health issue, got \(String(describing: HookInstaller.healthCheck()))")
+        }
+        XCTAssertEqual(names, ["WorktreeCreate"])
+    }
+
+    /// And the repair must actually clear it, otherwise the banner
+    /// re-appears on every launch.
+    func testReinstallClearsRetiredEventAndReturnsToHealthy() throws {
+        try HookInstaller.install()
+        var settings = try JSONSerialization.jsonObject(
+            with: try Data(contentsOf: AppPaths.claudeSettingsFile)) as! [String: Any]
+        var hooks = settings["hooks"] as! [String: Any]
+        hooks["WorktreeCreate"] = [
+            ["hooks": [["type": "command", "command": AppPaths.clydeHookScript.path]]]
+        ]
+        settings["hooks"] = hooks
+        try JSONSerialization.data(withJSONObject: settings).write(to: AppPaths.claudeSettingsFile)
+
+        try HookInstaller.install()
+
+        XCTAssertNil(HookInstaller.healthCheck())
+    }
+
     // MARK: - Regression tests for the matcher / rename / coexistence bugs
     //
     // Each of these covers a real-world failure mode we hit by hand and
@@ -393,6 +435,52 @@ final class HookInstallerTests: XCTestCase {
     /// Healthy hook install + cleat installed with hooks cap disabled
     /// → healthCheck returns the cleat advisory. This is the
     /// integration test for the new advisory branch.
+    // MARK: - Retired worktree subscription
+
+    /// `WorktreeCreate` is a *delegating* hook: Claude Code hands
+    /// worktree creation to whatever subscribes and requires the created
+    /// path on stdout. Clyde is advisory and prints nothing, so
+    /// subscribing to it made every `EnterWorktree` call fail with
+    /// "hook succeeded but returned no worktree path".
+    func testWorktreeEventsAreNotRegistered() {
+        XCTAssertFalse(HookInstaller.registeredHookEvents.contains("WorktreeCreate"))
+        XCTAssertFalse(HookInstaller.registeredHookEvents.contains("WorktreeRemove"))
+    }
+
+    /// Dropping the events from the registration list is not enough on
+    /// its own: install only prunes events it still knows about, so a
+    /// v0.7.0 install would keep its stale `WorktreeCreate` entry — and
+    /// its broken `EnterWorktree` — forever after upgrading.
+    func testInstallPrunesRetiredWorktreeRegistration() throws {
+        let stale: [String: Any] = [
+            "hooks": [
+                "WorktreeCreate": [
+                    ["hooks": [["type": "command", "command": AppPaths.clydeHookScript.path]]],
+                    ["hooks": [["type": "command", "command": "/other/observer.sh"]]],
+                ],
+                "WorktreeRemove": [
+                    ["hooks": [["type": "command", "command": AppPaths.clydeHookScript.path]]]
+                ],
+            ]
+        ]
+        try FileManager.default.createDirectory(at: AppPaths.claudeDir, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: stale).write(to: AppPaths.claudeSettingsFile)
+
+        try HookInstaller.install()
+
+        let parsed = try JSONSerialization.jsonObject(
+            with: try Data(contentsOf: AppPaths.claudeSettingsFile)) as! [String: Any]
+        let hooks = parsed["hooks"] as! [String: Any]
+
+        let create = hooks["WorktreeCreate"] as? [[String: Any]] ?? []
+        let createCommands = create.flatMap { ($0["hooks"] as? [[String: Any]] ?? []) }
+            .compactMap { $0["command"] as? String }
+        XCTAssertEqual(createCommands, ["/other/observer.sh"],
+                       "Clyde's entry must go; a third party's must stay")
+        XCTAssertNil(hooks["WorktreeRemove"],
+                     "Event with only Clyde's entry should be dropped entirely")
+    }
+
     func testHealthCheckDetectsCleatHooksCapDisabled() throws {
         try HookInstaller.install()
         CleatProbe.cleatOnPathOverride = true
