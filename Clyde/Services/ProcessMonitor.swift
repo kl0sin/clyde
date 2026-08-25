@@ -481,7 +481,7 @@ final class ProcessMonitor: ObservableObject {
             existing.activeToolCount = hookToolCountByPID[pid] ?? 0
             existing.lastMessage = hookLastMessageByPID[pid]
             existing.activeCommand = hookCommandByPID[pid]
-            existing.worktreeName = worktreeName(forPID: pid, cwd: existing.workingDirectory)
+            existing.worktreeName = worktreeName(forPID: pid)
             existing.activeSubagents = hookAgentsByPID[pid] ?? []
             return existing
         }
@@ -506,7 +506,7 @@ final class ProcessMonitor: ObservableObject {
             revived.activeToolCount = hookToolCountByPID[pid] ?? 0
             revived.lastMessage = hookLastMessageByPID[pid]
             revived.activeCommand = hookCommandByPID[pid]
-            revived.worktreeName = worktreeName(forPID: pid, cwd: revived.workingDirectory)
+            revived.worktreeName = worktreeName(forPID: pid)
             revived.activeSubagents = hookAgentsByPID[pid] ?? []
             return revived
         }
@@ -526,7 +526,7 @@ final class ProcessMonitor: ObservableObject {
         fresh.activeToolCount = hookToolCountByPID[pid] ?? 0
         fresh.lastMessage = hookLastMessageByPID[pid]
         fresh.activeCommand = hookCommandByPID[pid]
-        fresh.worktreeName = worktreeName(forPID: pid, cwd: fresh.workingDirectory)
+        fresh.worktreeName = worktreeName(forPID: pid)
         fresh.activeSubagents = hookAgentsByPID[pid] ?? []
         return fresh
     }
@@ -830,13 +830,16 @@ final class ProcessMonitor: ObservableObject {
         hookWorktreeByPID = worktrees
     }
 
-    /// The worktree name for `pid`, but only when the session is actually
-    /// working inside it — a session that left the worktree keeps the
-    /// marker until SessionEnd, and must not keep the badge.
-    private func worktreeName(forPID pid: pid_t, cwd: String) -> String {
-        guard let wt = hookWorktreeByPID[pid] else { return "" }
-        guard !wt.path.isEmpty else { return wt.name }
-        return cwd == wt.path || cwd.hasPrefix(wt.path + "/") ? wt.name : ""
+    /// The worktree name for `pid`. The marker's presence is
+    /// authoritative and deliberately not re-checked against `cwd`: the
+    /// hook re-derives the marker from the live cwd on every event and
+    /// deletes it as soon as the session is outside, so "marker exists"
+    /// already means "inside the worktree right now". Our own `cwd` is
+    /// the unreliable half — entering a worktree emits no `CwdChanged`,
+    /// so `-info` keeps the parent repo's path for the whole session and
+    /// gating on it dropped the badge on every real worktree session.
+    private func worktreeName(forPID pid: pid_t) -> String {
+        hookWorktreeByPID[pid]?.name ?? ""
     }
 
     /// Reads `state/<sid>-command` markers written by UserPromptExpansion.
@@ -1069,7 +1072,7 @@ final class ProcessMonitor: ObservableObject {
                 updated[index].activeCommand = newCommand
                 changed = true
             }
-            let newWorktree = worktreeName(forPID: pid, cwd: updated[index].workingDirectory)
+            let newWorktree = worktreeName(forPID: pid)
             if updated[index].worktreeName != newWorktree {
                 updated[index].worktreeName = newWorktree
                 changed = true

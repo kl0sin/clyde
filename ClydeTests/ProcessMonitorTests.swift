@@ -922,10 +922,18 @@ final class ProcessMonitorTests: XCTestCase {
     /// The badge names the worktree only when the session is actually
     /// inside it — a marker left by a worktree the session has since
     /// left must not keep labelling the row.
-    func testWorktreeNameAppliesOnlyWhenCwdIsInsideIt() async throws {
+    /// The marker's presence is authoritative — deliberately NOT gated on
+    /// the session's cwd. Entering a worktree emits no `CwdChanged`, so
+    /// `-info` keeps the parent repo's path for the entire session; a cwd
+    /// check would therefore drop the badge on every real worktree
+    /// session. Measured in the panel: the marker read `panel-demo` while
+    /// the row showed no badge at all. The hook rewrites or deletes the
+    /// marker on every event, so "marker exists" already means "session is
+    /// inside the worktree right now".
+    func testWorktreeBadgeShowsEvenWhenInfoCwdIsStale() async throws {
         let dir = tempStateDir()
         let sid = "s1"
-        let pid = writeInfoFile(in: dir, sessionId: sid, cwd: "/repo/.claude/worktrees/fix-race")
+        let pid = writeInfoFile(in: dir, sessionId: sid, cwd: "/repo")
         try #"{"session_id":"\#(sid)","pid":\#(pid),"name":"fix-race","path":"/repo/.claude/worktrees/fix-race","at":1}"#
             .write(to: dir.appendingPathComponent("\(sid)-worktree"), atomically: true, encoding: .utf8)
 
@@ -933,18 +941,22 @@ final class ProcessMonitorTests: XCTestCase {
             shell: emptyShell(), pollingInterval: 1, stateDir: dir,
             isLiveClaudeProcessCheck: { _ in true })
         await monitor.poll()
-        XCTAssertEqual(try XCTUnwrap(monitor.sessions.first).worktreeName, "fix-race")
 
-        let dir2 = tempStateDir()
-        let pid2 = writeInfoFile(in: dir2, sessionId: sid, cwd: "/repo")
-        try #"{"session_id":"\#(sid)","pid":\#(pid2),"name":"fix-race","path":"/repo/.claude/worktrees/fix-race","at":1}"#
-            .write(to: dir2.appendingPathComponent("\(sid)-worktree"), atomically: true, encoding: .utf8)
-        let monitor2 = ProcessMonitor(
-            shell: emptyShell(), pollingInterval: 1, stateDir: dir2,
+        XCTAssertEqual(try XCTUnwrap(monitor.sessions.first).worktreeName, "fix-race")
+    }
+
+    /// And no marker means no badge — the hook removed it because the
+    /// session left the worktree.
+    func testWorktreeBadgeAbsentWithoutMarker() async throws {
+        let dir = tempStateDir()
+        _ = writeInfoFile(in: dir, sessionId: "s1", cwd: "/repo")
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
             isLiveClaudeProcessCheck: { _ in true })
-        await monitor2.poll()
-        XCTAssertEqual(try XCTUnwrap(monitor2.sessions.first).worktreeName, "",
-                       "cwd outside the worktree must not carry the badge")
+        await monitor.poll()
+
+        XCTAssertEqual(try XCTUnwrap(monitor.sessions.first).worktreeName, "")
     }
 
     func testActiveSubagentsGCsEntriesOlderThan30Minutes() async throws {
