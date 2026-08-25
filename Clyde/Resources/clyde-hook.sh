@@ -173,6 +173,34 @@ compute_tool_summary() {
             raw=$(extract_tool_input_field query)
             truncate_summary "$raw" 40
             ;;
+        Skill)
+            # Skill names are already short and namespaced
+            # (`superpowers:brainstorming`) — no truncation needed.
+            extract_tool_input_field skill
+            ;;
+        Workflow)
+            # A named workflow carries `name`; an inline or file-backed
+            # one only has `scriptPath`, whose basename is the next most
+            # recognisable thing. An inline `script` has neither, and
+            # falls through to the empty summary.
+            raw=$(extract_tool_input_field name)
+            if [ -z "$raw" ]; then
+                raw=$(extract_tool_input_field scriptPath)
+                raw=${raw##*/}
+            fi
+            truncate_summary "$raw" 40
+            ;;
+        Artifact)
+            # Title when the caller set one, otherwise the file being
+            # published. Non-publish actions (read/list/comments) have
+            # neither and render as a bare tool name.
+            raw=$(extract_tool_input_field title)
+            if [ -z "$raw" ]; then
+                raw=$(extract_tool_input_field file_path)
+                raw=${raw##*/}
+            fi
+            truncate_summary "$raw" 40
+            ;;
         *)
             # TodoWrite, MCP tools, and any future built-in fall through
             # to the empty-summary path. Swift renders just tool_name.

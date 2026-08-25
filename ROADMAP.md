@@ -59,7 +59,7 @@ Clyde's hook coverage stopped growing at v0.4.0 while Claude Code kept shipping 
 - [ ] Make parallel tool calls honest via `PostToolBatch` — the `-tool` marker is single-slot and last-writer-wins, so concurrent calls render as a random one of them !md #hooks #ux
 - [ ] One-line preview of Claude's last reply from `Stop.last_assistant_message` — the field already arrives and the hook discards it !lo #hooks #ux
 - [ ] Worktree badge driven by `WorktreeCreate` / `WorktreeRemove`, styled like the existing cleat capsule — worktree sessions currently show an opaque temp path !lo #hooks #ux
-- [ ] Extend the tool-summary whitelist to `Skill`, `Workflow` and `Artifact` — all three are common now and all three render with an empty summary !lo #hooks
+- [x] Tool-summary whitelist extended to `Skill` (skill name), `Workflow` (`name`, falling back to the `scriptPath` basename) and `Artifact` (`title`, falling back to the published file's basename) — all three previously rendered as a bare tool name. Verified live: a real `Skill` call produced `summary='superpowers:verification-before-completion'` in the `-tool` marker !lo #hooks
 
 ## Phase: v0.7.x — Stabilization
 

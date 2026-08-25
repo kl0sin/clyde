@@ -126,6 +126,16 @@ final class HookScriptTests: XCTestCase {
         return files.filter { $0.hasSuffix(".json") }.sorted()
     }
 
+    /// Contents of the `-tool` marker the panel renders as
+    /// `<Tool> · <summary>` on the session row.
+    private func toolJSON(in home: URL, sessionId: String) -> [String: Any] {
+        let url = home.appendingPathComponent(".clyde/state/\(sessionId)-tool")
+        guard let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [:] }
+        return json
+    }
+
     private func agentJSON(in home: URL, sessionId: String, file: String) -> [String: Any] {
         let url = agentsDir(in: home, sessionId: sessionId).appendingPathComponent(file)
         guard let data = try? Data(contentsOf: url),
@@ -463,5 +473,67 @@ final class HookScriptTests: XCTestCase {
             FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path),
             "TeammateIdle must stay out of the attention pipeline"
         )
+    }
+
+    // MARK: - Tool summary whitelist
+
+    /// `Skill`, `Workflow` and `Artifact` all fell through to the
+    /// empty-summary branch, so the row rendered a bare tool name while
+    /// the interesting part — which skill, which workflow, which page —
+    /// sat unused in tool_input.
+    func testSkillToolSummaryIsTheSkillName() throws {
+        let home = tempHome()
+        let sid = "66666666-aaaa-bbbb-cccc-000000000001"
+        let payload = #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/tmp","tool_name":"Skill","tool_use_id":"t1","tool_input":{"skill":"superpowers:brainstorming","args":"something"}}"#
+
+        try runHook(payload: payload, home: home)
+
+        let json = toolJSON(in: home, sessionId: sid)
+        XCTAssertEqual(json["tool_name"] as? String, "Skill")
+        XCTAssertEqual(json["summary"] as? String, "superpowers:brainstorming")
+    }
+
+    func testWorkflowToolSummaryIsTheWorkflowName() throws {
+        let home = tempHome()
+        let sid = "66666666-aaaa-bbbb-cccc-000000000002"
+        let payload = #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/tmp","tool_name":"Workflow","tool_use_id":"t2","tool_input":{"name":"review-changes"}}"#
+
+        try runHook(payload: payload, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "review-changes")
+    }
+
+    /// A Workflow invoked with an inline script has no name — fall back
+    /// to the script file's basename rather than rendering nothing.
+    func testWorkflowToolSummaryFallsBackToScriptBasename() throws {
+        let home = tempHome()
+        let sid = "66666666-aaaa-bbbb-cccc-000000000003"
+        let payload = #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/tmp","tool_name":"Workflow","tool_use_id":"t3","tool_input":{"scriptPath":"/tmp/wf/find-flaky-tests.js"}}"#
+
+        try runHook(payload: payload, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "find-flaky-tests.js")
+    }
+
+    func testArtifactToolSummaryIsTheTitle() throws {
+        let home = tempHome()
+        let sid = "66666666-aaaa-bbbb-cccc-000000000004"
+        let payload = #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/tmp","tool_name":"Artifact","tool_use_id":"t4","tool_input":{"file_path":"/tmp/report.html","title":"Quarterly Report"}}"#
+
+        try runHook(payload: payload, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "Quarterly Report")
+    }
+
+    /// Most Artifact calls carry no title — the file being published is
+    /// the next most useful identifier.
+    func testArtifactToolSummaryFallsBackToFileBasename() throws {
+        let home = tempHome()
+        let sid = "66666666-aaaa-bbbb-cccc-000000000005"
+        let payload = #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/tmp","tool_name":"Artifact","tool_use_id":"t5","tool_input":{"file_path":"/tmp/dashboard.html"}}"#
+
+        try runHook(payload: payload, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "dashboard.html")
     }
 }
