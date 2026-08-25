@@ -919,6 +919,34 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(monitor.sessions.first).activeCommand, "code-review")
     }
 
+    /// The badge names the worktree only when the session is actually
+    /// inside it — a marker left by a worktree the session has since
+    /// left must not keep labelling the row.
+    func testWorktreeNameAppliesOnlyWhenCwdIsInsideIt() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        let pid = writeInfoFile(in: dir, sessionId: sid, cwd: "/repo/.claude/worktrees/fix-race")
+        try #"{"session_id":"\#(sid)","pid":\#(pid),"name":"fix-race","path":"/repo/.claude/worktrees/fix-race","at":1}"#
+            .write(to: dir.appendingPathComponent("\(sid)-worktree"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+        XCTAssertEqual(try XCTUnwrap(monitor.sessions.first).worktreeName, "fix-race")
+
+        let dir2 = tempStateDir()
+        let pid2 = writeInfoFile(in: dir2, sessionId: sid, cwd: "/repo")
+        try #"{"session_id":"\#(sid)","pid":\#(pid2),"name":"fix-race","path":"/repo/.claude/worktrees/fix-race","at":1}"#
+            .write(to: dir2.appendingPathComponent("\(sid)-worktree"), atomically: true, encoding: .utf8)
+        let monitor2 = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir2,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor2.poll()
+        XCTAssertEqual(try XCTUnwrap(monitor2.sessions.first).worktreeName, "",
+                       "cwd outside the worktree must not carry the badge")
+    }
+
     func testActiveSubagentsGCsEntriesOlderThan30Minutes() async throws {
         let dir = tempStateDir()
         let sid = "s1"

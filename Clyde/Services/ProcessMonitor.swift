@@ -74,6 +74,7 @@ final class ProcessMonitor: ObservableObject {
     private var hookLastMessageByPID: [pid_t: String] = [:]
     private var hookToolCountByPID: [pid_t: Int] = [:]
     private var hookCommandByPID: [pid_t: String] = [:]
+    private var hookWorktreeByPID: [pid_t: (name: String, path: String)] = [:]
 
     /// Active Task-dispatched subagents per PID, populated from `-agents/*.json` markers.
     /// Inner array is sorted by `startedAt` ascending.
@@ -323,6 +324,7 @@ final class ProcessMonitor: ObservableObject {
         refreshHookPlans()
         refreshHookLastMessages()
         refreshHookCommands()
+        refreshHookWorktrees()
         refreshHookAgents()
 
         let pids = await discoverPIDs()
@@ -482,6 +484,7 @@ final class ProcessMonitor: ObservableObject {
             existing.activeToolCount = hookToolCountByPID[pid] ?? 0
             existing.lastMessage = hookLastMessageByPID[pid]
             existing.activeCommand = hookCommandByPID[pid]
+            existing.worktreeName = worktreeName(forPID: pid, cwd: existing.workingDirectory)
             existing.activeSubagents = hookAgentsByPID[pid] ?? []
             return existing
         }
@@ -506,6 +509,7 @@ final class ProcessMonitor: ObservableObject {
             revived.activeToolCount = hookToolCountByPID[pid] ?? 0
             revived.lastMessage = hookLastMessageByPID[pid]
             revived.activeCommand = hookCommandByPID[pid]
+            revived.worktreeName = worktreeName(forPID: pid, cwd: revived.workingDirectory)
             revived.activeSubagents = hookAgentsByPID[pid] ?? []
             return revived
         }
@@ -526,6 +530,7 @@ final class ProcessMonitor: ObservableObject {
         fresh.activeToolCount = hookToolCountByPID[pid] ?? 0
         fresh.lastMessage = hookLastMessageByPID[pid]
         fresh.activeCommand = hookCommandByPID[pid]
+        fresh.worktreeName = worktreeName(forPID: pid, cwd: fresh.workingDirectory)
         fresh.activeSubagents = hookAgentsByPID[pid] ?? []
         return fresh
     }
@@ -831,6 +836,43 @@ final class ProcessMonitor: ObservableObject {
         return changed
     }
 
+    /// Reads `state/<sid>-worktree` markers written by WorktreeCreate.
+    private func refreshHookWorktrees() {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: stateDir, includingPropertiesForKeys: nil
+        ) else {
+            hookWorktreeByPID = [:]
+            return
+        }
+        var worktrees: [pid_t: (name: String, path: String)] = [:]
+        for file in files where file.lastPathComponent.hasSuffix("-worktree") {
+            guard let data = try? Data(contentsOf: file),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let pidValue = json["pid"] as? Int,
+                  let name = json["name"] as? String,
+                  !name.isEmpty else {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            let pid = pid_t(pidValue)
+            if kill(pid, 0) != 0 {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            worktrees[pid] = (name: name, path: (json["path"] as? String) ?? "")
+        }
+        hookWorktreeByPID = worktrees
+    }
+
+    /// The worktree name for `pid`, but only when the session is actually
+    /// working inside it — a session that left the worktree keeps the
+    /// marker until SessionEnd, and must not keep the badge.
+    private func worktreeName(forPID pid: pid_t, cwd: String) -> String {
+        guard let wt = hookWorktreeByPID[pid] else { return "" }
+        guard !wt.path.isEmpty else { return wt.name }
+        return cwd == wt.path || cwd.hasPrefix(wt.path + "/") ? wt.name : ""
+    }
+
     /// Reads `state/<sid>-command` markers written by UserPromptExpansion.
     @discardableResult
     private func refreshHookCommands() -> Bool {
@@ -978,6 +1020,7 @@ final class ProcessMonitor: ObservableObject {
         let planChanged = refreshHookPlans()
         let lastMsgChanged = refreshHookLastMessages()
         _ = refreshHookCommands()
+        refreshHookWorktrees()
         let agentsChanged = refreshHookAgents()
         _ = lastMsgChanged
 
@@ -1064,6 +1107,11 @@ final class ProcessMonitor: ObservableObject {
             let newCommand = hookCommandByPID[pid]
             if updated[index].activeCommand != newCommand {
                 updated[index].activeCommand = newCommand
+                changed = true
+            }
+            let newWorktree = worktreeName(forPID: pid, cwd: updated[index].workingDirectory)
+            if updated[index].worktreeName != newWorktree {
+                updated[index].worktreeName = newWorktree
                 changed = true
             }
             let newAgents = hookAgentsByPID[pid] ?? []

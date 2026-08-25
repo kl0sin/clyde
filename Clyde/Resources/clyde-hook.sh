@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 31
+# clyde-hook-version: 32
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -18,6 +18,8 @@
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
 #   PreToolUse          → clears event file + refreshes busy mtime + writes -tool; Agent/Task also → merges the description into the subagent's -agents/ record (pending-<tool_use_id>.json if SubagentStart hasn't landed yet)
+#   WorktreeCreate      → state/<session_id>-worktree (name + path for the row badge)
+#   WorktreeRemove      → removes state/<session_id>-worktree
 #   UserPromptExpansion → state/<session_id>-command (slash command name for the row badge)
 #   PostToolBatch       → sweeps every tool_use_id in the batch from state/<session_id>-tools/
 #   PostToolUse         → removes its own state/<session_id>-tools/<tool_use_id>.json slot; Agent/Task also → removes an UNCLAIMED state/<session_id>-agents/pending-<tool_use_id>.json only
@@ -725,7 +727,7 @@ case "$HOOK_EVENT" in
     SessionEnd)
         rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$STATE_DIR/$KEY-lastmsg" "$EVENTS_DIR/$KEY.json"
         rm -rf "$STATE_DIR/$KEY-agents" "$STATE_DIR/$KEY-tools"
-        rm -f "$STATE_DIR/$KEY-command"
+        rm -f "$STATE_DIR/$KEY-command" "$STATE_DIR/$KEY-worktree"
         ;;
     PermissionRequest)
         atomic_write "$EVENTS_DIR/$KEY.json" \
@@ -947,6 +949,25 @@ case "$HOOK_EVENT" in
         if [ -n "$SUB_AGENT_ID" ]; then
             rm -f "$STATE_DIR/$KEY-agents/$SUB_AGENT_ID.json"
         fi
+        ;;
+    WorktreeCreate)
+        # The session moved into a git worktree. Record it so the row can
+        # name the worktree instead of showing an opaque temp path.
+        #
+        # NOTE: payload shape follows the documented worktree_path /
+        # worktree_name fields and is NOT confirmed against a live
+        # session.
+        WT_NAME=$(extract_field worktree_name)
+        WT_PATH=$(extract_field worktree_path)
+        if [ -n "$WT_NAME" ] || [ -n "$WT_PATH" ]; then
+            ESC_WTN=$(printf '%s' "$WT_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            ESC_WTP=$(printf '%s' "$WT_PATH" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            atomic_write "$STATE_DIR/$KEY-worktree" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"name\": \"$ESC_WTN\", \"path\": \"$ESC_WTP\", \"at\": $TIMESTAMP}"
+        fi
+        ;;
+    WorktreeRemove)
+        rm -f "$STATE_DIR/$KEY-worktree"
         ;;
     UserPromptExpansion)
         # A slash command expanded into a prompt. Record its name so the

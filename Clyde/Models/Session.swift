@@ -98,6 +98,9 @@ struct Session: Identifiable, Equatable {
     /// `UserPromptExpansion`. Cleared when the turn ends. Nil for
     /// ordinary typed prompts.
     var activeCommand: String? = nil
+    /// Name of the git worktree this session is working inside, from
+    /// `WorktreeCreate`. Empty when the session is in a normal checkout.
+    var worktreeName: String = ""
     /// Non-nil while a plan-then-execute run is in progress. Populated
     /// by ProcessMonitor from -plan marker files written by the
     /// TaskCreated / TaskCompleted hook events. Cleared on SessionEnd

@@ -512,6 +512,37 @@ final class HookScriptTests: XCTestCase {
         )
     }
 
+    // MARK: - Worktree marker
+
+    /// Payload shape per the documented `WorktreeCreate` fields — NOT
+    /// confirmed live, since firing it means entering a worktree, which
+    /// the EnterWorktree tool forbids without an explicit instruction.
+    func testWorktreeCreateRecordsNameAndPath() throws {
+        let home = tempHome()
+        let sid = "aaaabbbb-aaaa-bbbb-cccc-000000000001"
+        let payload = #"{"hook_event_name":"WorktreeCreate","session_id":"\#(sid)","cwd":"/tmp","worktree_path":"/repo/.claude/worktrees/fix-race","worktree_name":"fix-race"}"#
+
+        try runHook(payload: payload, home: home)
+
+        let url = home.appendingPathComponent(".clyde/state/\(sid)-worktree")
+        let data = try XCTUnwrap(try? Data(contentsOf: url))
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["name"] as? String, "fix-race")
+        XCTAssertEqual(json["path"] as? String, "/repo/.claude/worktrees/fix-race")
+    }
+
+    func testWorktreeRemoveClearsMarker() throws {
+        let home = tempHome()
+        let sid = "aaaabbbb-aaaa-bbbb-cccc-000000000002"
+        let url = home.appendingPathComponent(".clyde/state/\(sid)-worktree")
+
+        try runHook(payload: #"{"hook_event_name":"WorktreeCreate","session_id":"\#(sid)","cwd":"/tmp","worktree_path":"/repo/wt","worktree_name":"wt"}"#, home: home)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), "precondition")
+
+        try runHook(payload: #"{"hook_event_name":"WorktreeRemove","session_id":"\#(sid)","cwd":"/tmp","worktree_path":"/repo/wt","worktree_name":"wt"}"#, home: home)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
     // MARK: - Slash command badge
 
     /// Payload shape per the documented `UserPromptExpansion` fields —

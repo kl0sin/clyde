@@ -98,6 +98,10 @@ struct SessionRow: View {
                             CommandBadge(name: command)
                         }
 
+                        if !session.worktreeName.isEmpty {
+                            WorktreeBadge(name: session.worktreeName)
+                        }
+
                         if let suffix = disambiguator {
                             Text(suffix)
                                 .font(.system(size: 10, weight: .medium))
@@ -556,6 +560,36 @@ private struct PlanBadge: View {
 /// runs inside a Cleat Docker sandbox. The container name is exposed
 /// via `.help` so hover reveals which container the session belongs
 /// to — useful when several cleat projects are running in parallel.
+/// Names the git worktree a session is working inside — otherwise the
+/// row shows an opaque `.claude/worktrees/…` path and nothing else.
+private struct WorktreeBadge: View {
+    let name: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 9, weight: .semibold))
+            Text(name)
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+        }
+        .foregroundStyle(accent)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(accent.opacity(0.12))
+        .clipShape(Capsule())
+        .fixedSize(horizontal: true, vertical: false)
+        .help("Worktree \(name)")
+        .accessibilityLabel("worktree \(name)")
+    }
+
+    private var accent: Color {
+        // Soft green — the fourth badge colour, distinct from the purple
+        // plan, cyan cleat and amber command capsules.
+        Color(red: 0.55, green: 0.80, blue: 0.60)
+    }
+}
+
 /// The slash command driving the current turn. Long autonomous runs
 /// (`/loop`, `/code-review`) otherwise render as an anonymous "Working".
 private struct CommandBadge: View {
