@@ -6,6 +6,8 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **Agent-team teammates that go idle now show as idle.** When a teammate on an agent team is about to go idle, its row in the panel settles instead of pretending work is still in progress — the little mascot stops animating, the duration stops counting, and the label reads `idle`. The row stays put, so you can still see who is on the team and what they were doing. This is intentionally a quiet state and not an alert: Clyde won't light up the "needs your input" badge for it until we know how often the event really fires. Hook script bumped to v29; existing installs auto-upgrade on Clyde launch.
+
 - **Subagents no longer disappear from the panel while they're still working.** Clyde tracked each in-flight subagent through the tool call that dispatched it, which held up right until Claude started running agents in the background — those calls return the moment the agent is handed off, so Clyde tore the row out of the panel while the agent carried on working. On a real session the gap measured five seconds; for a long-running agent it's minutes of the panel claiming nothing is in flight. Clyde now follows the agent's own identity instead, so a row appears when the agent is dispatched and disappears when the agent actually finishes. Hook script bumped to v28; existing installs auto-upgrade on Clyde launch.
 
 ## [0.6.0] — 2026-06-09

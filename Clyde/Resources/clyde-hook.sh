@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 28
+# clyde-hook-version: 29
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -25,6 +25,7 @@
 #   ElicitationResult   → clears event file (MCP input answered)
 #   SubagentStart       → merges with PreToolUse's record into state/<session_id>-agents/<agent_id>.json (either event may arrive first); also legacy -subagent (deprecated)
 #   SubagentStop        → removes legacy -subagent + state/<session_id>-agents/<agent_id>.json (the agent outlives its dispatching tool call)
+#   TeammateIdle        → flags an EXISTING state/<session_id>-agents/<agent_id>.json as idle (never creates one; not an attention signal)
 #   TaskCreated         → bumps task_count in state/<session_id>-plan
 #   TaskCompleted       → bumps done_count in state/<session_id>-plan (if file exists)
 #   Notification        → log only (no state files)
@@ -582,6 +583,9 @@ release_agents_lock() {
 #                or open a record awaiting its description.
 #   mode=pre   : id is tool_use_id — fill the description into a record
 #                SubagentStart already opened, or write pending-<id>.
+#   mode=idle  : id is agent_id — flag an EXISTING record as idle. Never
+#                creates one; returns non-zero when there is nothing to
+#                annotate.
 merge_agent_record() {
     command -v python3 >/dev/null 2>&1 || return 1
     acquire_agents_lock || return 1
@@ -630,7 +634,18 @@ pending = sorted(glob.glob(os.path.join(d, 'pending-*.json')))
 claimed = sorted(p for p in glob.glob(os.path.join(d, '*.json'))
                  if not os.path.basename(p).startswith('pending-'))
 
-if mode == 'start':
+if mode == 'idle':
+    # Annotate only. A teammate we never saw start gets no record —
+    # inventing one from an idle notification is how phantom rows are
+    # born. Exit non-zero so the caller can log it and move on.
+    path = os.path.join(d, ident + '.json')
+    rec = load(path)
+    if rec is None:
+        raise SystemExit(1)
+    rec['idle'] = True
+    rec['idle_at'] = ts
+    save(path, rec)
+elif mode == 'start':
     hit = oldest(pending, True)
     if hit:
         _, path, rec = hit
@@ -875,6 +890,23 @@ case "$HOOK_EVENT" in
         SUB_AGENT_ID=$(extract_field agent_id)
         if [ -n "$SUB_AGENT_ID" ]; then
             rm -f "$STATE_DIR/$KEY-agents/$SUB_AGENT_ID.json"
+        fi
+        ;;
+    TeammateIdle)
+        # An agent-team teammate is about to go idle. TeammateIdle
+        # addresses it by agent_id — the same key space the subagent
+        # records already live in — so we annotate in place.
+        #
+        # Deliberately NOT routed into the attention pipeline. v0.5.1
+        # mapped an ambiguous, attention-sounding event onto the badge on
+        # the same reasoning and v0.5.2 had to revert it a day later once
+        # it turned out to fire every turn. Until this event's real
+        # frequency is known, idle is a quiet state on the row, not an
+        # alert. Promoting it later is a one-line change; un-shipping a
+        # false-positive badge is a hotfix release.
+        AGENT_ID=$(extract_field agent_id)
+        if [ -n "$AGENT_ID" ]; then
+            merge_agent_record idle "$AGENT_ID" "" "" || true
         fi
         ;;
     TaskCreated)

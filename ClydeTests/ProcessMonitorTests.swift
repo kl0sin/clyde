@@ -790,6 +790,36 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(session.activeSubagents[0].summary, "find code")
     }
 
+    /// A teammate flagged idle by TeammateIdle stays on the row but
+    /// stops reading as live work.
+    func testActiveSubagentsCarryIdleFlag() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        _ = writeInfoFile(in: dir, sessionId: sid)
+
+        let agentsDir = dir.appendingPathComponent("\(sid)-agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+
+        let now = Date().timeIntervalSince1970
+        let idle = #"{"agent_id":"agent_idle","subagent_type":"Explore","summary":"waiting","started_at":\#(Int(now - 30)),"idle":true}"#
+        try idle.write(to: agentsDir.appendingPathComponent("agent_idle.json"), atomically: true, encoding: .utf8)
+        let busy = #"{"agent_id":"agent_busy","subagent_type":"Explore","summary":"working","started_at":\#(Int(now - 10))}"#
+        try busy.write(to: agentsDir.appendingPathComponent("agent_busy.json"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        let session = try XCTUnwrap(monitor.sessions.first)
+        XCTAssertEqual(session.activeSubagents.map(\.id), ["agent_idle", "agent_busy"])
+        XCTAssertTrue(session.activeSubagents[0].isIdle, "the flagged teammate must read as idle")
+        XCTAssertFalse(session.activeSubagents[1].isIdle, "an unflagged agent must stay live")
+    }
+
     func testActiveSubagentsGCsEntriesOlderThan30Minutes() async throws {
         let dir = tempStateDir()
         let sid = "s1"

@@ -55,6 +55,11 @@ struct ActiveSubagent: Equatable, Identifiable, Sendable {
     let summary: String
     /// When the parent dispatched the Task call (hook write time).
     let startedAt: Date
+    /// True once a `TeammateIdle` event flagged this agent-team teammate
+    /// as about to go idle. A quiet row state, deliberately not routed
+    /// into the attention pipeline — see the TeammateIdle branch in
+    /// `clyde-hook.sh` for why.
+    var isIdle: Bool = false
 }
 
 struct Session: Identifiable, Equatable {

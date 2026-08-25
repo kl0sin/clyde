@@ -640,19 +640,27 @@ private struct SubagentList: View {
     private func agentRow(for agent: ActiveSubagent) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let elapsed = max(0, Int(ctx.date.timeIntervalSince(agent.startedAt)))
+            // An idle teammate keeps its row but stops reading as live
+            // work: the sprite settles, the duration stops ticking, and
+            // the accent drops to the same grey as secondary text.
+            let trailing = agent.isIdle ? "idle" : formatElapsed(elapsed)
             HStack(alignment: .top, spacing: 6) {
-                ClydeAnimationView(state: .busy, pixelSize: 0.75, ambientIdleEnabled: false)
-                    .frame(width: 12, height: 12)
-                    .padding(.top, 1)
-                    .accessibilityHidden(true)
+                ClydeAnimationView(
+                    state: agent.isIdle ? .idle : .busy,
+                    pixelSize: 0.75,
+                    ambientIdleEnabled: false
+                )
+                .frame(width: 12, height: 12)
+                .padding(.top, 1)
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack {
                         Text(agent.type)
                             .font(.system(size: 10, weight: .medium, design: .monospaced))
-                            .foregroundStyle(accent)
+                            .foregroundStyle(agent.isIdle ? Color(white: 0.55) : accent)
                             .lineLimit(1)
                         Spacer(minLength: 8)
-                        Text(formatElapsed(elapsed))
+                        Text(trailing)
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundStyle(Color(white: 0.55))
                             .monospacedDigit()
@@ -667,8 +675,10 @@ private struct SubagentList: View {
                 }
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(agent.type), \(agent.summary), running \(formatElapsed(elapsed))")
-            .accessibilityAddTraits(.updatesFrequently)
+            .accessibilityLabel(agent.isIdle
+                ? "\(agent.type), \(agent.summary), idle"
+                : "\(agent.type), \(agent.summary), running \(formatElapsed(elapsed))")
+            .accessibilityAddTraits(agent.isIdle ? [] : .updatesFrequently)
         }
     }
 

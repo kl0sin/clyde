@@ -150,6 +150,10 @@ final class HookScriptTests: XCTestCase {
         #"{"hook_event_name":"SubagentStart","session_id":"\#(sid)","cwd":"/tmp","agent_id":"\#(agentID)","agent_type":"\#(type)"}"#
     }
 
+    private func teammateIdle(sid: String, agentID: String, type: String) -> String {
+        #"{"hook_event_name":"TeammateIdle","session_id":"\#(sid)","cwd":"/tmp","agent_id":"\#(agentID)","agent_type":"\#(type)"}"#
+    }
+
     private func subagentStop(sid: String, agentID: String, type: String) -> String {
         #"{"hook_event_name":"SubagentStop","session_id":"\#(sid)","cwd":"/tmp","agent_id":"\#(agentID)","agent_type":"\#(type)","last_assistant_message":"done"}"#
     }
@@ -404,6 +408,60 @@ final class HookScriptTests: XCTestCase {
         XCTAssertEqual(
             agentFiles(in: home, sessionId: sid), [],
             "a user interrupt kills the whole turn — no agent row may survive it"
+        )
+    }
+
+    // MARK: - TeammateIdle
+
+    /// `TeammateIdle` addresses the agent by `agent_id` — the same key
+    /// space the subagent records now live in — so it can annotate an
+    /// existing record in place rather than needing a store of its own.
+    func testTeammateIdleMarksExistingAgentRecordIdle() throws {
+        let home = tempHome()
+        let sid = "55555555-aaaa-bbbb-cccc-000000000001"
+
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_tm", type: "Explore", description: "Team job"), home: home)
+        try runHook(payload: subagentStart(sid: sid, agentID: "agent_tm", type: "Explore"), home: home)
+        try runHook(payload: teammateIdle(sid: sid, agentID: "agent_tm", type: "Explore"), home: home)
+
+        let json = agentJSON(in: home, sessionId: sid, file: "agent_tm.json")
+        XCTAssertEqual(json["idle"] as? Bool, true, "TeammateIdle must mark the record idle")
+        XCTAssertEqual(
+            json["summary"] as? String, "Team job",
+            "annotating must not clobber the rest of the record"
+        )
+    }
+
+    /// A teammate we never saw start must NOT materialise a row. Inventing
+    /// a record from an idle notification is how phantom rows appear — the
+    /// event is log-only in that case.
+    func testTeammateIdleWithoutExistingRecordWritesNothing() throws {
+        let home = tempHome()
+        let sid = "55555555-aaaa-bbbb-cccc-000000000002"
+
+        try runHook(payload: teammateIdle(sid: sid, agentID: "agent_ghost", type: "Explore"), home: home)
+
+        XCTAssertEqual(
+            agentFiles(in: home, sessionId: sid), [],
+            "an unknown teammate going idle must not create a row"
+        )
+    }
+
+    /// Deliberately NOT an attention signal. v0.5.1 mapped an
+    /// ambiguous-but-attention-sounding event onto the badge and v0.5.2
+    /// had to revert it a day later; until the real firing frequency of
+    /// TeammateIdle is known, it must not light the panel up.
+    func testTeammateIdleDoesNotRaiseAttention() throws {
+        let home = tempHome()
+        let sid = "55555555-aaaa-bbbb-cccc-000000000003"
+
+        try runHook(payload: preToolUseAgent(sid: sid, toolUseID: "toolu_tm2", type: "Explore", description: "Team job"), home: home)
+        try runHook(payload: subagentStart(sid: sid, agentID: "agent_tm2", type: "Explore"), home: home)
+        try runHook(payload: teammateIdle(sid: sid, agentID: "agent_tm2", type: "Explore"), home: home)
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path),
+            "TeammateIdle must stay out of the attention pipeline"
         )
     }
 }

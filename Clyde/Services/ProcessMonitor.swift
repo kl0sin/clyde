@@ -819,7 +819,8 @@ final class ProcessMonitor: ObservableObject {
                     continue
                 }
                 let summary = (json["summary"] as? String) ?? ""
-                agents.append(ActiveSubagent(id: id, type: type, summary: summary, startedAt: started))
+                let isIdle = (json["idle"] as? Bool) ?? false
+                agents.append(ActiveSubagent(id: id, type: type, summary: summary, startedAt: started, isIdle: isIdle))
             }
             if !agents.isEmpty {
                 byPID[parentPID] = agents.sorted { $0.startedAt < $1.startedAt }
