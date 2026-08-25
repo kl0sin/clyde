@@ -136,6 +136,16 @@ struct SessionRow: View {
                                     .truncationMode(.tail)
                             }
                             .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                        } else if session.status == .idle, let reply = session.lastMessage {
+                            // An idle session has nothing live to report, so
+                            // the last thing Claude said is more use than the
+                            // path — which is already on the row above.
+                            Text("› \(reply)")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(TextColor.tertiary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                         } else {
                             Text(session.workingDirectory.isEmpty
                                  ? "Unknown path"
@@ -329,6 +339,8 @@ struct SessionRow: View {
             let elapsed = max(0, Int(Date().timeIntervalSince(tool.startedAt)))
             let elapsedStr = elapsed == 1 ? "1 second elapsed" : "\(elapsed) seconds elapsed"
             parts.append("\(label), \(elapsedStr)")
+        } else if session.status == .idle, let reply = session.lastMessage {
+            parts.append("last reply, \(reply)")
         }
 
         if let plan = session.activePlan, plan.taskCount > 0 {

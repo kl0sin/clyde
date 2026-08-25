@@ -71,6 +71,7 @@ final class ProcessMonitor: ObservableObject {
     /// SessionEnd or a manual session reset; persists across Stop /
     /// UserPromptSubmit so a multi-turn plan keeps tracking.
     private var hookPlanByPID: [pid_t: ActivePlan] = [:]
+    private var hookLastMessageByPID: [pid_t: String] = [:]
 
     /// Active Task-dispatched subagents per PID, populated from `-agents/*.json` markers.
     /// Inner array is sorted by `startedAt` ascending.
@@ -318,6 +319,7 @@ final class ProcessMonitor: ObservableObject {
         refreshHookSubagents()
         refreshHookTools()
         refreshHookPlans()
+        refreshHookLastMessages()
         refreshHookAgents()
 
         let pids = await discoverPIDs()
@@ -474,6 +476,7 @@ final class ProcessMonitor: ObservableObject {
             existing.subagentType = hookSubagentByPID[pid]
             existing.activeTool = hookToolByPID[pid]
             existing.activePlan = hookPlanByPID[pid]
+            existing.lastMessage = hookLastMessageByPID[pid]
             existing.activeSubagents = hookAgentsByPID[pid] ?? []
             return existing
         }
@@ -495,6 +498,7 @@ final class ProcessMonitor: ObservableObject {
             }
             revived.activeTool = hookToolByPID[pid]
             revived.activePlan = hookPlanByPID[pid]
+            revived.lastMessage = hookLastMessageByPID[pid]
             revived.activeSubagents = hookAgentsByPID[pid] ?? []
             return revived
         }
@@ -512,6 +516,7 @@ final class ProcessMonitor: ObservableObject {
         fresh.subagentType = hookSubagentByPID[pid]
         fresh.activeTool = hookToolByPID[pid]
         fresh.activePlan = hookPlanByPID[pid]
+        fresh.lastMessage = hookLastMessageByPID[pid]
         fresh.activeSubagents = hookAgentsByPID[pid] ?? []
         return fresh
     }
@@ -774,6 +779,39 @@ final class ProcessMonitor: ObservableObject {
         return changed
     }
 
+    /// Reads `state/<sid>-lastmsg` markers written by Stop. Returns true
+    /// if the dictionary changed since last call.
+    @discardableResult
+    private func refreshHookLastMessages() -> Bool {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: stateDir, includingPropertiesForKeys: nil
+        ) else {
+            let changed = !hookLastMessageByPID.isEmpty
+            if changed { hookLastMessageByPID = [:] }
+            return changed
+        }
+        var messages: [pid_t: String] = [:]
+        for file in files where file.lastPathComponent.hasSuffix("-lastmsg") {
+            guard let data = try? Data(contentsOf: file),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let pidValue = json["pid"] as? Int,
+                  let message = json["message"] as? String,
+                  !message.isEmpty else {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            let pid = pid_t(pidValue)
+            if kill(pid, 0) != 0 {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            messages[pid] = message
+        }
+        let changed = messages != hookLastMessageByPID
+        if changed { hookLastMessageByPID = messages }
+        return changed
+    }
+
     /// Reads `state/<sid>-agents/*.json` marker files written by PreToolUse(Task).
     /// Returns true if the dictionary changed since last call.
     @discardableResult
@@ -854,7 +892,9 @@ final class ProcessMonitor: ObservableObject {
         let subagentChanged = refreshHookSubagents()
         let toolChanged = refreshHookTools()
         let planChanged = refreshHookPlans()
+        let lastMsgChanged = refreshHookLastMessages()
         let agentsChanged = refreshHookAgents()
+        _ = lastMsgChanged
 
         // Detect session arrivals/departures via -info file presence so a new
         // session is reflected in the UI immediately instead of waiting for
@@ -924,6 +964,11 @@ final class ProcessMonitor: ObservableObject {
             let newPlan = hookPlanByPID[pid]
             if updated[index].activePlan != newPlan {
                 updated[index].activePlan = newPlan
+                changed = true
+            }
+            let newLastMessage = hookLastMessageByPID[pid]
+            if updated[index].lastMessage != newLastMessage {
+                updated[index].lastMessage = newLastMessage
                 changed = true
             }
             let newAgents = hookAgentsByPID[pid] ?? []

@@ -13,7 +13,7 @@
 #   SessionStart        → state/<session_id>-info (alive marker, includes source)
 #   SessionEnd          → removes info + busy + error + subagent + tool + plan + event + cleans up -agents/ dir
 #   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info, drops fully-completed -plan)
-#   Stop                → removes busy + error + subagent + tool + event marker
+#   Stop                → removes busy + error + subagent + tool + event marker; writes state/<session_id>-lastmsg (one-line reply preview)
 #   StopFailure         → writes state/<session_id>-error with stop_reason
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
@@ -721,7 +721,7 @@ case "$HOOK_EVENT" in
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"$INFO_RUNTIME_FIELDS}"
         ;;
     SessionEnd)
-        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$EVENTS_DIR/$KEY.json"
+        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$STATE_DIR/$KEY-lastmsg" "$EVENTS_DIR/$KEY.json"
         rm -rf "$STATE_DIR/$KEY-agents"
         ;;
     PermissionRequest)
@@ -739,6 +739,8 @@ case "$HOOK_EVENT" in
         rm -f "$EVENTS_DIR/$KEY.json"
         ;;
     UserPromptSubmit)
+        # The previous turn's reply preview is stale as of now.
+        rm -f "$STATE_DIR/$KEY-lastmsg"
         atomic_write "$STATE_DIR/$KEY-busy" \
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"timestamp\": $TIMESTAMP}"
         # User typed a reply — any attention flag from a prior
@@ -774,6 +776,19 @@ case "$HOOK_EVENT" in
         # often outlive the parent's Stop event; each entry vanishes only when
         # its own PostToolUse(Agent) arrives.
         rm -f "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$EVENTS_DIR/$KEY.json"
+        # Record a one-line preview of what Claude just said, so an idle
+        # session can show its last reply instead of only a project path.
+        # Deliberately a short prefix: the row renders one line, and this
+        # goes to disk, so whole replies have no business being here.
+        # (This is why we use Stop's last_assistant_message rather than
+        # MessageDisplay, which would hand us every message in full.)
+        LAST_MSG=$(extract_field last_assistant_message | tr '\n\t' '  ')
+        if [ -n "$LAST_MSG" ]; then
+            LAST_MSG=$(truncate_summary "$LAST_MSG" 80)
+            ESC_MSG=$(printf '%s' "$LAST_MSG" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            atomic_write "$STATE_DIR/$KEY-lastmsg" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"message\": \"$ESC_MSG\", \"at\": $TIMESTAMP}"
+        fi
         ;;
     StopFailure)
         # API/billing/rate-limit error. Extract stop_reason so Clyde

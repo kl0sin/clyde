@@ -820,6 +820,45 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertFalse(session.activeSubagents[1].isIdle, "an unflagged agent must stay live")
     }
 
+    /// The `-lastmsg` marker Stop writes becomes the row's one-line
+    /// "what did it actually say" preview.
+    func testLastMessageIsReadFromMarker() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+
+        let body = #"{"session_id":"\#(sid)","pid":\#(pid),"message":"All 158 tests pass.","at":\#(Int(Date().timeIntervalSince1970))}"#
+        try body.write(to: dir.appendingPathComponent("\(sid)-lastmsg"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        let session = try XCTUnwrap(monitor.sessions.first)
+        XCTAssertEqual(session.lastMessage, "All 158 tests pass.")
+    }
+
+    /// No marker (fresh session, or the user just submitted a new
+    /// prompt) means no preview — not an empty one.
+    func testLastMessageIsNilWithoutMarker() async throws {
+        let dir = tempStateDir()
+        _ = writeInfoFile(in: dir, sessionId: "s1")
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(),
+            pollingInterval: 1,
+            stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true }
+        )
+        await monitor.poll()
+
+        XCTAssertNil(try XCTUnwrap(monitor.sessions.first).lastMessage)
+    }
+
     func testActiveSubagentsGCsEntriesOlderThan30Minutes() async throws {
         let dir = tempStateDir()
         let sid = "s1"

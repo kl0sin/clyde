@@ -95,6 +95,10 @@ struct Session: Identifiable, Equatable {
     /// TaskCreated / TaskCompleted hook events. Cleared on SessionEnd
     /// or manual session reset.
     var activePlan: ActivePlan? = nil
+    /// One-line preview of Claude's last reply, from `Stop`'s
+    /// `last_assistant_message`. Cleared the moment the user submits a
+    /// new prompt, so it only ever describes a session sitting idle.
+    var lastMessage: String? = nil
     /// Set when the underlying Claude process has exited but we're keeping
     /// the row visible briefly. Nil for live sessions.
     var endedAt: Date? = nil

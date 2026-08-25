@@ -126,6 +126,14 @@ final class HookScriptTests: XCTestCase {
         return files.filter { $0.hasSuffix(".json") }.sorted()
     }
 
+    private func lastMessageJSON(in home: URL, sessionId: String) -> [String: Any] {
+        let url = home.appendingPathComponent(".clyde/state/\(sessionId)-lastmsg")
+        guard let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [:] }
+        return json
+    }
+
     /// Contents of the `-tool` marker the panel renders as
     /// `<Tool> · <summary>` on the session row.
     private func toolJSON(in home: URL, sessionId: String) -> [String: Any] {
@@ -473,6 +481,69 @@ final class HookScriptTests: XCTestCase {
             FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path),
             "TeammateIdle must stay out of the attention pipeline"
         )
+    }
+
+    // MARK: - Last assistant message preview
+
+    /// `Stop` has always carried `last_assistant_message` and the hook
+    /// always threw it away. It is the cheapest possible "what did it
+    /// actually say" affordance for a session sitting idle.
+    func testStopRecordsLastAssistantMessage() throws {
+        let home = tempHome()
+        let sid = "77777777-aaaa-bbbb-cccc-000000000001"
+        let payload = #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/tmp","last_assistant_message":"All 158 tests pass."}"#
+
+        try runHook(payload: payload, home: home)
+
+        XCTAssertEqual(
+            lastMessageJSON(in: home, sessionId: sid)["message"] as? String,
+            "All 158 tests pass."
+        )
+    }
+
+    /// The row shows one line, and the file is written to disk — both
+    /// argue for keeping only a short prefix rather than whole replies.
+    func testLastAssistantMessageIsCollapsedAndTruncated() throws {
+        let home = tempHome()
+        let sid = "77777777-aaaa-bbbb-cccc-000000000002"
+        let long = String(repeating: "x", count: 200)
+        let payload = #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/tmp","last_assistant_message":"first line\nsecond line \#(long)"}"#
+
+        try runHook(payload: payload, home: home)
+
+        let msg = try XCTUnwrap(lastMessageJSON(in: home, sessionId: sid)["message"] as? String)
+        XCTAssertFalse(msg.contains("\n"), "newlines must be collapsed — the row renders one line")
+        XCTAssertLessThanOrEqual(msg.count, 81, "must be truncated, got \(msg.count) chars")
+        XCTAssertTrue(msg.hasPrefix("first line second line"), "prefix must be preserved, got \(msg)")
+    }
+
+    /// A reply preview from the previous turn must not sit under a
+    /// session that is busy again — the moment the user submits, it is
+    /// stale.
+    func testUserPromptSubmitClearsLastAssistantMessage() throws {
+        let home = tempHome()
+        let sid = "77777777-aaaa-bbbb-cccc-000000000003"
+
+        try runHook(payload: #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/tmp","last_assistant_message":"stale reply"}"#, home: home)
+        XCTAssertFalse(lastMessageJSON(in: home, sessionId: sid).isEmpty, "precondition: preview recorded")
+
+        try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/tmp"}"#, home: home)
+
+        XCTAssertTrue(
+            lastMessageJSON(in: home, sessionId: sid).isEmpty,
+            "a new prompt makes the previous reply preview stale"
+        )
+    }
+
+    /// A Stop with no message (or an empty one) must not leave an empty
+    /// row artefact behind.
+    func testStopWithoutMessageWritesNoPreview() throws {
+        let home = tempHome()
+        let sid = "77777777-aaaa-bbbb-cccc-000000000004"
+
+        try runHook(payload: #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/tmp"}"#, home: home)
+
+        XCTAssertTrue(lastMessageJSON(in: home, sessionId: sid).isEmpty)
     }
 
     // MARK: - Tool summary whitelist
