@@ -60,6 +60,21 @@ final class SessionTests: XCTestCase {
 
     // MARK: - activeTool / toolDisplayLabel
 
+    /// The Activity timeline's subagent entries used to be driven by the
+    /// legacy single-agent `-subagent` marker. They now derive from the
+    /// same `activeSubagents` list the panel renders, so one source of
+    /// truth feeds both.
+    func testPrimarySubagentTypeDerivesFromActiveSubagents() {
+        var session = Session(pid: 123, workingDirectory: "/tmp")
+        XCTAssertNil(session.primarySubagentType, "no agents means no timeline entry")
+
+        session.activeSubagents = [
+            ActiveSubagent(id: "a1", type: "Explore", summary: "find", startedAt: Date()),
+            ActiveSubagent(id: "a2", type: "general-purpose", summary: "research", startedAt: Date()),
+        ]
+        XCTAssertEqual(session.primarySubagentType, "Explore", "oldest agent names the entry")
+    }
+
     func testToolDisplayLabelIsNilWhenNoActiveTool() {
         let session = Session(pid: 123, workingDirectory: "/tmp")
         XCTAssertNil(session.toolDisplayLabel)

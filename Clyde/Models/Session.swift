@@ -81,11 +81,17 @@ struct Session: Identifiable, Equatable {
     /// (Claude retrying internally). Cleared by the next Stop event.
     var errorReason: String? = nil
     /// Non-nil while a subagent is actively running inside this session.
-    var subagentType: String? = nil
+
     /// Currently running Task-dispatched subagents inside this session,
     /// sorted by `startedAt` ascending (oldest first). Empty when the
     /// session has no parallel Task fan-out in flight.
     var activeSubagents: [ActiveSubagent] = []
+
+    /// Type of the subagent that best represents this session for the
+    /// Activity timeline: the oldest one still running, or nil when none
+    /// are. Derived from `activeSubagents` rather than stored, so the
+    /// timeline and the panel cannot disagree.
+    var primarySubagentType: String? { activeSubagents.first?.type }
     /// Non-nil while a built-in or MCP tool call is in flight. The hook
     /// writes this on PreToolUse and clears it on PostToolUse / Stop /
     /// SessionEnd, so it tracks the same per-tool-call lifecycle.

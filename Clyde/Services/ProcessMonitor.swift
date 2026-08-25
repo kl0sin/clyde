@@ -60,7 +60,6 @@ final class ProcessMonitor: ObservableObject {
 
     /// Active subagent type per PID, populated from `-subagent` marker
     /// files written by SubagentStart. Cleared on SubagentStop / Stop.
-    private var hookSubagentByPID: [pid_t: String] = [:]
 
     /// Active tool per PID, populated from `-tool` marker files written
     /// by PreToolUse. Cleared on PostToolUse / Stop / SessionEnd.
@@ -319,7 +318,6 @@ final class ProcessMonitor: ObservableObject {
         refreshPIDRuntimes()
         refreshHookBusyPIDs()
         refreshHookErrors()
-        refreshHookSubagents()
         refreshHookTools()
         refreshHookPlans()
         refreshHookLastMessages()
@@ -478,7 +476,6 @@ final class ProcessMonitor: ObservableObject {
                 }
             }
             existing.errorReason = hookErrorByPID[pid]
-            existing.subagentType = hookSubagentByPID[pid]
             existing.activeTool = hookToolByPID[pid]
             existing.activePlan = hookPlanByPID[pid]
             existing.activeToolCount = hookToolCountByPID[pid] ?? 0
@@ -524,7 +521,6 @@ final class ProcessMonitor: ObservableObject {
         )
         fresh.runtime = info?.runtime ?? ""
         fresh.container = info?.container ?? ""
-        fresh.subagentType = hookSubagentByPID[pid]
         fresh.activeTool = hookToolByPID[pid]
         fresh.activePlan = hookPlanByPID[pid]
         fresh.activeToolCount = hookToolCountByPID[pid] ?? 0
@@ -685,36 +681,6 @@ final class ProcessMonitor: ObservableObject {
         return changed
     }
 
-    /// Reads `-subagent` marker files written by SubagentStart.
-    @discardableResult
-    private func refreshHookSubagents() -> Bool {
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: stateDir, includingPropertiesForKeys: nil
-        ) else {
-            let changed = !hookSubagentByPID.isEmpty
-            if changed { hookSubagentByPID = [:] }
-            return changed
-        }
-        var agents: [pid_t: String] = [:]
-        for file in files where file.lastPathComponent.hasSuffix("-subagent") {
-            guard let data = try? Data(contentsOf: file),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let pidValue = json["pid"] as? Int else {
-                try? FileManager.default.removeItem(at: file)
-                continue
-            }
-            let pid = pid_t(pidValue)
-            if kill(pid, 0) != 0 {
-                try? FileManager.default.removeItem(at: file)
-                continue
-            }
-            let agentType = (json["agent_type"] as? String) ?? "unknown"
-            agents[pid] = agentType
-        }
-        let changed = agents != hookSubagentByPID
-        if changed { hookSubagentByPID = agents }
-        return changed
-    }
 
     /// Reads `-tool` marker files written by the PreToolUse hook.
     /// Returns true if the dictionary changed since last call.
@@ -1015,7 +981,6 @@ final class ProcessMonitor: ObservableObject {
         refreshPIDRuntimes()
         let busyChanged = refreshHookBusyPIDs()
         let errorChanged = refreshHookErrors()
-        let subagentChanged = refreshHookSubagents()
         let toolChanged = refreshHookTools()
         let planChanged = refreshHookPlans()
         let lastMsgChanged = refreshHookLastMessages()
@@ -1046,11 +1011,11 @@ final class ProcessMonitor: ObservableObject {
         // This avoids waiting on the full `poll()` cycle (which shells
         // out to pgrep — ~50–200 ms of latency before the UI catches
         // up to the hook event).
-        if busyChanged || errorChanged || subagentChanged || toolChanged || planChanged || agentsChanged {
+        if busyChanged || errorChanged || toolChanged || planChanged || agentsChanged {
             applyBusyStateToSessions()
         }
 
-        if busyChanged || infoChanged || errorChanged || subagentChanged || toolChanged || planChanged || agentsChanged {
+        if busyChanged || infoChanged || errorChanged || toolChanged || planChanged || agentsChanged {
             Task { await self.poll() }
         }
     }
@@ -1077,11 +1042,6 @@ final class ProcessMonitor: ObservableObject {
             let newError = hookErrorByPID[pid]
             if updated[index].errorReason != newError {
                 updated[index].errorReason = newError
-                changed = true
-            }
-            let newSubagent = hookSubagentByPID[pid]
-            if updated[index].subagentType != newSubagent {
-                updated[index].subagentType = newSubagent
                 changed = true
             }
             let newTool = hookToolByPID[pid]

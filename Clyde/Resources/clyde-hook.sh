@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 32
+# clyde-hook-version: 33
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -11,9 +11,9 @@
 #
 # Handled events:
 #   SessionStart        → state/<session_id>-info (alive marker, includes source)
-#   SessionEnd          → removes info + busy + error + subagent + tool + plan + event + cleans up -agents/ dir
+#   SessionEnd          → removes info + busy + error + tool + plan + event + cleans up -agents/ dir
 #   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info, drops fully-completed -plan)
-#   Stop                → removes busy + error + subagent + tool + event marker; writes state/<session_id>-lastmsg (one-line reply preview)
+#   Stop                → removes busy + error + tool + event marker; writes state/<session_id>-lastmsg (one-line reply preview)
 #   StopFailure         → writes state/<session_id>-error with stop_reason
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
@@ -27,8 +27,8 @@
 #   CwdChanged          → rewrites state/<session_id>-info with new cwd
 #   Elicitation         → events/<session_id>.json (MCP tool input request)
 #   ElicitationResult   → clears event file (MCP input answered)
-#   SubagentStart       → merges with PreToolUse's record into state/<session_id>-agents/<agent_id>.json (either event may arrive first); also legacy -subagent (deprecated)
-#   SubagentStop        → removes legacy -subagent + state/<session_id>-agents/<agent_id>.json (the agent outlives its dispatching tool call)
+#   SubagentStart       → merges with PreToolUse's record into state/<session_id>-agents/<agent_id>.json (either event may arrive first)
+#   SubagentStop        → removes state/<session_id>-agents/<agent_id>.json (the agent outlives its dispatching tool call)
 #   TeammateIdle        → flags an EXISTING state/<session_id>-agents/<agent_id>.json as idle (never creates one; not an attention signal)
 #   TaskCreated         → bumps task_count in state/<session_id>-plan
 #   TaskCompleted       → bumps done_count in state/<session_id>-plan (if file exists)
@@ -725,7 +725,7 @@ case "$HOOK_EVENT" in
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"$INFO_RUNTIME_FIELDS}"
         ;;
     SessionEnd)
-        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$STATE_DIR/$KEY-lastmsg" "$EVENTS_DIR/$KEY.json"
+        rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$STATE_DIR/$KEY-lastmsg" "$EVENTS_DIR/$KEY.json"
         rm -rf "$STATE_DIR/$KEY-agents" "$STATE_DIR/$KEY-tools"
         rm -f "$STATE_DIR/$KEY-command" "$STATE_DIR/$KEY-worktree"
         ;;
@@ -775,12 +775,12 @@ case "$HOOK_EVENT" in
         fi
         ;;
     Stop)
-        # Clear busy, error, legacy subagent, tool, and attention markers. Stop
+        # Clear busy, error, tool, and attention markers. Stop
         # means the turn is over — everything from that turn is resolved.
         # NOTE: -agents/ is intentionally NOT cleared here. Parallel subagents
         # often outlive the parent's Stop event; each entry vanishes only when
         # its own PostToolUse(Agent) arrives.
-        rm -f "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$EVENTS_DIR/$KEY.json"
+        rm -f "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-tool" "$EVENTS_DIR/$KEY.json"
         rm -rf "$STATE_DIR/$KEY-tools"
         rm -f "$STATE_DIR/$KEY-command"
         # Record a one-line preview of what Claude just said, so an idle
@@ -935,12 +935,8 @@ case "$HOOK_EVENT" in
         if [ -n "$AGENT_ID" ]; then
             merge_agent_record start "$AGENT_ID" "$AGENT_TYPE" "" || true
         fi
-        ESC_AGENT=$(printf '%s' "$AGENT_TYPE" | sed 's/\\/\\\\/g; s/"/\\"/g')
-        atomic_write "$STATE_DIR/$KEY-subagent" \
-            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"agent_type\": \"$ESC_AGENT\", \"timestamp\": $TIMESTAMP}"
         ;;
     SubagentStop)
-        rm -f "$STATE_DIR/$KEY-subagent"
         # The agent is genuinely finished — this is the only event that
         # says so. Verified against a live session: SubagentStop carries
         # agent_id and agent_type but no tool_use_id, so the entry it

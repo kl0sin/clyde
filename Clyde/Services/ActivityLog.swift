@@ -50,7 +50,7 @@ final class ActivityLog: ObservableObject {
                 status: session.status,
                 hadAttention: attentionMonitor.attentionPIDs.contains(session.pid),
                 hadError: session.errorReason,
-                hadSubagent: session.subagentType,
+                hadSubagent: session.primarySubagentType,
                 displayName: session.displayName,
                 lastSource: processMonitor.hookInfoByPID[session.pid]?.source ?? ""
             )
@@ -93,7 +93,7 @@ final class ActivityLog: ObservableObject {
             hasher.combine(s.status)
             hasher.combine(attentionPIDs.contains(s.pid))
             hasher.combine(s.errorReason)
-            hasher.combine(s.subagentType)
+            hasher.combine(s.primarySubagentType)
             // Include hook source so an in-PID auto-compact / /clear
             // transition (which keeps every other field unchanged)
             // doesn't get short-circuited away by the fingerprint check.
@@ -190,14 +190,14 @@ final class ActivityLog: ObservableObject {
                 }
 
                 // Subagent lifecycle
-                if prev.hadSubagent == nil, let agentType = session.subagentType {
+                if prev.hadSubagent == nil, let agentType = session.primarySubagentType {
                     append(.init(
                         timestamp: Date(),
                         kind: .subagentStarted(agentType: agentType),
                         sessionDisplayName: session.displayName,
                         sessionPID: session.pid
                     ))
-                } else if prev.hadSubagent != nil && session.subagentType == nil {
+                } else if prev.hadSubagent != nil && session.primarySubagentType == nil {
                     append(.init(
                         timestamp: Date(),
                         kind: .subagentStopped,
@@ -211,7 +211,7 @@ final class ActivityLog: ObservableObject {
                 status: session.status,
                 hadAttention: hadAttention,
                 hadError: session.errorReason,
-                hadSubagent: session.subagentType,
+                hadSubagent: session.primarySubagentType,
                 displayName: session.displayName,
                 lastSource: currentSource
             )

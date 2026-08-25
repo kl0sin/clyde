@@ -974,7 +974,10 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: agentsDir.appendingPathComponent("toolu_old.json").path))
     }
 
-    func testLegacySubagentMarkerCoexistsWithEmptyAgentsDir() async throws {
+    /// The `-subagent` marker is retired. A stale one left on disk by a
+    /// pre-v33 hook must simply be ignored — not resurrect a row, not
+    /// crash the poll.
+    func testRetiredSubagentMarkerIsIgnored() async throws {
         let dir = tempStateDir()
         let sid = "s1"
         let pid = writeInfoFile(in: dir, sessionId: sid)
@@ -990,8 +993,8 @@ final class ProcessMonitorTests: XCTestCase {
         await monitor.poll()
 
         let session = try XCTUnwrap(monitor.sessions.first)
-        XCTAssertEqual(session.subagentType, "general-purpose")
-        XCTAssertTrue(session.activeSubagents.isEmpty)
+        XCTAssertTrue(session.activeSubagents.isEmpty, "a stale legacy marker must not produce a row")
+        XCTAssertNil(session.primarySubagentType, "and must not drive a timeline entry")
     }
 
     func testResetSessionStateClearsAgentsDir() throws {
