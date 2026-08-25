@@ -129,7 +129,13 @@ struct SessionRow: View {
                     ZStack(alignment: .leading) {
                         if let tool = session.activeTool, let label = session.toolDisplayLabel {
                             TimelineView(.periodic(from: tool.startedAt, by: 1)) { context in
-                                Text("\(label) · \(formatDuration(from: tool.startedAt, now: context.date))")
+                                // A batch of parallel calls reads as a count:
+                                // naming one of several is arbitrary and was
+                                // what made the single-slot marker misleading.
+                                let text = session.activeToolCount >= 2
+                                    ? "\(session.activeToolCount) tools"
+                                    : label
+                                Text("\(text) · \(formatDuration(from: tool.startedAt, now: context.date))")
                                     .font(.system(size: 10, design: .monospaced))
                                     .foregroundStyle(Color(white: 0.65))
                                     .lineLimit(1)
@@ -338,7 +344,10 @@ struct SessionRow: View {
         } else if let tool = session.activeTool, let label = session.toolDisplayLabel {
             let elapsed = max(0, Int(Date().timeIntervalSince(tool.startedAt)))
             let elapsedStr = elapsed == 1 ? "1 second elapsed" : "\(elapsed) seconds elapsed"
-            parts.append("\(label), \(elapsedStr)")
+            let what = session.activeToolCount >= 2
+                ? "\(session.activeToolCount) tools running"
+                : label
+            parts.append("\(what), \(elapsedStr)")
         } else if session.status == .idle, let reply = session.lastMessage {
             parts.append("last reply, \(reply)")
         }

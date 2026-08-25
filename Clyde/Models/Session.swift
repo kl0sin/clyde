@@ -90,6 +90,10 @@ struct Session: Identifiable, Equatable {
     /// writes this on PreToolUse and clears it on PostToolUse / Stop /
     /// SessionEnd, so it tracks the same per-tool-call lifecycle.
     var activeTool: ActiveTool? = nil
+    /// How many tool calls are in flight right now. Claude batches calls
+    /// and runs them in parallel, so this is routinely > 1; the row shows
+    /// `N tools` instead of a single label in that case. 0 when idle.
+    var activeToolCount: Int = 0
     /// Non-nil while a plan-then-execute run is in progress. Populated
     /// by ProcessMonitor from -plan marker files written by the
     /// TaskCreated / TaskCompleted hook events. Cleared on SessionEnd

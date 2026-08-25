@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 29
+# clyde-hook-version: 30
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -18,7 +18,8 @@
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
 #   PreToolUse          → clears event file + refreshes busy mtime + writes -tool; Agent/Task also → merges the description into the subagent's -agents/ record (pending-<tool_use_id>.json if SubagentStart hasn't landed yet)
-#   PostToolUse         → removes -tool marker; Agent/Task also → removes an UNCLAIMED state/<session_id>-agents/pending-<tool_use_id>.json only
+#   PostToolBatch       → sweeps every tool_use_id in the batch from state/<session_id>-tools/
+#   PostToolUse         → removes its own state/<session_id>-tools/<tool_use_id>.json slot; Agent/Task also → removes an UNCLAIMED state/<session_id>-agents/pending-<tool_use_id>.json only
 #   PostToolUseFailure  → removes -tool marker; Agent/Task also → removes an UNCLAIMED pending- entry; IF is_interrupt=true also removes busy + every -agents/ record (an interrupted agent never emits SubagentStop)
 #   CwdChanged          → rewrites state/<session_id>-info with new cwd
 #   Elicitation         → events/<session_id>.json (MCP tool input request)
@@ -722,7 +723,7 @@ case "$HOOK_EVENT" in
         ;;
     SessionEnd)
         rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$STATE_DIR/$KEY-lastmsg" "$EVENTS_DIR/$KEY.json"
-        rm -rf "$STATE_DIR/$KEY-agents"
+        rm -rf "$STATE_DIR/$KEY-agents" "$STATE_DIR/$KEY-tools"
         ;;
     PermissionRequest)
         atomic_write "$EVENTS_DIR/$KEY.json" \
@@ -776,6 +777,7 @@ case "$HOOK_EVENT" in
         # often outlive the parent's Stop event; each entry vanishes only when
         # its own PostToolUse(Agent) arrives.
         rm -f "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-subagent" "$STATE_DIR/$KEY-tool" "$EVENTS_DIR/$KEY.json"
+        rm -rf "$STATE_DIR/$KEY-tools"
         # Record a one-line preview of what Claude just said, so an idle
         # session can show its last reply instead of only a project path.
         # Deliberately a short prefix: the row renders one line, and this
@@ -825,6 +827,7 @@ case "$HOOK_EVENT" in
         # The tool call itself has terminated either way (interrupt or
         # error), so the active-tool indicator must clear.
         rm -f "$STATE_DIR/$KEY-tool"
+        [ -n "$TOOL_USE_ID" ] && rm -f "$STATE_DIR/$KEY-tools/$TOOL_USE_ID.json"
         if { [ "$TOOL_NAME" = "Agent" ] || [ "$TOOL_NAME" = "Task" ]; } && [ -n "$TOOL_USE_ID" ]; then
             # Only sweeps an entry SubagentStart never claimed. A claimed
             # entry is keyed on agent_id and belongs to SubagentStop —
@@ -847,12 +850,18 @@ case "$HOOK_EVENT" in
         # the user sees "Edit · SessionRow.swift" instead of just the
         # busy spinner. Empty TOOL_NAME would only happen for malformed
         # payloads — skip the write rather than producing a junk file.
-        if [ -n "$TOOL_NAME" ]; then
+        if [ -n "$TOOL_NAME" ] && [ -n "$TOOL_USE_ID" ]; then
             ESC_TOOL=$(printf '%s' "$TOOL_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
             TOOL_SUMMARY=$(compute_tool_summary "$TOOL_NAME")
             ESC_SUMMARY=$(printf '%s' "$TOOL_SUMMARY" | sed 's/\\/\\\\/g; s/"/\\"/g')
-            atomic_write "$STATE_DIR/$KEY-tool" \
-                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"tool_name\": \"$ESC_TOOL\", \"summary\": \"$ESC_SUMMARY\", \"started_at\": $TIMESTAMP}"
+            ESC_TID=$(printf '%s' "$TOOL_USE_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            # One slot per tool_use_id. Claude batches tool calls and runs
+            # them in parallel, so a single -tool file was last-writer-wins:
+            # the row showed whichever PreToolUse happened to land last, and
+            # the first PostToolUse blanked it while siblings still ran.
+            mkdir -p "$STATE_DIR/$KEY-tools"
+            atomic_write "$STATE_DIR/$KEY-tools/$TOOL_USE_ID.json" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"tool_use_id\": \"$ESC_TID\", \"tool_name\": \"$ESC_TOOL\", \"summary\": \"$ESC_SUMMARY\", \"started_at\": $TIMESTAMP}"
         fi
         if { [ "$TOOL_NAME" = "Agent" ] || [ "$TOOL_NAME" = "Task" ]; } && [ -n "$TOOL_USE_ID" ]; then
             SUBAGENT_TYPE=$(extract_tool_input_field subagent_type)
@@ -885,6 +894,7 @@ case "$HOOK_EVENT" in
         # session row will slide back to the project path until the
         # next PreToolUse fires.
         rm -f "$STATE_DIR/$KEY-tool"
+        [ -n "$TOOL_USE_ID" ] && rm -f "$STATE_DIR/$KEY-tools/$TOOL_USE_ID.json"
         if { [ "$TOOL_NAME" = "Agent" ] || [ "$TOOL_NAME" = "Task" ]; } && [ -n "$TOOL_USE_ID" ]; then
             # Only sweeps an entry SubagentStart never claimed. A claimed
             # entry is keyed on agent_id and belongs to SubagentStop —
@@ -933,6 +943,28 @@ case "$HOOK_EVENT" in
         SUB_AGENT_ID=$(extract_field agent_id)
         if [ -n "$SUB_AGENT_ID" ]; then
             rm -f "$STATE_DIR/$KEY-agents/$SUB_AGENT_ID.json"
+        fi
+        ;;
+    PostToolBatch)
+        # Safety net for a whole batch of parallel calls. Verified against
+        # a live payload: tool_calls is a list of {tool_name, tool_use_id,
+        # tool_input, tool_response} and there is NO batch_id, despite what
+        # the docs list — correlation is per tool_use_id.
+        if command -v python3 >/dev/null 2>&1; then
+            BATCH_IDS=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    raise SystemExit(0)
+for tc in (d.get('tool_calls') or []):
+    tid = tc.get('tool_use_id')
+    if isinstance(tid, str) and tid and '/' not in tid:
+        print(tid)
+" 2>/dev/null)
+            for BATCH_ID in $BATCH_IDS; do
+                rm -f "$STATE_DIR/$KEY-tools/$BATCH_ID.json"
+            done
         fi
         ;;
     TeammateIdle)

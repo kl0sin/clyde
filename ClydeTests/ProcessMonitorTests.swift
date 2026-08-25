@@ -859,6 +859,51 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertNil(try XCTUnwrap(monitor.sessions.first).lastMessage)
     }
 
+    /// Parallel calls each occupy their own slot; the row shows the
+    /// oldest as its label and the count so it can say "3 tools".
+    func testParallelToolSlotsYieldOldestToolAndCount() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+
+        let toolsDir = dir.appendingPathComponent("\(sid)-tools")
+        try FileManager.default.createDirectory(at: toolsDir, withIntermediateDirectories: true)
+        let now = Date().timeIntervalSince1970
+        try #"{"pid":\#(pid),"tool_use_id":"t_a","tool_name":"Bash","summary":"probe-A","started_at":\#(Int(now - 9))}"#
+            .write(to: toolsDir.appendingPathComponent("t_a.json"), atomically: true, encoding: .utf8)
+        try #"{"pid":\#(pid),"tool_use_id":"t_b","tool_name":"Read","summary":"Session.swift","started_at":\#(Int(now - 3))}"#
+            .write(to: toolsDir.appendingPathComponent("t_b.json"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        let session = try XCTUnwrap(monitor.sessions.first)
+        XCTAssertEqual(session.activeToolCount, 2)
+        XCTAssertEqual(session.activeTool?.toolName, "Bash", "oldest call labels the row")
+    }
+
+    /// A session started under a pre-v30 hook still writes the single
+    /// `-tool` file. Keep reading it for one release so those sessions
+    /// don't go blank mid-flight.
+    func testLegacySingleToolMarkerStillRenders() async throws {
+        let dir = tempStateDir()
+        let sid = "s1"
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        try #"{"pid":\#(pid),"tool_name":"Bash","summary":"legacy","started_at":\#(Int(Date().timeIntervalSince1970 - 5))}"#
+            .write(to: dir.appendingPathComponent("\(sid)-tool"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        let session = try XCTUnwrap(monitor.sessions.first)
+        XCTAssertEqual(session.activeTool?.summary, "legacy")
+        XCTAssertEqual(session.activeToolCount, 1)
+    }
+
     func testActiveSubagentsGCsEntriesOlderThan30Minutes() async throws {
         let dir = tempStateDir()
         let sid = "s1"

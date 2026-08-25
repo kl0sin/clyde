@@ -126,6 +126,24 @@ final class HookScriptTests: XCTestCase {
         return files.filter { $0.hasSuffix(".json") }.sorted()
     }
 
+    private func toolsDir(in home: URL, sessionId: String) -> URL {
+        home.appendingPathComponent(".clyde/state/\(sessionId)-tools")
+    }
+
+    private func toolFiles(in home: URL, sessionId: String) -> [String] {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            atPath: toolsDir(in: home, sessionId: sessionId).path)) ?? []
+        return files.filter { $0.hasSuffix(".json") }.sorted()
+    }
+
+    private func preToolUse(sid: String, toolUseID: String, name: String, command: String) -> String {
+        #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/tmp","tool_name":"\#(name)","tool_use_id":"\#(toolUseID)","tool_input":{"command":"\#(command)"}}"#
+    }
+
+    private func postToolUse(sid: String, toolUseID: String, name: String) -> String {
+        #"{"hook_event_name":"PostToolUse","session_id":"\#(sid)","cwd":"/tmp","tool_name":"\#(name)","tool_use_id":"\#(toolUseID)","tool_input":{"command":"x"}}"#
+    }
+
     private func lastMessageJSON(in home: URL, sessionId: String) -> [String: Any] {
         let url = home.appendingPathComponent(".clyde/state/\(sessionId)-lastmsg")
         guard let data = try? Data(contentsOf: url),
@@ -136,9 +154,20 @@ final class HookScriptTests: XCTestCase {
 
     /// Contents of the `-tool` marker the panel renders as
     /// `<Tool> · <summary>` on the session row.
+    /// The in-flight tool record. Since hook v30 each call occupies its
+    /// own slot under `-tools/`; these cases drive a single call, so the
+    /// sole slot is the one under test. Falls back to the pre-v30
+    /// single-file marker.
     private func toolJSON(in home: URL, sessionId: String) -> [String: Any] {
-        let url = home.appendingPathComponent(".clyde/state/\(sessionId)-tool")
-        guard let data = try? Data(contentsOf: url),
+        let dir = toolsDir(in: home, sessionId: sessionId)
+        if let slot = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [])
+            .first(where: { $0.hasSuffix(".json") }),
+           let data = try? Data(contentsOf: dir.appendingPathComponent(slot)),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return json
+        }
+        let legacy = home.appendingPathComponent(".clyde/state/\(sessionId)-tool")
+        guard let data = try? Data(contentsOf: legacy),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return [:] }
         return json
@@ -481,6 +510,67 @@ final class HookScriptTests: XCTestCase {
             FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path),
             "TeammateIdle must stay out of the attention pipeline"
         )
+    }
+
+    // MARK: - Parallel tool calls
+
+    /// The `-tool` marker was a single file, so a batch of parallel
+    /// calls overwrote each other and the row showed whichever
+    /// PreToolUse happened to land last. One slot per tool_use_id, the
+    /// same shape `-agents/` already uses.
+    func testParallelToolCallsEachGetTheirOwnSlot() throws {
+        let home = tempHome()
+        let sid = "88888888-aaaa-bbbb-cccc-000000000001"
+
+        try runHook(payload: preToolUse(sid: sid, toolUseID: "t_a", name: "Bash", command: "probe-A"), home: home)
+        try runHook(payload: preToolUse(sid: sid, toolUseID: "t_b", name: "Bash", command: "probe-B"), home: home)
+        try runHook(payload: preToolUse(sid: sid, toolUseID: "t_c", name: "Bash", command: "probe-C"), home: home)
+
+        XCTAssertEqual(toolFiles(in: home, sessionId: sid), ["t_a.json", "t_b.json", "t_c.json"])
+    }
+
+    /// One call finishing must not blank the row while its siblings are
+    /// still running.
+    func testPostToolUseRemovesOnlyItsOwnSlot() throws {
+        let home = tempHome()
+        let sid = "88888888-aaaa-bbbb-cccc-000000000002"
+
+        try runHook(payload: preToolUse(sid: sid, toolUseID: "t_a", name: "Bash", command: "probe-A"), home: home)
+        try runHook(payload: preToolUse(sid: sid, toolUseID: "t_b", name: "Bash", command: "probe-B"), home: home)
+        try runHook(payload: postToolUse(sid: sid, toolUseID: "t_a", name: "Bash"), home: home)
+
+        XCTAssertEqual(
+            toolFiles(in: home, sessionId: sid), ["t_b.json"],
+            "the sibling call is still in flight and must stay on the row"
+        )
+    }
+
+    /// Safety net. Real payload shape, captured from a live session:
+    /// `tool_calls` is a list of {tool_name, tool_use_id, tool_input,
+    /// tool_response} — and there is no `batch_id`, despite the docs.
+    func testPostToolBatchSweepsEveryCallInTheBatch() throws {
+        let home = tempHome()
+        let sid = "88888888-aaaa-bbbb-cccc-000000000003"
+
+        try runHook(payload: preToolUse(sid: sid, toolUseID: "t_a", name: "Bash", command: "probe-A"), home: home)
+        try runHook(payload: preToolUse(sid: sid, toolUseID: "t_b", name: "Bash", command: "probe-B"), home: home)
+        XCTAssertEqual(toolFiles(in: home, sessionId: sid).count, 2, "precondition")
+
+        let batch = #"{"hook_event_name":"PostToolBatch","session_id":"\#(sid)","cwd":"/tmp","tool_calls":[{"tool_name":"Bash","tool_use_id":"t_a","tool_input":{"command":"probe-A"},"tool_response":"ok"},{"tool_name":"Bash","tool_use_id":"t_b","tool_input":{"command":"probe-B"},"tool_response":"ok"}]}"#
+        try runHook(payload: batch, home: home)
+
+        XCTAssertEqual(toolFiles(in: home, sessionId: sid), [], "PostToolBatch must clear the whole batch")
+    }
+
+    /// The turn is over — nothing can still be in flight.
+    func testStopClearsAllToolSlots() throws {
+        let home = tempHome()
+        let sid = "88888888-aaaa-bbbb-cccc-000000000004"
+
+        try runHook(payload: preToolUse(sid: sid, toolUseID: "t_a", name: "Bash", command: "probe-A"), home: home)
+        try runHook(payload: #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/tmp"}"#, home: home)
+
+        XCTAssertEqual(toolFiles(in: home, sessionId: sid), [])
     }
 
     // MARK: - Last assistant message preview

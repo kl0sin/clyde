@@ -72,6 +72,7 @@ final class ProcessMonitor: ObservableObject {
     /// UserPromptSubmit so a multi-turn plan keeps tracking.
     private var hookPlanByPID: [pid_t: ActivePlan] = [:]
     private var hookLastMessageByPID: [pid_t: String] = [:]
+    private var hookToolCountByPID: [pid_t: Int] = [:]
 
     /// Active Task-dispatched subagents per PID, populated from `-agents/*.json` markers.
     /// Inner array is sorted by `startedAt` ascending.
@@ -476,6 +477,7 @@ final class ProcessMonitor: ObservableObject {
             existing.subagentType = hookSubagentByPID[pid]
             existing.activeTool = hookToolByPID[pid]
             existing.activePlan = hookPlanByPID[pid]
+            existing.activeToolCount = hookToolCountByPID[pid] ?? 0
             existing.lastMessage = hookLastMessageByPID[pid]
             existing.activeSubagents = hookAgentsByPID[pid] ?? []
             return existing
@@ -498,6 +500,7 @@ final class ProcessMonitor: ObservableObject {
             }
             revived.activeTool = hookToolByPID[pid]
             revived.activePlan = hookPlanByPID[pid]
+            revived.activeToolCount = hookToolCountByPID[pid] ?? 0
             revived.lastMessage = hookLastMessageByPID[pid]
             revived.activeSubagents = hookAgentsByPID[pid] ?? []
             return revived
@@ -516,6 +519,7 @@ final class ProcessMonitor: ObservableObject {
         fresh.subagentType = hookSubagentByPID[pid]
         fresh.activeTool = hookToolByPID[pid]
         fresh.activePlan = hookPlanByPID[pid]
+        fresh.activeToolCount = hookToolCountByPID[pid] ?? 0
         fresh.lastMessage = hookLastMessageByPID[pid]
         fresh.activeSubagents = hookAgentsByPID[pid] ?? []
         return fresh
@@ -714,6 +718,42 @@ final class ProcessMonitor: ObservableObject {
             return changed
         }
         var tools: [pid_t: ActiveTool] = [:]
+        var counts: [pid_t: Int] = [:]
+
+        // Preferred shape (hook v30+): one slot per tool_use_id, so a
+        // batch of parallel calls is represented honestly. The oldest
+        // call labels the row; the count drives the "N tools" variant.
+        for dir in files where dir.lastPathComponent.hasSuffix("-tools") {
+            guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true,
+                  let slots = try? FileManager.default.contentsOfDirectory(
+                    at: dir, includingPropertiesForKeys: nil) else { continue }
+            for slot in slots where slot.pathExtension == "json" {
+                guard let data = try? Data(contentsOf: slot),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let pidValue = json["pid"] as? Int,
+                      let toolName = json["tool_name"] as? String,
+                      !toolName.isEmpty,
+                      let startedAt = json["started_at"] as? Int else {
+                    try? FileManager.default.removeItem(at: slot)
+                    continue
+                }
+                let pid = pid_t(pidValue)
+                if kill(pid, 0) != 0 {
+                    try? FileManager.default.removeItem(at: slot)
+                    continue
+                }
+                let started = Date(timeIntervalSince1970: TimeInterval(startedAt))
+                counts[pid, default: 0] += 1
+                let candidate = ActiveTool(
+                    toolName: toolName,
+                    summary: (json["summary"] as? String) ?? "",
+                    startedAt: started
+                )
+                if let existing = tools[pid], existing.startedAt <= started { continue }
+                tools[pid] = candidate
+            }
+        }
+
         for file in files where file.lastPathComponent.hasSuffix("-tool") {
             guard let data = try? Data(contentsOf: file),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -729,6 +769,10 @@ final class ProcessMonitor: ObservableObject {
                 try? FileManager.default.removeItem(at: file)
                 continue
             }
+            // Legacy single-slot marker from a pre-v30 hook. Never
+            // overrides the richer per-call slots above.
+            if tools[pid] != nil { continue }
+            counts[pid, default: 0] += 1
             let summary = (json["summary"] as? String) ?? ""
             tools[pid] = ActiveTool(
                 toolName: toolName,
@@ -736,8 +780,11 @@ final class ProcessMonitor: ObservableObject {
                 startedAt: Date(timeIntervalSince1970: TimeInterval(startedAt))
             )
         }
-        let changed = tools != hookToolByPID
-        if changed { hookToolByPID = tools }
+        let changed = tools != hookToolByPID || counts != hookToolCountByPID
+        if changed {
+            hookToolByPID = tools
+            hookToolCountByPID = counts
+        }
         return changed
     }
 
@@ -959,6 +1006,11 @@ final class ProcessMonitor: ObservableObject {
             let newTool = hookToolByPID[pid]
             if updated[index].activeTool != newTool {
                 updated[index].activeTool = newTool
+                changed = true
+            }
+            let newToolCount = hookToolCountByPID[pid] ?? 0
+            if updated[index].activeToolCount != newToolCount {
+                updated[index].activeToolCount = newToolCount
                 changed = true
             }
             let newPlan = hookPlanByPID[pid]
