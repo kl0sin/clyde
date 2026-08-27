@@ -43,7 +43,7 @@ enum HookInstaller {
         }
     }
 
-    enum InstallError: LocalizedError {
+    enum InstallError: LocalizedError, Equatable {
         case writeFailed(String)
         case parseFailed
         case bundledScriptMissing
@@ -164,6 +164,7 @@ enum HookInstaller {
         case scriptNotExecutable
         case outdated(installed: Int, current: Int)
         case missingEvents([String])            // events that are missing from settings.json
+        case scriptVersionUnreadable            // script on disk carries no parseable version stamp
         case staleEvents([String])              // retired events still registered in settings.json
         case autoRepairFailed(reason: String)   // we tried to fix it and write threw
         case cleatHooksCapDisabled              // cleat installed but its hooks cap is off
@@ -194,6 +195,8 @@ enum HookInstaller {
                 return "Hook script isn't executable. Reinstall to fix permissions."
             case .outdated(let installed, let current):
                 return "Hook script is outdated (v\(installed) → v\(current)). Reinstall to upgrade."
+            case .scriptVersionUnreadable:
+                return "Hook script carries no readable version stamp. Reinstall to replace it."
             case .missingEvents(let names):
                 return "Hook isn't registered for: \(names.joined(separator: ", ")). Reinstall to fix."
             case .staleEvents(let names):
@@ -239,6 +242,7 @@ enum HookInstaller {
                  .scriptMissing,
                  .scriptNotExecutable,
                  .outdated,
+                 .scriptVersionUnreadable,
                  .missingEvents,
                  .staleEvents,
                  .autoRepairFailed:
@@ -355,9 +359,16 @@ enum HookInstaller {
             return .scriptNotExecutable
         }
 
-        // Version stamp.
-        if let installedVersion = readInstalledVersion(),
-           installedVersion < currentScriptVersion {
+        // Version stamp. A script we cannot read a version out of is not
+        // "up to date" — it is a script we know nothing about, most likely
+        // truncated by an interrupted write or hand-edited. The comparison
+        // below is `if let`, so a nil version used to skip the check
+        // entirely: the corrupt script was never upgraded and never
+        // flagged, and simply sat there until someone noticed by hand.
+        guard let installedVersion = readInstalledVersion() else {
+            return .scriptVersionUnreadable
+        }
+        if installedVersion < currentScriptVersion {
             return .outdated(installed: installedVersion, current: currentScriptVersion)
         }
 
@@ -474,9 +485,19 @@ enum HookInstaller {
         )
 
         // 2. Merge hook config into settings.json
+        // Refuse to touch a settings.json we cannot understand. The old
+        // code parsed it with `try?` and fell back to an empty dictionary,
+        // which meant an unparseable file — a truncated write, a
+        // hand-edited trailing comma — was replaced wholesale by one
+        // containing nothing but Clyde's hooks. Model, permissions, env,
+        // plugins and MCP servers, gone, silently. Better to fail loudly
+        // and let the banner tell the user to fix their file.
         var settings: [String: Any] = [:]
-        if let data = try? Data(contentsOf: AppPaths.claudeSettingsFile),
-           let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if let data = try? Data(contentsOf: AppPaths.claudeSettingsFile), !data.isEmpty {
+            guard let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                ClydeLog.hooks.error("settings.json is unparseable — refusing to overwrite it")
+                throw InstallError.parseFailed
+            }
             settings = parsed
         }
 
@@ -518,7 +539,7 @@ enum HookInstaller {
                 withJSONObject: settings,
                 options: [.prettyPrinted, .sortedKeys]
             )
-            try data.write(to: AppPaths.claudeSettingsFile)
+            try data.write(to: AppPaths.claudeSettingsFile, options: .atomic)
             Self.lastSelfWriteAt = Date()
             ClydeLog.hooks.info("Hook installed successfully")
         } catch {
@@ -550,7 +571,7 @@ enum HookInstaller {
                     withJSONObject: settings,
                     options: [.prettyPrinted, .sortedKeys]
                 )
-                try newData.write(to: AppPaths.claudeSettingsFile)
+                try newData.write(to: AppPaths.claudeSettingsFile, options: .atomic)
                 Self.lastSelfWriteAt = Date()
             } catch {
                 ClydeLog.hooks.error("Failed to write cleaned settings: \(error.localizedDescription, privacy: .public)")

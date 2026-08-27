@@ -548,7 +548,7 @@ final class AppViewModel: ObservableObject {
                 shouldAutoInstall = false
             case .notInstalled:
                 shouldAutoInstall = !optedOut
-            case .scriptMissing, .scriptNotExecutable, .outdated, .missingEvents, .staleEvents:
+            case .scriptMissing, .scriptNotExecutable, .outdated, .scriptVersionUnreadable, .missingEvents, .staleEvents:
                 shouldAutoInstall = true
             case .autoRepairFailed:
                 shouldAutoInstall = false

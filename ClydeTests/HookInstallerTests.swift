@@ -435,6 +435,79 @@ final class HookInstallerTests: XCTestCase {
     /// Healthy hook install + cleat installed with hooks cap disabled
     /// → healthCheck returns the cleat advisory. This is the
     /// integration test for the new advisory branch.
+    // MARK: - Error paths
+
+    /// The worst thing HookInstaller can do is not "fail to install" —
+    /// it's silently replacing the user's entire Claude Code config with
+    /// nothing but Clyde's hooks. An unparseable settings.json (truncated
+    /// write, a hand-edited trailing comma) parsed to nil, which the merge
+    /// treated as "no existing settings", so model, permissions, env,
+    /// plugins and MCP servers would all be written away.
+    func testInstallRefusesToClobberUnparseableSettings() throws {
+        try FileManager.default.createDirectory(at: AppPaths.claudeDir, withIntermediateDirectories: true)
+        let corrupt = "{ \"model\": \"opus\", \"hooks\": {  "  // truncated mid-object
+        try corrupt.write(to: AppPaths.claudeSettingsFile, atomically: true, encoding: .utf8)
+
+        XCTAssertThrowsError(try HookInstaller.install()) { error in
+            XCTAssertEqual(error as? HookInstaller.InstallError, .parseFailed)
+        }
+
+        let after = try String(contentsOf: AppPaths.claudeSettingsFile, encoding: .utf8)
+        XCTAssertEqual(after, corrupt, "a settings.json we cannot read must be left exactly as it is")
+    }
+
+    /// JSON that parses but isn't an object (a bare array, say) is the
+    /// same hazard by a different route.
+    func testInstallRefusesSettingsThatAreNotAnObject() throws {
+        try FileManager.default.createDirectory(at: AppPaths.claudeDir, withIntermediateDirectories: true)
+        let notAnObject = "[1, 2, 3]"
+        try notAnObject.write(to: AppPaths.claudeSettingsFile, atomically: true, encoding: .utf8)
+
+        XCTAssertThrowsError(try HookInstaller.install())
+        XCTAssertEqual(try String(contentsOf: AppPaths.claudeSettingsFile, encoding: .utf8), notAnObject)
+    }
+
+    /// An empty or absent settings.json is the normal first-run case and
+    /// must still install cleanly — the guard above must not swallow it.
+    func testInstallStillWorksWithNoSettingsFile() throws {
+        try? FileManager.default.removeItem(at: AppPaths.claudeSettingsFile)
+
+        XCTAssertNoThrow(try HookInstaller.install())
+        XCTAssertNil(HookInstaller.healthCheck())
+    }
+
+    /// A script whose version stamp is gone (truncated write, hand-edit)
+    /// read as `nil`, and the outdated check is `if let` — so the version
+    /// comparison was skipped entirely and the corrupt script was never
+    /// upgraded and never flagged. It just sat there.
+    func testHealthCheckFlagsScriptWithMissingVersionStamp() throws {
+        try HookInstaller.install()
+        try "#!/usr/bin/env bash\nexit 0\n".write(
+            to: AppPaths.clydeHookScript, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(HookInstaller.healthCheck(), .scriptVersionUnreadable)
+    }
+
+    func testHealthCheckFlagsScriptWithUnparseableVersionStamp() throws {
+        try HookInstaller.install()
+        try "#!/usr/bin/env bash\n# clyde-hook-version: banana\nexit 0\n".write(
+            to: AppPaths.clydeHookScript, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(HookInstaller.healthCheck(), .scriptVersionUnreadable)
+    }
+
+    /// And reinstalling has to actually resolve it, or the banner becomes
+    /// permanent furniture.
+    func testReinstallRepairsAnUnstampedScript() throws {
+        try HookInstaller.install()
+        try "#!/usr/bin/env bash\nexit 0\n".write(
+            to: AppPaths.clydeHookScript, atomically: true, encoding: .utf8)
+
+        try HookInstaller.install()
+
+        XCTAssertNil(HookInstaller.healthCheck())
+    }
+
     // MARK: - Retired worktree subscription
 
     /// `WorktreeCreate` is a *delegating* hook: Claude Code hands
