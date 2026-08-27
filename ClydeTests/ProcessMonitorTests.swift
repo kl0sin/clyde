@@ -719,6 +719,97 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
+    // MARK: - Reclaiming disk in state/<sid>-agents/
+
+    /// Writes one `-agents/<id>.json` record the way the hook does.
+    private func writeAgentFile(
+        in stateDir: URL, sessionId: String, id: String,
+        type: String = "Explore", summary: String = "job",
+        startedAt: Date = Date()
+    ) throws {
+        let agentsDir = stateDir.appendingPathComponent("\(sessionId)-agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+        let body = #"{"agent_id":"\#(id)","subagent_type":"\#(type)","summary":"\#(summary)","started_at":\#(Int(startedAt.timeIntervalSince1970))}"#
+        try body.write(to: agentsDir.appendingPathComponent("\(id).json"), atomically: true, encoding: .utf8)
+    }
+
+    /// The 30-minute cutoff only ever filtered the entry out of the read;
+    /// the file itself stayed on disk forever and every poll logged
+    /// "Dropping stale subagent entry" again — 1200 lines an hour at the
+    /// 3s polling interval. Dropping it from the panel has to mean
+    /// reclaiming it from disk.
+    func testStaleSubagentEntryIsDeletedFromDisk() async throws {
+        let dir = tempStateDir()
+        let sid = "stale-sid"
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        try writeAgentFile(in: dir, sessionId: sid, id: "agent_old",
+                           startedAt: Date().addingTimeInterval(-31 * 60))
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        let file = dir.appendingPathComponent("\(sid)-agents/agent_old.json")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path),
+                       "stale entry must be reclaimed, not just skipped")
+    }
+
+    /// A session that died without emitting SessionEnd leaves its whole
+    /// `-agents/` directory behind. Nothing collected those: the refresh
+    /// skips any directory whose session has no `-info`, so the one case
+    /// that actually produces litter was the one case never swept.
+    func testAgentsDirIsRemovedWhenSessionInfoIsGone() async throws {
+        let dir = tempStateDir()
+        try writeAgentFile(in: dir, sessionId: "dead-sid", id: "agent_x")
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: dir.appendingPathComponent("dead-sid-agents").path),
+            "orphaned agents dir must be removed")
+    }
+
+    /// The four directories found on the developer machine were all empty
+    /// — sessions that ended with no agents in flight.
+    func testEmptyOrphanedAgentsDirIsRemoved() async throws {
+        let dir = tempStateDir()
+        let orphan = dir.appendingPathComponent("gone-sid-agents")
+        try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: true)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+    }
+
+    /// The guard against over-collecting: a live session's directory and
+    /// its in-flight records must survive the sweep. Orphan detection keys
+    /// on the `-info` file being absent, deliberately NOT on the liveness
+    /// probe — a cleat-sandboxed session fails the identity check while
+    /// being perfectly alive, and deleting its agents would be worse than
+    /// leaving litter.
+    func testLiveSessionAgentsDirSurvivesTheSweep() async throws {
+        let dir = tempStateDir()
+        let sid = "live-sid"
+        _ = writeInfoFile(in: dir, sessionId: sid)
+        try writeAgentFile(in: dir, sessionId: sid, id: "agent_fresh")
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in false })
+        await monitor.poll()
+
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("\(sid)-agents/agent_fresh.json").path),
+            "a live session's records must not be collected")
+    }
+
     func testActiveSubagentsListedFromAgentsDir() async throws {
         let dir = tempStateDir()
         let sid = "s1"
@@ -982,8 +1073,13 @@ final class ProcessMonitorTests: XCTestCase {
 
         let session = try XCTUnwrap(monitor.sessions.first)
         XCTAssertEqual(session.activeSubagents.map(\.id), ["toolu_fresh"])
-        // The stale file is NOT deleted on disk — UI drop only.
-        XCTAssertTrue(FileManager.default.fileExists(atPath: agentsDir.appendingPathComponent("toolu_old.json").path))
+        // Dropping it from the panel now means reclaiming it from disk.
+        // This assertion used to demand the opposite ("UI drop only"),
+        // which is what let a single zombie re-log its way through 1200
+        // poll cycles an hour while never freeing a byte.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: agentsDir.appendingPathComponent("toolu_old.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: agentsDir.appendingPathComponent("toolu_fresh.json").path),
+                      "the fresh record must survive")
     }
 
     /// The `-subagent` marker is retired. A stale one left on disk by a

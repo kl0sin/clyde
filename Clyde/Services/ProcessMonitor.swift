@@ -926,6 +926,28 @@ final class ProcessMonitor: ObservableObject {
             let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
             guard isDir else { continue }
             let sid = String(entry.lastPathComponent.dropLast("-agents".count))
+
+            // Reclaim the directory of a session that is gone. A session
+            // that ends cleanly has its `-agents/` removed by SessionEnd;
+            // one that is killed or crashes never emits it and leaves the
+            // directory behind forever, because the loop below skips any
+            // session it can't resolve to a live PID — so the only case
+            // that produces litter was the only case never collected.
+            //
+            // Orphan detection keys on `-info` being absent rather than on
+            // the liveness probe: a cleat-sandboxed session fails the
+            // identity check while being perfectly alive, and deleting a
+            // live session's agents is far worse than leaving litter. The
+            // `-info` file is written by SessionStart and removed by
+            // SessionEnd, and `discoverPIDs` prunes it for dead PIDs, so
+            // its absence is the honest signal.
+            let infoURL = stateDir.appendingPathComponent("\(sid)-info")
+            guard FileManager.default.fileExists(atPath: infoURL.path) else {
+                try? FileManager.default.removeItem(at: entry)
+                ClydeLog.hooks.info("Reclaimed orphaned -agents dir sid=\(sid, privacy: .public)")
+                continue
+            }
+
             guard let parentPID = parentPIDForSessionID(sid) else { continue }
 
             guard let files = try? FileManager.default.contentsOfDirectory(
@@ -948,7 +970,12 @@ final class ProcessMonitor: ObservableObject {
                 }
                 let started = Date(timeIntervalSince1970: TimeInterval(startedAt))
                 guard started >= cutoff else {
-                    ClydeLog.hooks.info("Dropping stale subagent entry id=\(id, privacy: .public)")
+                    // Delete rather than skip. Skipping kept the file on
+                    // disk forever and re-logged this line on every poll —
+                    // 1200 lines an hour at a 3s interval — while the disk
+                    // never got its space back.
+                    try? FileManager.default.removeItem(at: file)
+                    ClydeLog.hooks.info("Reclaimed stale subagent entry id=\(id, privacy: .public)")
                     continue
                 }
                 let summary = (json["summary"] as? String) ?? ""
