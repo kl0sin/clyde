@@ -6,6 +6,10 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **Clyde can no longer overwrite your Claude Code settings.** If `~/.claude/settings.json` couldn't be parsed — a truncated write, a stray comma from a hand-edit — Clyde treated it as an empty file and rewrote it with nothing but its own hooks, taking your model, permissions, environment, plugins and MCP servers with it. It now refuses to touch a settings file it can't read and tells you instead. Clyde's own writes to that file are atomic too, so an interrupted one can no longer truncate it in the first place.
+- **A hook script with no version stamp is now repaired instead of ignored.** Clyde compared version numbers only when it could read one, so a script damaged into losing its stamp was never upgraded and never reported — it just quietly stopped keeping up. Clyde now spots it and replaces it on the next launch.
+- **Stale subagent records are cleaned off disk.** Clyde stopped showing subagent rows older than 30 minutes but never deleted them, so the files accumulated and each one re-logged itself on every poll. Leftover directories from sessions that crashed without shutting down cleanly are now collected too.
+
 ## [0.7.0] — 2026-08-27
 
 Clyde's hook coverage stopped growing while Claude Code kept getting more autonomous, and the gap showed up exactly where it hurts: agent teams, batches of parallel tool calls, slash commands driving long unattended runs. This release closes it. The session row stops saying "Working" and starts saying what is actually happening — which command is running, which worktree it is running in, how many tools are in flight, and what Claude said when it finished. It also fixes the one place where Clyde's model of a session was provably wrong: subagents were tracked through the tool call that dispatched them, so a backgrounded agent vanished from the panel while it carried on working. Clyde's hook script upgrades itself on launch; nothing to reinstall.
