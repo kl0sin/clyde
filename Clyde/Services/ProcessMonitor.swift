@@ -700,8 +700,23 @@ final class ProcessMonitor: ObservableObject {
         // batch of parallel calls is represented honestly. The oldest
         // call labels the row; the count drives the "N tools" variant.
         for dir in files where dir.lastPathComponent.hasSuffix("-tools") {
-            guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true,
-                  let slots = try? FileManager.default.contentsOfDirectory(
+            guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+
+            // Same reclamation as `-agents/`: slots are pruned by PID
+            // liveness, but nothing ever removed the directory, so a
+            // session killed without SessionEnd left an empty one behind
+            // for good. Orphan means "no `-info` on disk" — not "the
+            // liveness probe said no" — because a cleat session fails the
+            // identity check while being perfectly alive.
+            let sid = String(dir.lastPathComponent.dropLast("-tools".count))
+            guard FileManager.default.fileExists(
+                atPath: stateDir.appendingPathComponent("\(sid)-info").path) else {
+                try? FileManager.default.removeItem(at: dir)
+                ClydeLog.hooks.info("Reclaimed orphaned -tools dir sid=\(sid, privacy: .public)")
+                continue
+            }
+
+            guard let slots = try? FileManager.default.contentsOfDirectory(
                     at: dir, includingPropertiesForKeys: nil) else { continue }
             for slot in slots where slot.pathExtension == "json" {
                 guard let data = try? Data(contentsOf: slot),

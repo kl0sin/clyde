@@ -810,6 +810,60 @@ final class ProcessMonitorTests: XCTestCase {
             "a live session's records must not be collected")
     }
 
+    /// `-tools/` leaks exactly the way `-agents/` did: slots are pruned
+    /// by PID liveness, but the directory itself was never removed, so a
+    /// session killed without SessionEnd leaves an empty one behind
+    /// forever. Same reclamation, same orphan rule (`-info` absent).
+    func testToolsDirIsRemovedWhenSessionInfoIsGone() async throws {
+        let dir = tempStateDir()
+        let toolsDir = dir.appendingPathComponent("dead-sid-tools")
+        try FileManager.default.createDirectory(at: toolsDir, withIntermediateDirectories: true)
+        let body = #"{"session_id":"dead-sid","pid":\#(getpid()),"tool_name":"Bash","summary":"x","started_at":0}"#
+        try body.write(to: toolsDir.appendingPathComponent("toolu_dead.json"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: toolsDir.path),
+                       "orphaned tools dir must be reclaimed")
+    }
+
+    func testEmptyOrphanedToolsDirIsRemoved() async throws {
+        let dir = tempStateDir()
+        let orphan = dir.appendingPathComponent("gone-sid-tools")
+        try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: true)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+    }
+
+    /// Guard against over-collecting, mirroring the agents case: a live
+    /// session's in-flight slots must survive even when the identity probe
+    /// says no (cleat).
+    func testLiveSessionToolsDirSurvivesTheSweep() async throws {
+        let dir = tempStateDir()
+        let sid = "live-sid"
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        let toolsDir = dir.appendingPathComponent("\(sid)-tools")
+        try FileManager.default.createDirectory(at: toolsDir, withIntermediateDirectories: true)
+        let body = #"{"session_id":"\#(sid)","pid":\#(pid),"tool_name":"Bash","summary":"x","started_at":\#(Int(Date().timeIntervalSince1970))}"#
+        try body.write(to: toolsDir.appendingPathComponent("toolu_live.json"), atomically: true, encoding: .utf8)
+
+        let monitor = ProcessMonitor(
+            shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in false })
+        await monitor.poll()
+
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: toolsDir.appendingPathComponent("toolu_live.json").path))
+    }
+
     func testActiveSubagentsListedFromAgentsDir() async throws {
         let dir = tempStateDir()
         let sid = "s1"
