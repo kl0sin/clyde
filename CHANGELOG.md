@@ -6,9 +6,14 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
-- **Clyde can no longer overwrite your Claude Code settings.** If `~/.claude/settings.json` couldn't be parsed — a truncated write, a stray comma from a hand-edit — Clyde treated it as an empty file and rewrote it with nothing but its own hooks, taking your model, permissions, environment, plugins and MCP servers with it. It now refuses to touch a settings file it can't read and tells you instead. Clyde's own writes to that file are atomic too, so an interrupted one can no longer truncate it in the first place.
-- **A hook script with no version stamp is now repaired instead of ignored.** Clyde compared version numbers only when it could read one, so a script damaged into losing its stamp was never upgraded and never reported — it just quietly stopped keeping up. Clyde now spots it and replaces it on the next launch.
-- **Stale subagent records are cleaned off disk.** Clyde stopped showing subagent rows older than 30 minutes but never deleted them, so the files accumulated and each one re-logged itself on every poll. Leftover directories from sessions that crashed without shutting down cleanly are now collected too.
+## [0.7.1] — 2026-08-27
+
+A bugfix release, and the headline is one you would rather never have needed: Clyde could overwrite your Claude Code settings. It took an unreadable `settings.json` to trigger it, but when it did, the file came back holding nothing but Clyde's own hooks. That is fixed, along with three smaller faults found while auditing the same code — all of them the kind that stay invisible until the day they aren't.
+
+- **Clyde can no longer overwrite your Claude Code settings.** If `~/.claude/settings.json` couldn't be parsed — a truncated write, a stray comma from a hand-edit — Clyde treated it as an empty file and rewrote it with nothing but its own hooks, taking your model, permissions, environment, plugins and MCP servers with it. It now refuses to touch a settings file it can't read and reports the problem instead. Clyde's own writes to that file are atomic too, so an interrupted one can no longer truncate it in the first place.
+- **The session row says what a command is actually doing.** A shell command's summary was its first 40 characters, so anything starting with an environment variable or a `cd` into a long path filled the row with noise — `Bash · SP=/private/tmp/claude-501/-U…` — and never got to the command itself. Those prefixes are skipped now, while anything ambiguous is left alone rather than guessed at.
+- **A hook script with no version stamp is repaired instead of ignored.** Clyde compared version numbers only when it could read one, so a script damaged into losing its stamp was never upgraded and never reported — it just quietly stopped keeping up. Clyde now spots it and replaces it on the next launch.
+- **Leftover session files are cleaned off disk.** Clyde stopped showing subagent rows older than 30 minutes but never deleted them, so the files accumulated and each one re-announced itself in the log on every poll. Directories left behind by sessions that crashed without shutting down cleanly are now collected too.
 
 ## [0.7.0] — 2026-08-27
 
