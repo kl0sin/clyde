@@ -512,6 +512,98 @@ final class HookScriptTests: XCTestCase {
         )
     }
 
+    // MARK: - Bash summary readability
+
+    /// Observed in the panel on a live session: `Bash · SP=/private/tmp/
+    /// claude-501/-U…`. The summary is the command's first 40 characters,
+    /// and a leading environment assignment eats every one of them, so the
+    /// row names the tool and then says nothing about what it is doing.
+    func testBashSummarySkipsLeadingEnvAssignment() throws {
+        let home = tempHome()
+        let sid = "bash-0001"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_b1","tool_input":{"command":"SP=/private/tmp/claude-501 swift test"}}"#, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "swift test")
+    }
+
+    func testBashSummarySkipsSeveralEnvAssignments() throws {
+        let home = tempHome()
+        let sid = "bash-0002"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_b2","tool_input":{"command":"FOO=1 BAR=2 make build"}}"#, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "make build")
+    }
+
+    /// `cd <somewhere> && <the actual thing>` is the other shape that
+    /// spends the whole budget before saying anything.
+    func testBashSummarySkipsLeadingCd() throws {
+        let home = tempHome()
+        let sid = "bash-0003"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_b3","tool_input":{"command":"cd /Users/me/very/long/path && swift build"}}"#, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "swift build")
+    }
+
+    /// The shape that slipped through the first implementation, caught by
+    /// running it against a live session: an assignment as its own
+    /// statement, `VAR=value && command`. Stripping the assignment leaves
+    /// a dangling `&&`, so the row read `Bash · && cat ~/.clyde/state/…`.
+    func testBashSummaryDropsDanglingAndAfterAssignment() throws {
+        let home = tempHome()
+        let sid = "bash-0007"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_b7","tool_input":{"command":"SP=/private/tmp/scratch && cat state.json"}}"#, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "cat state.json")
+    }
+
+    /// Same shape with a semicolon separator.
+    func testBashSummaryDropsDanglingSemicolonAfterAssignment() throws {
+        let home = tempHome()
+        let sid = "bash-0008"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_b8","tool_input":{"command":"FOO=1 ; make build"}}"#, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "make build")
+    }
+
+    /// An `=` further along the line is not an assignment. Stripping on
+    /// that would silently eat the actual command.
+    func testBashSummaryKeepsEqualsSignInsideArguments() throws {
+        let home = tempHome()
+        let sid = "bash-0004"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_b4","tool_input":{"command":"git log --format=short"}}"#, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "git log --format=short")
+    }
+
+    /// A quoted value may contain spaces, so the naive "cut at the first
+    /// space" rule would slice it in half. Leave those alone rather than
+    /// produce a summary that is actively wrong.
+    func testBashSummaryLeavesQuotedAssignmentAlone() throws {
+        let home = tempHome()
+        let sid = "bash-0005"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_b5","tool_input":{"command":"MSG=\"a b\" echo hi"}}"#, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "MSG=\"a b\" echo hi")
+    }
+
+    /// A command that is nothing but assignments still has to say
+    /// something rather than collapse to an empty summary.
+    func testBashSummaryOfBareAssignmentIsKept() throws {
+        let home = tempHome()
+        let sid = "bash-0006"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_b6","tool_input":{"command":"FOO=bar"}}"#, home: home)
+
+        XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "FOO=bar")
+    }
+
     // MARK: - Per-event regression coverage
     //
     // Twelve of the hook's twenty-three handled events had no test at

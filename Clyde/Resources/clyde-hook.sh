@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 34
+# clyde-hook-version: 35
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -157,6 +157,40 @@ compute_tool_summary() {
             # Collapse embedded newlines (python3 strips them; the
             # grep fallback may not).
             raw=$(printf '%s' "$raw" | tr '\n' ' ')
+            # Drop leading `VAR=value` assignments and a leading
+            # `cd <path> &&`. Both spend the entire 40-character budget
+            # before the summary says anything about what is running —
+            # observed on a live session as the row reading
+            # `Bash · SP=/private/tmp/claude-501/-U…`.
+            #
+            # Conservative on purpose: a quoted value can contain spaces,
+            # so "cut at the first space" would slice it in half. Anything
+            # quoted is left alone — a slightly noisy summary beats a
+            # wrong one. A command that is nothing but an assignment is
+            # kept as-is rather than collapsing to an empty summary.
+            while :; do
+                first=${raw%% *}
+                [ "$first" = "$raw" ] && break
+                case "$first" in
+                    *=*\"*|*=*\'*) break ;;
+                    [A-Za-z_]*=*)   raw=${raw#* } ;;
+                    *)              break ;;
+                esac
+            done
+            # An assignment can also stand as its own statement
+            # (`VAR=value && cmd`), which leaves the separator dangling
+            # once the assignment is gone. Caught on a live session, where
+            # the row read `Bash · && cat ~/.clyde/state/…`.
+            while :; do
+                case "$raw" in
+                    "&& "*) raw=${raw#"&& "} ;;
+                    "; "*)  raw=${raw#"; "} ;;
+                    *)      break ;;
+                esac
+            done
+            case "$raw" in
+                "cd "*" && "*) raw=${raw#*" && "} ;;
+            esac
             truncate_summary "$raw" 40
             ;;
         Glob|Grep)
