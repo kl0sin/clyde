@@ -512,6 +512,217 @@ final class HookScriptTests: XCTestCase {
         )
     }
 
+    // MARK: - Per-event regression coverage
+    //
+    // Twelve of the hook's twenty-three handled events had no test at
+    // all: the suite grew around whatever was being debugged that week,
+    // which left the quiet, load-bearing events — session lifecycle,
+    // attention, plan progress — as the least-covered code in the
+    // pipeline. Each case below pins one event's state-file contract,
+    // the thing ProcessMonitor reads on the other side.
+
+    /// Convenience for the `~/.clyde/state/<sid>-<suffix>` path.
+    private func stateFile(in home: URL, sessionId: String, suffix: String) -> URL {
+        home.appendingPathComponent(".clyde/state/\(sessionId)-\(suffix)")
+    }
+
+    private func json(at url: URL) throws -> [String: Any] {
+        let data = try XCTUnwrap(try? Data(contentsOf: url), "expected a file at \(url.lastPathComponent)")
+        return try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    func testSessionStartWritesInfoWithCwdAndSource() throws {
+        let home = tempHome()
+        let sid = "ev-0001"
+
+        try runHook(payload: #"{"hook_event_name":"SessionStart","session_id":"\#(sid)","cwd":"/repo","source":"startup"}"#, home: home)
+
+        let info = try json(at: stateFile(in: home, sessionId: sid, suffix: "info"))
+        XCTAssertEqual(info["cwd"] as? String, "/repo")
+        XCTAssertEqual(info["source"] as? String, "startup")
+    }
+
+    /// `source` is what tells ActivityLog an auto-compact restart apart
+    /// from a fresh session, so it has to survive verbatim.
+    func testSessionStartRecordsCompactSource() throws {
+        let home = tempHome()
+        let sid = "ev-0002"
+
+        try runHook(payload: #"{"hook_event_name":"SessionStart","session_id":"\#(sid)","cwd":"/repo","source":"compact"}"#, home: home)
+
+        let info = try json(at: stateFile(in: home, sessionId: sid, suffix: "info"))
+        XCTAssertEqual(info["source"] as? String, "compact")
+    }
+
+    func testCwdChangedRewritesInfoCwd() throws {
+        let home = tempHome()
+        let sid = "ev-0003"
+        try runHook(payload: #"{"hook_event_name":"SessionStart","session_id":"\#(sid)","cwd":"/repo","source":"startup"}"#, home: home)
+
+        try runHook(payload: #"{"hook_event_name":"CwdChanged","session_id":"\#(sid)","cwd":"/repo/sub"}"#, home: home)
+
+        let info = try json(at: stateFile(in: home, sessionId: sid, suffix: "info"))
+        XCTAssertEqual(info["cwd"] as? String, "/repo/sub")
+    }
+
+    /// No `-info` means no session Clyde knows about; CwdChanged must not
+    /// conjure one, or a dead session reappears in the panel.
+    func testCwdChangedWithoutExistingInfoWritesNothing() throws {
+        let home = tempHome()
+        let sid = "ev-0004"
+
+        try runHook(payload: #"{"hook_event_name":"CwdChanged","session_id":"\#(sid)","cwd":"/repo/sub"}"#, home: home)
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: stateFile(in: home, sessionId: sid, suffix: "info").path))
+    }
+
+    /// SessionEnd is the one event that has to leave nothing behind —
+    /// every marker the hook can write, plus both directories.
+    func testSessionEndClearsEveryMarker() throws {
+        let home = tempHome()
+        let sid = "ev-0005"
+        try runHook(payload: #"{"hook_event_name":"SessionStart","session_id":"\#(sid)","cwd":"/repo","source":"startup"}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Read","tool_use_id":"toolu_e5","tool_input":{"file_path":"/repo/a.swift"}}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"TaskCreated","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"PermissionRequest","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"StopFailure","session_id":"\#(sid)","cwd":"/repo","stop_reason":"rate_limit"}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"UserPromptExpansion","session_id":"\#(sid)","cwd":"/repo","command_name":"loop"}"#, home: home)
+
+        try runHook(payload: #"{"hook_event_name":"SessionEnd","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        for suffix in ["info", "busy", "error", "tool", "plan", "lastmsg", "command", "worktree"] {
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: stateFile(in: home, sessionId: sid, suffix: suffix).path),
+                "-\(suffix) survived SessionEnd")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: agentsDir(in: home, sessionId: sid).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: toolsDir(in: home, sessionId: sid).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path))
+    }
+
+    func testPermissionRequestRaisesAttentionEvent() throws {
+        let home = tempHome()
+        let sid = "ev-0006"
+
+        try runHook(payload: #"{"hook_event_name":"PermissionRequest","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        let event = try json(at: eventFile(in: home, sessionId: sid))
+        XCTAssertEqual(event["event"] as? String, "PermissionRequest")
+    }
+
+    func testPermissionDeniedClearsAttentionEvent() throws {
+        let home = tempHome()
+        let sid = "ev-0007"
+        try runHook(payload: #"{"hook_event_name":"PermissionRequest","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path), "precondition")
+
+        try runHook(payload: #"{"hook_event_name":"PermissionDenied","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path))
+    }
+
+    /// An MCP tool asking for input is the same class of signal as a
+    /// permission gate — the session is blocked on the human either way.
+    func testElicitationRaisesAttentionEvent() throws {
+        let home = tempHome()
+        let sid = "ev-0008"
+
+        try runHook(payload: #"{"hook_event_name":"Elicitation","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        let event = try json(at: eventFile(in: home, sessionId: sid))
+        XCTAssertEqual(event["event"] as? String, "Elicitation")
+    }
+
+    func testElicitationResultClearsAttentionEvent() throws {
+        let home = tempHome()
+        let sid = "ev-0009"
+        try runHook(payload: #"{"hook_event_name":"Elicitation","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        try runHook(payload: #"{"hook_event_name":"ElicitationResult","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path))
+    }
+
+    func testStopFailureRecordsStopReason() throws {
+        let home = tempHome()
+        let sid = "ev-0010"
+
+        try runHook(payload: #"{"hook_event_name":"StopFailure","session_id":"\#(sid)","cwd":"/repo","stop_reason":"rate_limit"}"#, home: home)
+
+        let error = try json(at: stateFile(in: home, sessionId: sid, suffix: "error"))
+        XCTAssertEqual(error["reason"] as? String, "rate_limit")
+    }
+
+    /// No reason, nothing to tell the user — an empty error card is worse
+    /// than none.
+    func testStopFailureWithoutReasonWritesNothing() throws {
+        let home = tempHome()
+        let sid = "ev-0011"
+
+        try runHook(payload: #"{"hook_event_name":"StopFailure","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: stateFile(in: home, sessionId: sid, suffix: "error").path))
+    }
+
+    func testTaskCreatedIncrementsTaskCountAndKeepsStartedAt() throws {
+        let home = tempHome()
+        let sid = "ev-0012"
+
+        try runHook(payload: #"{"hook_event_name":"TaskCreated","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        let first = try json(at: stateFile(in: home, sessionId: sid, suffix: "plan"))
+        try runHook(payload: #"{"hook_event_name":"TaskCreated","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        let second = try json(at: stateFile(in: home, sessionId: sid, suffix: "plan"))
+
+        XCTAssertEqual(first["task_count"] as? Int, 1)
+        XCTAssertEqual(second["task_count"] as? Int, 2)
+        XCTAssertEqual(second["done_count"] as? Int, 0)
+        XCTAssertEqual(second["started_at"] as? Int, first["started_at"] as? Int,
+                       "started_at must survive later TaskCreated events")
+    }
+
+    func testTaskCompletedIncrementsDoneCountWithoutTouchingTaskCount() throws {
+        let home = tempHome()
+        let sid = "ev-0013"
+        try runHook(payload: #"{"hook_event_name":"TaskCreated","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"TaskCreated","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        try runHook(payload: #"{"hook_event_name":"TaskCompleted","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        let plan = try json(at: stateFile(in: home, sessionId: sid, suffix: "plan"))
+        XCTAssertEqual(plan["task_count"] as? Int, 2)
+        XCTAssertEqual(plan["done_count"] as? Int, 1)
+    }
+
+    /// A TaskCompleted with no plan on disk is a lost event, not a plan of
+    /// one. Fabricating the file would render as "1/0" on the row.
+    func testTaskCompletedWithoutPlanWritesNothing() throws {
+        let home = tempHome()
+        let sid = "ev-0014"
+
+        try runHook(payload: #"{"hook_event_name":"TaskCompleted","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: stateFile(in: home, sessionId: sid, suffix: "plan").path))
+    }
+
+    /// Compaction is logged, never surfaced: it says nothing about
+    /// whether the session needs the human.
+    func testCompactionEventsWriteNoStateFiles() throws {
+        let home = tempHome()
+        let sid = "ev-0015"
+
+        try runHook(payload: #"{"hook_event_name":"PreCompact","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"PostCompact","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        let stateDir = home.appendingPathComponent(".clyde/state")
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: stateDir.path)) ?? []
+        XCTAssertEqual(contents, [], "compaction must not write state")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path))
+    }
+
     // MARK: - Worktree marker
 
     /// Derived from the `cwd` that every event carries — NOT from
