@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.7.0</title>
+            <pubDate>Thu, 27 Aug 2026 11:54:25 +0000</pubDate>
+            <sparkle:version>22</sparkle:version>
+            <sparkle:shortVersionString>0.7.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Clyde's hook coverage stopped growing while Claude Code kept getting more autonomous, and the gap showed up exactly where it hurts: agent teams, batches of parallel tool calls, slash commands driving long unattended runs. This release closes it. The session row stops saying "Working" and starts saying what is actually happening — which command is running, which worktree it is running in, how many tools are in flight, and what Claude said when it finished. It also fixes the one place where Clyde's model of a session was provably wrong: subagents were tracked through the tool call that dispatched them, so a backgrounded agent vanished from the panel while it carried on working. Clyde's hook script upgrades itself on launch; nothing to reinstall.</p>
+<ul><li><strong>Subagents no longer disappear from the panel while they're still working.</strong> Clyde tracked each in-flight subagent through the tool call that dispatched it, which held up right until Claude started running agents in the background — those calls return the moment the agent is handed off, so Clyde tore the row out of the panel while the agent carried on working. On a real session the gap measured five seconds; for a long-running agent it's minutes of the panel claiming nothing is in flight. Clyde now follows the agent's own identity instead, so a row appears when the agent is dispatched and disappears when the agent actually finishes.</li><li><strong>Parallel tool calls now show up as parallel.</strong> Claude often runs several tools at once. Clyde used to track only one of them, so the row showed whichever call happened to register last and went blank the moment the first of them finished — even with three still running. Each call is now tracked separately: the row reads <code>3 tools · 0:04</code> while a batch is in flight and only clears when the last one is genuinely done.</li><li><strong>The running slash command is named on the row.</strong> Start a long <code>/loop</code> or <code>/code-review</code> and the session shows an amber <code>/loop</code> badge next to the project name instead of an anonymous "Working", so you can tell at a glance which of your sessions is grinding through what.</li><li><strong>Worktree sessions are labelled.</strong> A session working inside a git worktree gets a green badge with the worktree's name, instead of showing an opaque <code>.claude/worktrees/…</code> path. The badge drops the moment the session leaves the worktree.</li><li><strong>Idle sessions show Claude's last reply.</strong> Instead of repeating the project path, an idle session's second line now previews the first line of what Claude last said.</li><li><strong>Skill, Workflow and Artifact calls are named.</strong> These three used to render as a bare tool name; the row now shows which skill, which workflow and which page.</li><li><strong>Agent-team teammates that go idle now show as idle.</strong> When a teammate on an agent team is about to go idle, its row in the panel settles instead of pretending work is still in progress — the little mascot stops animating, the duration stops counting, and the label reads <code>idle</code>. The row stays put, so you can still see who is on the team and what they were doing. This is intentionally a quiet state and not an alert: Clyde won't light up the "needs your input" badge for it until we know how often the event really fires.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.7.0/Clyde-0.7.0.dmg"
+                length="5559535"
+                type="application/octet-stream"
+                sparkle:edSignature="flXlrSc5JK9RP1KBqBbeAbxNiipgmprAdzYkK7W3mZik0xk5dzOagEvcJJCpeRlA+a0vQcIsBxpj6i9BMbFvBw==" />
+        </item>
+        <item>
             <title>Version 0.6.0</title>
             <pubDate>Tue, 09 Jun 2026 20:19:41 +0000</pubDate>
             <sparkle:version>21</sparkle:version>
