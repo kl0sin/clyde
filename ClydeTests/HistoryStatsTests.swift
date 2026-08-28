@@ -146,6 +146,66 @@ final class HistoryStatsTests: XCTestCase {
         XCTAssertEqual(totals.workingSeconds, 0)
     }
 
+    // MARK: - Activity trail
+
+    /// The trail answers "what did Claude actually do", so it carries the
+    /// tool calls and drops the bookkeeping: PostToolUse and PostToolBatch
+    /// mirror every PreToolUse, and listing all three would treat one
+    /// action as three lines of history.
+    func testTrailListsToolCallsNewestFirstAndSkipsTheirEchoes() throws {
+        let store = try makeStore()
+        try store.insert([
+            event("PreToolUse", at: 100, tool: "Read"),
+            event("PostToolUse", at: 101, tool: "Read"),
+            event("PostToolBatch", at: 102, tool: "Read"),
+            event("PreToolUse", at: 200, tool: "Bash"),
+            event("PostToolUse", at: 201, tool: "Bash"),
+        ])
+
+        let trail = HistoryStats(store: store).trail(from: wholeRange.from, to: wholeRange.to, limit: 10)
+
+        XCTAssertEqual(trail.map(\.tool), ["Bash", "Read"])
+    }
+
+    func testTrailHonoursItsLimit() throws {
+        let store = try makeStore()
+        try store.insert((1...30).map { event("PreToolUse", at: $0 * 10, tool: "Bash") })
+
+        XCTAssertEqual(HistoryStats(store: store)
+            .trail(from: wholeRange.from, to: wholeRange.to, limit: 12).count, 12)
+    }
+
+    /// Clicking a project narrows the trail to it — the same filter the
+    /// spec asked for, and the reason the trail is worth having next to
+    /// the project table rather than on its own.
+    func testTrailFiltersByProject() throws {
+        let store = try makeStore()
+        try store.insert([
+            event("PreToolUse", at: 100, project: "/repos/a", tool: "Read"),
+            event("PreToolUse", at: 200, project: "/repos/b", tool: "Bash"),
+        ])
+
+        let trail = HistoryStats(store: store)
+            .trail(from: wholeRange.from, to: wholeRange.to, project: "/repos/a", limit: 10)
+
+        XCTAssertEqual(trail.count, 1)
+        XCTAssertEqual(trail.first?.tool, "Read")
+    }
+
+    /// Subagent dispatches belong in the trail: "Claude fanned out to three
+    /// agents" is exactly the kind of thing this view exists to show.
+    func testTrailIncludesSubagentDispatches() throws {
+        let store = try makeStore()
+        try store.insert([
+            event("SubagentStart", at: 100, tool: nil),
+            event("PreToolUse", at: 200, tool: "Bash"),
+        ])
+
+        let trail = HistoryStats(store: store).trail(from: wholeRange.from, to: wholeRange.to, limit: 10)
+
+        XCTAssertEqual(trail.map(\.event), ["PreToolUse", "SubagentStart"])
+    }
+
     // MARK: - Daily activity (the heatmap's data)
 
     /// Buckets are local-time days, because the grid a person reads is

@@ -35,6 +35,11 @@ struct ReviewView: View {
     /// "how have the last weeks gone" view you land on, while the tiles and
     /// the project table answer "and what about today".
     @State private var daily: [DayActivity] = []
+    @State private var trail: [HistoryEvent] = []
+    /// Set by clicking a project row. The trail is the only thing it
+    /// narrows — the tiles keep describing the whole period, so the filter
+    /// cannot quietly change what the headline numbers mean.
+    @State private var projectFilter: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -78,7 +83,12 @@ struct ReviewView: View {
                                 .fill(Color(white: 0.18))
                                 .frame(height: 1)
                         }
-                        projectRow(row)
+                        Button {
+                            projectFilter = (projectFilter == row.project) ? nil : row.project
+                        } label: {
+                            projectRow(row)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .background(
@@ -91,12 +101,14 @@ struct ReviewView: View {
                 )
             }
 
+            activitySection
+
             Spacer(minLength: 0)
         }
         .padding(Spacing.lg)
-        .frame(minWidth: 560, minHeight: 560)
+        .frame(minWidth: 560, minHeight: 760)
         .background(Color(nsColor: NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)))
-        .task(id: period) {
+        .task(id: TaskKey(period: period, project: projectFilter)) {
             // Reload once immediately, then keep reloading on the same
             // 30s cadence as the ingest tick, for as long as the window
             // stays visible — otherwise a window left open shows
@@ -133,15 +145,18 @@ struct ReviewView: View {
         let today = calendar.startOfDay(for: Date())
         let gridFrom = calendar.date(byAdding: .day, value: -(Self.heatmapWeeks * 7), to: today) ?? today
         let gridTo = calendar.date(byAdding: .day, value: 1, to: today) ?? Date()
-        let (newTotals, newProjects, newDaily) = await Task.detached(priority: .userInitiated) {
+        let filter = projectFilter
+        let (newTotals, newProjects, newDaily, newTrail) = await Task.detached(priority: .userInitiated) {
             (s.totals(from: range.from, to: range.to),
              s.projects(from: range.from, to: range.to),
-             s.dailyActivity(from: gridFrom, to: gridTo))
+             s.dailyActivity(from: gridFrom, to: gridTo),
+             s.trail(from: range.from, to: range.to, project: filter))
         }.value
         guard !Task.isCancelled else { return }
         totals = newTotals
         projects = newProjects
         daily = newDaily
+        trail = newTrail
     }
 
     // `accessibilityValue` lets the "Turns" tile speak "1 turn" / "2 turns"
@@ -259,6 +274,11 @@ struct ReviewView: View {
     /// Mirrors SessionRow: name on top, a 10pt monospaced secondary line
     /// underneath, figures right-aligned in monospaced digits.
     private func projectRow(_ row: ProjectRow) -> some View {
+        let isFiltered = projectFilter == row.project
+        return projectRowBody(row, isFiltered: isFiltered)
+    }
+
+    private func projectRowBody(_ row: ProjectRow, isFiltered: Bool) -> some View {
         HStack(spacing: Spacing.sm) {
             VStack(alignment: .leading, spacing: 2) {
                 Text((row.project as NSString).lastPathComponent)
@@ -284,9 +304,104 @@ struct ReviewView: View {
         }
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, 10)
+        .background(isFiltered ? SessionTheme.processingColor.opacity(0.12) : .clear)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\((row.project as NSString).lastPathComponent), \(Self.turnLabel(row.turns)), \(Self.duration(row.workingSeconds)) working")
+        .accessibilityHint(isFiltered ? "Showing only this project below. Activate to clear." : "Activate to show only this project's activity below.")
+        .accessibilityAddTraits(isFiltered ? [.isButton, .isSelected] : .isButton)
+    }
+
+    // MARK: - Activity trail
+
+    private var activitySection: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(spacing: Spacing.xs) {
+                Text("ACTIVITY")
+                    .font(.system(size: 10, weight: .semibold))
+                    .kerning(0.6)
+                    .foregroundStyle(TextColor.tertiary)
+
+                if let projectFilter {
+                    Button {
+                        self.projectFilter = nil
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text((projectFilter as NSString).lastPathComponent)
+                                .font(.system(size: 9, weight: .medium))
+                            Image(systemName: "xmark")
+                                .font(.system(size: 7, weight: .bold))
+                        }
+                        .foregroundStyle(SessionTheme.processingColor)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(SessionTheme.processingColor.opacity(0.16)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear the \((projectFilter as NSString).lastPathComponent) filter")
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if trail.isEmpty {
+                Text("No tool calls recorded for this period.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(TextColor.disabled)
+                    .padding(.vertical, Spacing.xs)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(trail.enumerated()), id: \.offset) { _, entry in
+                            trailRow(entry)
+                        }
+                    }
+                }
+                .frame(maxHeight: 180)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                        .fill(Color(white: 0.12))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                        .stroke(Color(white: 0.18), lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    private func trailRow(_ entry: HistoryEvent) -> some View {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        let name = entry.event == "SubagentStart" ? "Agent"
+                 : entry.event == "StopFailure" ? "Error"
+                 : (entry.tool ?? entry.event)
+
+        return HStack(spacing: Spacing.xs) {
+            Text(formatter.string(from: entry.ts))
+                .font(.system(size: 10, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(TextColor.tertiary)
+                .frame(width: 38, alignment: .leading)
+
+            Text(name)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(entry.event == "StopFailure" ? SessionTheme.errorColor : TextColor.secondary)
+                .frame(width: 74, alignment: .leading)
+                .lineLimit(1)
+
+            Text(entry.summary ?? "")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(TextColor.tertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(formatter.string(from: entry.ts)), \(name)\(entry.summary.map { ", \($0)" } ?? "")")
     }
 
     /// Same shape as the panel's empty state — sleeping mascot and two
@@ -313,6 +428,15 @@ struct ReviewView: View {
     /// Half a year. Twelve weeks left two thirds of the window empty and made
     /// the grid read as a fragment; at this density 26 columns fill the width
     /// the way the shape people know from a contribution graph does.
+    /// `.task(id:)` needs one value to key on, and the trail depends on the
+    /// period *and* the project filter — without the filter in the key,
+    /// clicking a project would leave the list showing every project until
+    /// the next 30-second reload.
+    private struct TaskKey: Equatable {
+        let period: Period
+        let project: String?
+    }
+
     static let heatmapWeeks = 26
 
     static func duration(_ seconds: Int) -> String {

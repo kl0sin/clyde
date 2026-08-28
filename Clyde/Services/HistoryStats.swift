@@ -134,6 +134,49 @@ final class HistoryStats {
         }
     }
 
+    /// The activity trail: what Claude actually did, newest first.
+    ///
+    /// Carries tool calls and subagent dispatches and drops the
+    /// bookkeeping — `PostToolUse` and `PostToolBatch` mirror every
+    /// `PreToolUse`, so listing all three would render one action as three
+    /// lines of history. Turn boundaries are left out too: the tiles above
+    /// already count them, and interleaving them here buries the work.
+    func trail(from: Date, to: Date, project: String? = nil, limit: Int = 200) -> [HistoryEvent] {
+        var result: [HistoryEvent] = []
+        let filter = project == nil ? "" : "AND project = ?3 "
+        let sql = """
+            SELECT ts, event, session_id, project, tool, summary
+            FROM events
+            WHERE ts >= ?1 AND ts < ?2 \(filter)
+              AND event IN ('PreToolUse', 'SubagentStart', 'StopFailure')
+            ORDER BY ts DESC, id DESC
+            LIMIT \(max(0, limit))
+            """
+
+        store.read { handle in
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_int64(stmt, 1, Int64(from.timeIntervalSince1970))
+            sqlite3_bind_int64(stmt, 2, Int64(to.timeIntervalSince1970))
+            if let project {
+                let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+                sqlite3_bind_text(stmt, 3, project, -1, transient)
+            }
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                result.append(HistoryEvent(
+                    ts: Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(stmt, 0))),
+                    event: String(cString: sqlite3_column_text(stmt, 1)),
+                    sessionID: String(cString: sqlite3_column_text(stmt, 2)),
+                    project: String(cString: sqlite3_column_text(stmt, 3)),
+                    tool: sqlite3_column_text(stmt, 4).map { String(cString: $0) },
+                    summary: sqlite3_column_text(stmt, 5).map { String(cString: $0) }
+                ))
+            }
+        }
+        return result
+    }
+
     /// Per-day buckets for the activity grid. Uses the same turn pairing as
     /// `totals`, so a period's days always sum to the period's minutes
     /// rather than drifting from the number shown right above them.
