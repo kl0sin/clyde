@@ -1118,12 +1118,13 @@ final class HookScriptTests: XCTestCase {
 
         let lines = spoolLines(in: home)
         XCTAssertEqual(lines.count, 1)
-        XCTAssertEqual(lines[0]["event"] as? String, "PreToolUse")
-        XCTAssertEqual(lines[0]["session_id"] as? String, sid)
-        XCTAssertEqual(lines[0]["cwd"] as? String, "/repo")
-        XCTAssertEqual(lines[0]["tool"] as? String, "Bash")
-        XCTAssertEqual(lines[0]["summary"] as? String, "swift test")
-        XCTAssertNotNil(lines[0]["ts"] as? Int)
+        let first = try XCTUnwrap(lines.first)
+        XCTAssertEqual(first["event"] as? String, "PreToolUse")
+        XCTAssertEqual(first["session_id"] as? String, sid)
+        XCTAssertEqual(first["cwd"] as? String, "/repo")
+        XCTAssertEqual(first["tool"] as? String, "Bash")
+        XCTAssertEqual(first["summary"] as? String, "swift test")
+        XCTAssertNotNil(first["ts"] as? Int)
     }
 
     /// Turn boundaries are what every duration in the review is computed
