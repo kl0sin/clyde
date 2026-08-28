@@ -84,7 +84,21 @@ struct ReviewView: View {
         .padding(20)
         .frame(minWidth: 560, minHeight: 420)
         .task(id: period) {
-            await load()
+            // Reload once immediately, then keep reloading on the same
+            // 30s cadence as the ingest tick, for as long as the window
+            // stays visible — otherwise a window left open shows
+            // whatever numbers were current when it opened, forever,
+            // with no indication they're stale. `load()` awaits its own
+            // detached query before returning, so a slow load can never
+            // stack a second one on top of it; sleeping in between (not
+            // running on a fixed timer) means the 30s gap is always
+            // measured from the previous load's completion. `.task(id:)`
+            // cancels this whole loop the moment `period` changes or the
+            // view disappears.
+            while !Task.isCancelled {
+                await load()
+                try? await Task.sleep(for: .seconds(30))
+            }
         }
     }
 

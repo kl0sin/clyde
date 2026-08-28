@@ -199,10 +199,16 @@ final class HistoryStore {
             return 0
         }
 
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+        guard let data = try? Data(contentsOf: url) else {
             ClydeLog.general.error("History: unreadable claimed spool \(name, privacy: .public)")
             return 0
         }
+        // Decode with substitution rather than `String(contentsOf:encoding:)`,
+        // which fails the whole file on a single invalid byte. A lossy
+        // decode replaces the bad byte(s) with U+FFFD and keeps every
+        // intact line readable; `HistorySpool.parse` already discards
+        // whatever line that lands on.
+        let text = String(decoding: data, as: UTF8.self)
 
         let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
         let events = lines.compactMap { HistorySpool.parse(line: String($0)) }

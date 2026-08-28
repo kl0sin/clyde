@@ -853,7 +853,17 @@ struct AdvancedSettingsTab: View {
                             isClearingHistory = true
                             Task {
                                 do {
-                                    try store.clear()
+                                    // Off the main actor, same shape as
+                                    // `reloadHistorySummary()` below and
+                                    // `ReviewView.load()`: DELETE + VACUUM
+                                    // can run for a while on a multi-megabyte
+                                    // database, and it takes the store's
+                                    // serial ingest queue, which a concurrent
+                                    // ingest tick may already be holding.
+                                    // Neither should be able to freeze the UI.
+                                    try await Task.detached(priority: .userInitiated) {
+                                        try store.clear()
+                                    }.value
                                     clearHistoryOutcome = .afterClearing(didSucceed: true)
                                 } catch {
                                     // Advisory-only clear: the failure is
@@ -904,7 +914,7 @@ struct AdvancedSettingsTab: View {
                     Text("Reset tracking state")
                         .font(.system(size: 12))
                         .foregroundStyle(.white)
-                    Text("Wipes all session and event files in ~/.clyde/. Sessions will reappear on the next hook fire or pgrep poll. Use this if Clyde gets stuck in a wrong state.")
+                    Text("Wipes the live session and event markers in ~/.clyde/ — not the history database above. Sessions will reappear on the next hook fire or pgrep poll. Use this if Clyde gets stuck in a wrong state.")
                         .font(.system(size: 10))
                         .foregroundStyle(Color(white: 0.45))
                         .fixedSize(horizontal: false, vertical: true)

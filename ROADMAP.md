@@ -78,6 +78,9 @@ Clyde answers "what is Claude doing right now" well. It answers "what did Claude
 - [x] Retention decided: unbounded, kept forever unless the user clears it. History lives in SQLite at `~/.clyde/history/`, written by the hook to a JSONL spool and drained into the database by the app. Settings → Advanced shows the event count, size on disk and oldest recorded date, and clears the store behind a two-click confirm !md #ux
 - [x] Stays local by construction — history lives only in the SQLite file under `~/.clyde/history/` on disk; no telemetry, no accounts, no network involved in collecting or reviewing it !hi #ux
 - [ ] Filterable event list in the review window — deliberately deferred from this pass; the tiles and per-project table are what make the window worth opening, and a searchable/filterable list is additive once the store holds a real backlog of events !md #ux
+- [ ] Second entry point into the review window from the panel's Activity header — the design spec names this, but only the Settings/menu-bar menu item opens it today !lo #ux
+- [ ] Rebuild-from-scratch affordance when `~/.clyde/history/history.sqlite` is missing, unopenable or corrupt — today `historyStore` is left `nil`, the review menu item silently no-ops, and Settings only says "History tracking is unavailable." with no recovery action !md #ux
+- [ ] `spool.jsonl` can grow unbounded if the hook stays installed while Clyde is removed or never relaunched — nothing ever drains it without a running app to ingest it !lo #hooks
 
 ## Phase: v0.9.0 — Panel actions (two-way channel)
 

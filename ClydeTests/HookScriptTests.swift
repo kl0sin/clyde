@@ -1163,4 +1163,75 @@ final class HookScriptTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: home.appendingPathComponent(".clyde/state/\(sid)-busy").path))
     }
+
+    /// T-A: the branch's headline privacy claim — "only tool names and
+    /// summaries, never conversation content" — is only real if every
+    /// spool line's keys are a subset of this allowlist. A test that
+    /// greps for one literal string (as `testSpoolNeverCarriesTheAssistantMessage`
+    /// does above) would not catch someone adding a brand-new field
+    /// (e.g. a `"prompt"` key) tomorrow; this one would, for any event
+    /// shape. Exercises a turn boundary, an Agent dispatch (which
+    /// carries both `tool` and `summary`), and a Stop that carries
+    /// `last_assistant_message` in the payload — the field this whole
+    /// allowlist exists to keep out.
+    func testEverySpoolLineKeySetIsWithinTheAllowlist() throws {
+        let home = tempHome()
+        let sid = "spool-keys"
+        let allowedKeys: Set<String> = ["ts", "event", "session_id", "cwd", "tool", "summary"]
+
+        try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        try runHook(payload: preToolUseAgent(
+            sid: sid, toolUseID: "toolu_keys1", type: "general-purpose",
+            description: "explore the repo"), home: home)
+        try runHook(payload: #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/repo","last_assistant_message":"the secret reply text"}"#, home: home)
+
+        let lines = spoolLines(in: home)
+        XCTAssertEqual(lines.count, 3)
+        for line in lines {
+            let keys = Set(line.keys)
+            XCTAssertTrue(keys.isSubset(of: allowedKeys),
+                          "unexpected spool key(s): \(keys.subtracting(allowedKeys))")
+        }
+    }
+
+    /// T-B: the only test that drives the hook and the store together.
+    /// Every other test on either side of this boundary assumes its own
+    /// idea of the spool line format — this one runs the real script,
+    /// hands its real output straight to `HistoryStore.ingestPending()`,
+    /// and checks the ingested data through `HistoryStats`, the same
+    /// read path the review window uses.
+    func testRealHookOutputIngestsEndToEndIntoTheStore() throws {
+        let home = tempHome()
+        let sid = "spool-e2e"
+
+        try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_e1","tool_input":{"command":"swift test"}}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/repo","last_assistant_message":"done"}"#, home: home)
+
+        let store = try HistoryStore(directory: home.appendingPathComponent(".clyde/history"))
+        let ingested = store.ingestPending()
+
+        XCTAssertEqual(ingested, 3)
+        XCTAssertEqual(store.eventCount(), 3)
+
+        let stats = HistoryStats(store: store)
+        let rows = stats.projects(from: Date(timeIntervalSince1970: 0), to: Date().addingTimeInterval(60))
+        let repoRow = try XCTUnwrap(rows.first { $0.project == "/repo" })
+        XCTAssertEqual(repoRow.turns, 1)
+    }
+
+    /// T-D (B2): the spool accumulates Bash commands, Grep patterns and
+    /// search queries, so it must get the same 0600 posture as the
+    /// database and state markers rather than the shell's default 0644.
+    func testSpoolFileIsCreated0600() throws {
+        let home = tempHome()
+        let sid = "spool-perm"
+
+        try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        let spoolURL = home.appendingPathComponent(".clyde/history/spool.jsonl")
+        let attrs = try FileManager.default.attributesOfItem(atPath: spoolURL.path)
+        let mode = try XCTUnwrap(attrs[.posixPermissions] as? NSNumber).uint16Value
+        XCTAssertEqual(mode, 0o600, "spool.jsonl must be 0600, was \(String(mode, radix: 8))")
+    }
 }

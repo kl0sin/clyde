@@ -140,4 +140,30 @@ final class HistoryStoreTests: XCTestCase {
 
         XCTAssertEqual(store.ingestPending(), 0)
     }
+
+    /// B1: a single invalid UTF-8 byte between two valid lines used to
+    /// fail `String(contentsOf:encoding:.utf8)` for the *whole file*,
+    /// which returned early without consuming or marking it ingested —
+    /// so every event in the file was lost, and lost again every 30s
+    /// forever, since the same unreadable file just kept getting
+    /// re-claimed and re-failed. Decoding losslessly (substituting
+    /// U+FFFD for the bad byte) must recover the two good lines and
+    /// still consume the file.
+    func testInvalidUTF8ByteDoesNotDiscardTheRestOfTheFile() throws {
+        let dir = tempDir()
+        var bytes = Data((spoolLine("UserPromptSubmit", ts: 100) + "\n").utf8)
+        bytes.append(0xFF)
+        bytes.append(contentsOf: "\n".utf8)
+        bytes.append(contentsOf: (spoolLine("Stop", ts: 160) + "\n").utf8)
+        try bytes.write(to: dir.appendingPathComponent("spool.jsonl"))
+        let store = try HistoryStore(directory: dir)
+
+        let count = store.ingestPending()
+
+        XCTAssertEqual(count, 2)
+        XCTAssertEqual(store.eventCount(), 2)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("spool.jsonl").path),
+            "a spool with one bad byte must still be consumed, not retried forever")
+    }
 }

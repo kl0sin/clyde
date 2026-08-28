@@ -33,8 +33,8 @@ final class HistoryStats {
         let turns = rows(
             """
             SELECT SUM(dt), COUNT(*) FROM (
-              SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) - ts AS dt, event,
-                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts) AS next_event
+              SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt, event,
+                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
               FROM events
               -- Deliberate: the range filter runs before LEAD builds pairs, so a
               -- turn straddling a window boundary (prompt before `from`, Stop
@@ -49,8 +49,8 @@ final class HistoryStats {
         let waits = rows(
             """
             SELECT SUM(dt) FROM (
-              SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) - ts AS dt, event,
-                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts) AS next_event
+              SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt, event,
+                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
               FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
                 AND event IN ('UserPromptSubmit','Stop')
             ) WHERE event = 'Stop' AND next_event = 'UserPromptSubmit' AND dt IS NOT NULL
@@ -79,12 +79,12 @@ final class HistoryStats {
     /// `workingSeconds == 0`, rather than being invisible in a view of work
     /// that only just started.
     func projects(from: Date, to: Date) -> [ProjectRow] {
-        var worked: [String: (seconds: Int, topTool: String?)] = [:]
+        var worked: [String: Int] = [:]
         let workedSQL = """
             SELECT project, SUM(dt) AS worked FROM (
               SELECT project, session_id, event,
-                     LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) - ts AS dt,
-                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts) AS next_event
+                     LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt,
+                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
               FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
                 AND event IN ('UserPromptSubmit','Stop')
             ) WHERE event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
@@ -95,7 +95,7 @@ final class HistoryStats {
             if sqlite3_prepare_v2(handle, workedSQL, -1, &stmt, nil) == SQLITE_OK {
                 while sqlite3_step(stmt) == SQLITE_ROW {
                     let project = String(cString: sqlite3_column_text(stmt, 0))
-                    worked[project] = (Int(sqlite3_column_int64(stmt, 1)), nil)
+                    worked[project] = Int(sqlite3_column_int64(stmt, 1))
                 }
             }
             sqlite3_finalize(stmt)
@@ -122,7 +122,7 @@ final class HistoryStats {
         let result = projects.map { project -> ProjectRow in
             ProjectRow(
                 project: project,
-                workingSeconds: worked[project]?.seconds ?? 0,
+                workingSeconds: worked[project] ?? 0,
                 turns: turnsByProject[project] ?? 0,
                 topTool: topTool(project: project, from: from, to: to)
             )
