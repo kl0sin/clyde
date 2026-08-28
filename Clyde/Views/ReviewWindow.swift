@@ -33,56 +33,51 @@ struct ReviewView: View {
     @State private var projects: [ProjectRow] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Picker("", selection: $period) {
-                ForEach(Period.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 240)
-            .accessibilityLabel("Review period")
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            header
+            periodSwitch
 
-            HStack(spacing: 12) {
+            HStack(spacing: Spacing.sm) {
                 tile("Working", Self.duration(totals.workingSeconds))
                 tile("Waiting on you", Self.duration(totals.waitingSeconds))
                 tile("Turns", "\(totals.turns)", accessibilityValue: Self.turnLabel(totals.turns))
                 tile("Sessions", "\(totals.sessions)")
             }
 
-            Text("Projects")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color(white: 0.7))
+            Text("PROJECTS")
+                .font(.system(size: 10, weight: .semibold))
+                .kerning(0.6)
+                .foregroundStyle(TextColor.tertiary)
+                .padding(.top, Spacing.xxs)
 
             if projects.isEmpty {
-                Text("Nothing recorded for this period yet.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.5))
+                emptyState
             } else {
-                ForEach(projects, id: \.project) { row in
-                    HStack {
-                        Text((row.project as NSString).lastPathComponent)
-                            .font(.system(size: 12, weight: .medium))
-                        Spacer()
-                        Text(row.topTool ?? "—")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(Color(white: 0.55))
-                        Text(Self.turnLabel(row.turns))
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color(white: 0.55))
-                            .frame(width: 70, alignment: .trailing)
-                        Text(Self.duration(row.workingSeconds))
-                            .font(.system(size: 12, design: .monospaced))
-                            .frame(width: 70, alignment: .trailing)
+                VStack(spacing: 0) {
+                    ForEach(Array(projects.enumerated()), id: \.element.project) { index, row in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(Color(white: 0.18))
+                                .frame(height: 1)
+                        }
+                        projectRow(row)
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\((row.project as NSString).lastPathComponent), \(Self.turnLabel(row.turns)), \(Self.duration(row.workingSeconds)) working")
                 }
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                        .fill(Color(white: 0.12))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                        .stroke(Color(white: 0.18), lineWidth: 1)
+                )
             }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(20)
+        .padding(Spacing.lg)
         .frame(minWidth: 560, minHeight: 420)
+        .background(Color(nsColor: NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)))
         .task(id: period) {
             // Reload once immediately, then keep reloading on the same
             // 30s cadence as the ingest tick, for as long as the window
@@ -129,19 +124,165 @@ struct ReviewView: View {
     // the label above it already reads "Turns", so the visible value must
     // not duplicate that word.
     private func tile(_ label: String, _ value: String, accessibilityValue: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(Color(white: 0.55))
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .kerning(0.5)
+                .foregroundStyle(TextColor.tertiary)
+            // Monospaced digits: these tick on a 30s reload, and
+            // proportional figures make the whole row shuffle sideways
+            // every time a number changes width.
             Text(value)
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(TextColor.primary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(white: 0.14)))
+        .padding(Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                .fill(Color(white: 0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                .stroke(Color(white: 0.18), lineWidth: 1)
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label): \(accessibilityValue ?? value)")
+    }
+
+    /// Same shape as the panel's header: the mascot carries the app's
+    /// identity, so a window that shows Clyde's data should open the same
+    /// way the panel does.
+    private var header: some View {
+        HStack(spacing: Spacing.sm) {
+            ClydeAnimationView(state: .idle, pixelSize: 2.625)
+                .frame(width: 34, height: 34)
+                .padding(Spacing.xs)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
+                        .fill(SessionTheme.processingColor.opacity(0.16))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
+                        .stroke(SessionTheme.processingColor.opacity(0.45), lineWidth: 1)
+                )
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Session review")
+                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+                    .foregroundStyle(TextColor.primary)
+                Text(periodSubtitle)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(TextColor.tertiary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Session review, \(periodSubtitle)")
+    }
+
+    private var periodSubtitle: String {
+        let range = period.range
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM"
+        // "since 00:00" was technically true and told the reader nothing;
+        // the date is what they actually want to see next to the numbers.
+        switch period {
+        case .day:  return formatter.string(from: range.to)
+        case .week: return "\(formatter.string(from: range.from)) – \(formatter.string(from: range.to))"
+        }
+    }
+
+    /// The system segmented control is the single thing that made this
+    /// window read as a form from another app. Two capsules in the same
+    /// language as the row badges instead.
+    private var periodSwitch: some View {
+        HStack(spacing: Spacing.xs) {
+            ForEach(Period.allCases) { option in
+                let selected = option == period
+                Button {
+                    period = option
+                } label: {
+                    Text(option.rawValue)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(selected ? SessionTheme.processingColor : TextColor.secondary)
+                        .padding(.horizontal, Spacing.sm)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule().fill(selected
+                                           ? SessionTheme.processingColor.opacity(0.18)
+                                           : Color(white: 0.14))
+                        )
+                        .overlay(
+                            Capsule().stroke(selected
+                                             ? SessionTheme.processingColor.opacity(0.5)
+                                             : .clear, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.rawValue)
+                .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Review period")
+    }
+
+    /// Mirrors SessionRow: name on top, a 10pt monospaced secondary line
+    /// underneath, figures right-aligned in monospaced digits.
+    private func projectRow(_ row: ProjectRow) -> some View {
+        HStack(spacing: Spacing.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text((row.project as NSString).lastPathComponent)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(TextColor.primary)
+                Text(row.topTool ?? "—")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(TextColor.tertiary)
+            }
+
+            Spacer(minLength: Spacing.xs)
+
+            Text(Self.turnLabel(row.turns))
+                .font(.system(size: 10))
+                .monospacedDigit()
+                .foregroundStyle(TextColor.tertiary)
+
+            Text(Self.duration(row.workingSeconds))
+                .font(.system(size: 13, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(TextColor.secondary)
+                .frame(width: 64, alignment: .trailing)
+        }
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\((row.project as NSString).lastPathComponent), \(Self.turnLabel(row.turns)), \(Self.duration(row.workingSeconds)) working")
+    }
+
+    /// Same shape as the panel's empty state — sleeping mascot and two
+    /// lines — rather than a bare sentence floating in the window.
+    private var emptyState: some View {
+        VStack(spacing: Spacing.sm) {
+            ClydeAnimationView(state: .sleeping, pixelSize: 2.5)
+                .frame(width: 40, height: 40)
+                .accessibilityHidden(true)
+            Text("Nothing recorded yet")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(TextColor.disabled)
+            Text("Work in any Claude session and it\nwill show up here.")
+                .font(.system(size: 11))
+                .foregroundStyle(Color(white: 0.4))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Spacing.lg)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Nothing recorded for this period yet")
     }
 
     static func duration(_ seconds: Int) -> String {

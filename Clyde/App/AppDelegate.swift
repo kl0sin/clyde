@@ -647,7 +647,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = NSHostingController(rootView: ReviewView(stats: HistoryStats(store: store)))
         let window = NSWindow(contentViewController: controller)
         window.title = "Session review"
-        window.styleMask = [.titled, .closable, .resizable]
+        // Same chrome as the welcome window: a system titlebar is what made
+        // this read as a form from another app rather than as Clyde. The
+        // view draws its own header, so the bar only needs to carry the
+        // traffic lights.
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.backgroundColor = NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)
+        window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
         window.center()
 
         // Unlike the settings window, the review window doesn't need to
