@@ -36,6 +36,11 @@ enum AppPaths {
         stateDir.appendingPathComponent("\(pid)-busy")
     }
 
+    /// Durable session history: the hook's spool plus Clyde's SQLite store.
+    static var historyDir: URL {
+        clydeDir.appendingPathComponent("history")
+    }
+
     static var logsDir: URL {
         clydeDir.appendingPathComponent("logs")
     }

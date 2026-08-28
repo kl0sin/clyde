@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 35
+# clyde-hook-version: 37
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -45,8 +45,9 @@
 EVENTS_DIR="$HOME/.clyde/events"
 STATE_DIR="$HOME/.clyde/state"
 LOG_DIR="$HOME/.clyde/logs"
+HISTORY_DIR="$HOME/.clyde/history"
 HOOK_LOG="$LOG_DIR/hook.log"
-mkdir -p "$EVENTS_DIR" "$STATE_DIR" "$LOG_DIR" 2>/dev/null || true
+mkdir -p "$EVENTS_DIR" "$STATE_DIR" "$LOG_DIR" "$HISTORY_DIR" 2>/dev/null || true
 
 # Catch any unexpected error so it lands in the log instead of
 # bubbling out as a non-zero exit. Claude treats non-zero exits as
@@ -572,8 +573,15 @@ KEY="${SESSION_ID:-$CLAUDE_PID}"
 TIMESTAMP=$(date +%s)
 
 # JSON-escape cwd for safe embedding (just escape backslashes and quotes).
-ESC_CWD=$(printf '%s' "$CWD" | sed 's/\\/\\\\/g; s/"/\\"/g')
+# Also drop any embedded newline/CR: a corrupt payload or an unusual
+# filesystem path must not be able to split a spool line in two.
+ESC_CWD=$(printf '%s' "$CWD" | tr -d '\n\r' | sed 's/\\/\\\\/g; s/"/\\"/g')
 ESC_SID=$(printf '%s' "$SESSION_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
+# Spool events key on the same session-id-or-pid fallback the state
+# markers use (KEY), so a payload without session_id doesn't collapse
+# every such event into one shared pseudo-session that turn-pairing SQL
+# would then pair across.
+ESC_SPOOL_SID=$(printf '%s' "$KEY" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
 # Optional runtime-suffix for -info JSON. Empty for regular host
 # sessions so the existing on-disk format is byte-identical. Cleat
@@ -595,6 +603,35 @@ atomic_write() {
     tmp=$(mktemp "$(dirname "$target")/.clyde-tmp.XXXXXX") || return 1
     printf '%s\n' "$body" > "$tmp"
     mv -f "$tmp" "$target"
+}
+
+# Append one structured line to the history spool. Deliberately a plain
+# append, not an atomic-write: O_APPEND writes below the pipe buffer are
+# atomic, so parallel hooks cannot interleave, and Clyde claims the file
+# by renaming it rather than truncating it. Any failure is ignored — the
+# spool is a convenience, the user's session is not.
+spool_append() {
+    local extra=$1
+    local spool="$HISTORY_DIR/spool.jsonl"
+    # The spool accumulates Bash commands, Grep patterns and search
+    # queries, so it gets the same 0600 posture as the database and
+    # state markers rather than the default 0644. Only pay for the
+    # umask'd create on the rare event that starts a fresh file (first
+    # run, or right after Clyde claims/renames the previous one) —
+    # every other call is a plain append inheriting that mode.
+    if [ ! -e "$spool" ]; then
+        # Append, not truncate: two hooks can both pass this existence
+        # check (the spool is legitimately absent for a moment right
+        # after Clyde renames it away to claim it, and Claude fires
+        # batched tool calls' hooks in parallel), and a truncating
+        # create would let the second one wipe a line the first already
+        # appended. `>>` creates the file under the same umask just as
+        # well, so the 0600 mode is unaffected.
+        (umask 077; : >>"$spool") 2>/dev/null || true
+    fi
+    printf '{"ts": %s, "event": "%s", "session_id": "%s", "cwd": "%s"%s}\n' \
+        "$TIMESTAMP" "$HOOK_EVENT" "$ESC_SPOOL_SID" "$ESC_CWD" "$extra" \
+        >>"$spool" 2>/dev/null || true
 }
 
 # --- Subagent record merging -------------------------------------------
@@ -923,7 +960,14 @@ case "$HOOK_EVENT" in
         # payloads — skip the write rather than producing a junk file.
         if [ -n "$TOOL_NAME" ] && [ -n "$TOOL_USE_ID" ]; then
             ESC_TOOL=$(printf '%s' "$TOOL_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
-            TOOL_SUMMARY=$(compute_tool_summary "$TOOL_NAME")
+            # Strip embedded newlines/CRs before anything downstream sees
+            # this summary: a multiline Glob/Grep pattern or WebSearch
+            # query would otherwise split one JSONL spool record into two
+            # unparseable lines (Bash already collapses its own newlines
+            # inside compute_tool_summary, but Glob/Grep/WebSearch/Workflow/
+            # Artifact don't). Fixing it here also repairs the -tool
+            # marker below, which shares this same value.
+            TOOL_SUMMARY=$(compute_tool_summary "$TOOL_NAME" | tr -d '\n\r')
             ESC_SUMMARY=$(printf '%s' "$TOOL_SUMMARY" | sed 's/\\/\\\\/g; s/"/\\"/g')
             ESC_TID=$(printf '%s' "$TOOL_USE_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
             # One slot per tool_use_id. Claude batches tool calls and runs
@@ -1138,5 +1182,22 @@ for tc in (d.get('tool_calls') or []):
         :
         ;;
 esac
+
+# History spool. Built from fields already extracted above, so this adds
+# no parsing work. Note what is absent: last_assistant_message never
+# reaches the spool — the -lastmsg marker is a live preview, not history.
+SPOOL_EXTRA=""
+if [ -n "$TOOL_NAME" ]; then
+    ESC_TOOL=$(printf '%s' "$TOOL_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    SPOOL_EXTRA="$SPOOL_EXTRA, \"tool\": \"$ESC_TOOL\""
+fi
+if [ -n "${TOOL_SUMMARY:-}" ]; then
+    # Escape freshly rather than reusing ESC_SUMMARY: that variable is
+    # reassigned at line 948 to carry an Agent's description, so by the end
+    # of the dispatch it may not be this tool's summary at all.
+    ESC_TSUM=$(printf '%s' "$TOOL_SUMMARY" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    SPOOL_EXTRA="$SPOOL_EXTRA, \"summary\": \"$ESC_TSUM\""
+fi
+spool_append "$SPOOL_EXTRA"
 
 exit 0

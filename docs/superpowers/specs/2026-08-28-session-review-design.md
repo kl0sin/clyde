@@ -96,7 +96,7 @@ Every one of these ends the same way: the panel keeps working. Session tracking 
 
 | Failure | Behaviour |
 |---|---|
-| Database missing, unopenable or corrupt | History features disable themselves; Settings offers to rebuild from scratch. Tracking is unaffected. |
+| Database missing, unopenable or corrupt | `historyStore` is left `nil`; the review menu item silently does nothing and Settings shows "History tracking is unavailable." with no recovery action. Tracking is unaffected. A rebuild-from-scratch affordance is not built yet — see ROADMAP. |
 | Malformed line in the spool | Skip that line, count the skips. A shell-written log can always be cut mid-line by a full disk. |
 | Spool write fails in the hook | Ignored, exit 0, as with every other hook write. One lost event, not a broken session. |
 | Disk full during insert | Transaction rolls back, the claimed file is left intact, retried on the next tick. |

@@ -149,7 +149,7 @@ spool_append() {
 }
 ```
 
-Then call it once, immediately before the main `case "$HOOK_EVENT" in` dispatch (the one that starts with `SessionStart)`), so every handled event is recorded exactly once:
+Then call it once **after the main dispatch's closing `esac` (line 1140), immediately before the final `exit 0`**. That placement is deliberate: `TOOL_SUMMARY` is assigned inside the `PreToolUse` branch at line 926, so a call placed before the dispatch would spool an empty summary for every tool call. The early `exit 0` at line 567 (no `claude` ancestor in the process tree) skips the spool as well, which is correct — that path skips every other state write too.
 
 ```sh
 # History spool. Built from fields already extracted above, so this adds
@@ -161,13 +161,16 @@ if [ -n "$TOOL_NAME" ]; then
     SPOOL_EXTRA="$SPOOL_EXTRA, \"tool\": \"$ESC_TOOL\""
 fi
 if [ -n "${TOOL_SUMMARY:-}" ]; then
+    # Escape freshly rather than reusing ESC_SUMMARY: that variable is
+    # reassigned at line 948 to carry an Agent's description, so by the end
+    # of the dispatch it may not be this tool's summary at all.
     ESC_TSUM=$(printf '%s' "$TOOL_SUMMARY" | sed 's/\\/\\\\/g; s/"/\\"/g')
     SPOOL_EXTRA="$SPOOL_EXTRA, \"summary\": \"$ESC_TSUM\""
 fi
 spool_append "$SPOOL_EXTRA"
 ```
 
-If `TOOL_SUMMARY` is not already a variable at that point in the script, reuse whatever local the `PreToolUse` branch assigns from `tool_summary_for`; do not recompute it.
+Do not call `compute_tool_summary` again in this block — it is already computed once in the `PreToolUse` branch, and that helper shells out to python3.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -800,6 +803,23 @@ final class HistoryStatsTests: XCTestCase {
         XCTAssertEqual(totals.turns, 1)
     }
 
+    /// An interrupted turn followed by a fresh prompt leaves two
+    /// `UserPromptSubmit` events in a row. Pairing them would bill the time
+    /// the human spent typing as time Claude spent working.
+    func testTwoPromptsInARowAreNotCountedAsWorkingTime() throws {
+        let store = try makeStore()
+        try store.insert([
+            event("UserPromptSubmit", at: 100),
+            event("UserPromptSubmit", at: 400),
+            event("Stop", at: 430),
+        ])
+
+        let totals = HistoryStats(store: store).totals(from: wholeRange.from, to: wholeRange.to)
+
+        XCTAssertEqual(totals.workingSeconds, 30)
+        XCTAssertEqual(totals.turns, 2)
+    }
+
     /// Two sessions interleaved in time must not pair across each other.
     func testTurnsArePairedWithinASessionNotAcrossSessions() throws {
         let store = try makeStore()
@@ -903,18 +923,20 @@ final class HistoryStats {
         let turns = rows(
             """
             SELECT SUM(dt), COUNT(*) FROM (
-              SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) - ts AS dt, event
+              SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) - ts AS dt, event,
+                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts) AS next_event
               FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
                 AND event IN ('UserPromptSubmit','Stop')
-            ) WHERE event = 'UserPromptSubmit' AND dt IS NOT NULL
+            ) WHERE event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
             """)
         let waits = rows(
             """
             SELECT SUM(dt) FROM (
-              SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) - ts AS dt, event
+              SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) - ts AS dt, event,
+                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts) AS next_event
               FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
                 AND event IN ('UserPromptSubmit','Stop')
-            ) WHERE event = 'Stop' AND dt IS NOT NULL
+            ) WHERE event = 'Stop' AND next_event = 'UserPromptSubmit' AND dt IS NOT NULL
             """)
         let promptCount = store.scalarInt(
             "SELECT COUNT(*) FROM events WHERE event = 'UserPromptSubmit' AND ts >= \(epoch(from)) AND ts < \(epoch(to))") ?? 0
@@ -935,10 +957,11 @@ final class HistoryStats {
         let sql = """
             SELECT project, SUM(dt) AS worked, COUNT(*) AS turns FROM (
               SELECT project, session_id, event,
-                     LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) - ts AS dt
+                     LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts) - ts AS dt,
+                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts) AS next_event
               FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
                 AND event IN ('UserPromptSubmit','Stop')
-            ) WHERE event = 'UserPromptSubmit' AND dt IS NOT NULL
+            ) WHERE event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
             GROUP BY project ORDER BY worked DESC
             """
         guard sqlite3_prepare_v2(store.handle(), sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
@@ -994,7 +1017,7 @@ final class HistoryStats {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `swift test --filter HistoryStatsTests`
-Expected: PASS, 6 tests.
+Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Commit**
 

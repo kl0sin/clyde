@@ -98,6 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsObserver: NSObjectProtocol?
     private var diagnosticsObserver: NSObjectProtocol?
 
+    private(set) var historyStore: HistoryStore?
+    private var historyIngestTimer: Timer?
+
     deinit {
         if let token = settingsObserver {
             NotificationCenter.default.removeObserver(token)
@@ -129,6 +132,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             processMonitor: appViewModel.processMonitor,
             attentionMonitor: appViewModel.attentionMonitor
         )
+
+        // History is best-effort: if the store cannot be opened, Clyde
+        // carries on with tracking and the review window reports itself
+        // unavailable. Session tracking must never break because of a
+        // statistics feature.
+        do {
+            let store = try HistoryStore(directory: AppPaths.historyDir)
+            historyStore = store
+            DispatchQueue.global(qos: .utility).async { store.ingestPending() }
+            // 30s, not the 3s poll: the review needs no second-level
+            // freshness, and writing to the database that often is work
+            // with no reader.
+            let timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+                DispatchQueue.global(qos: .utility).async { store.ingestPending() }
+            }
+            historyIngestTimer = timer
+        } catch {
+            ClydeLog.general.error("History disabled: \(error.localizedDescription, privacy: .public)")
+        }
 
         let screenFrame = NSScreen.main?.visibleFrame ?? .zero
         let initialOrigin = NSPoint(
@@ -258,6 +280,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         applyWidgetVisibility(appViewModel.widgetVisible)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        historyIngestTimer?.invalidate()
+        // Dispatch async, not a blocking call on the main thread: the spool
+        // file is durable, so losing this race at quit costs nothing —
+        // anything left unclaimed, or claimed but not yet committed, is
+        // picked up by the next launch's ingest, leftover-`.ingesting`
+        // sweep included. A synchronous call here would buy freshness at
+        // a moment when no window is open to show it, and pay for that
+        // with the risk of a hang: a burst of tool calls right before quit
+        // could make ingestion slow enough that macOS force-kills the
+        // process before it returns. It would also now serialize behind
+        // `HistoryStore`'s internal ingest queue, so a synchronous call
+        // could additionally block on an ingest already in flight from the
+        // timer. Keep this async.
+        if let store = historyStore {
+            DispatchQueue.global(qos: .utility).async { store.ingestPending() }
+        }
     }
 
     /// Show or hide the WIDGET panel based on the user preference.
@@ -549,6 +590,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let reviewItem = NSMenuItem(title: "Session review…", action: #selector(openReview), keyEquivalent: "")
+        reviewItem.target = self
+        menu.addItem(reviewItem)
+
         let updateItem = NSMenuItem(
             title: "Check for updates…",
             action: #selector(UpdateController.checkForUpdates(_:)),
@@ -584,6 +629,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showSettingsWindow()
     }
 
+    // MARK: - Review Window
+
+    private var reviewWindow: NSWindow?
+    private var reviewWindowDelegate: SettingsWindowDelegate?
+
+    @MainActor @objc func openReview() {
+        guard let store = historyStore else {
+            ClydeLog.general.info("Review requested but history is unavailable")
+            return
+        }
+        if let existing = reviewWindow {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let controller = NSHostingController(rootView: ReviewView(stats: HistoryStats(store: store)))
+        let window = NSWindow(contentViewController: controller)
+        window.title = "Session review"
+        window.styleMask = [.titled, .closable, .resizable]
+        window.center()
+
+        // Unlike the settings window, the review window doesn't need to
+        // flip the activation policy — `NSApp.activate(ignoringOtherApps:)`
+        // alone is enough to give it key focus as an accessory app. On
+        // close, drop the reference so the hosting controller and its view
+        // graph (and the stale numbers it's holding) are released rather
+        // than sitting hidden for the rest of the process.
+        let delegate = SettingsWindowDelegate { [weak self] in
+            self?.reviewWindow = nil
+            self?.reviewWindowDelegate = nil
+        }
+        window.delegate = delegate
+        reviewWindowDelegate = delegate
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        reviewWindow = window
+    }
+
     // MARK: - Settings Window
 
     private var settingsWindow: NSWindow?
@@ -597,7 +681,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let settingsView = SettingsView(appViewModel: appViewModel)
+        let settingsView = SettingsView(appViewModel: appViewModel, historyStore: historyStore)
             .environment(\.colorScheme, .dark)
         let hostingController = NSHostingController(rootView: settingsView)
         let window = NSWindow(contentViewController: hostingController)

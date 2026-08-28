@@ -50,12 +50,28 @@ struct SettingsView: View {
     @ObservedObject var appViewModel: AppViewModel
     @ObservedObject var notificationService: NotificationService
     @ObservedObject var pushService: PushService
+    let historyStore: HistoryStore?
     @State private var selectedTab: SettingsTab = .general
 
-    init(appViewModel: AppViewModel) {
+    // Owned here, not inside `AdvancedSettingsTab`, so a reload can be tied
+    // to `selectedTab` itself via `.task(id:)` below rather than to that
+    // tab view's appear/disappear lifecycle. Relying on the tab switch
+    // tearing down and rebuilding `AdvancedSettingsTab` (so its own `.task`
+    // reruns) was found to leave a stale reading live: switching away and
+    // back to Advanced did not always refetch, because nothing here forces
+    // that view's identity to change. Keying a `.task` directly off
+    // `selectedTab` reloads deterministically every time the tab becomes
+    // `.advanced`, regardless of whatever identity SwiftUI happens to
+    // assign the switch's branches.
+    @State private var historyEventCount: Int = 0
+    @State private var historySizeBytes: Int64 = 0
+    @State private var historyOldestDate: Date?
+
+    init(appViewModel: AppViewModel, historyStore: HistoryStore?) {
         self.appViewModel = appViewModel
         self.notificationService = appViewModel.notificationService
         self.pushService = appViewModel.pushService
+        self.historyStore = historyStore
     }
 
     var body: some View {
@@ -70,6 +86,25 @@ struct SettingsView: View {
         }
         .frame(minWidth: 560, minHeight: 440)
         .background(SettingsTheme.panelBackground)
+        .task(id: selectedTab) {
+            guard selectedTab == .advanced else { return }
+            await reloadHistorySummary()
+        }
+    }
+
+    // Runs on the main actor (so assigning back to `@State` is safe) but
+    // hands the actual synchronous, lock-taking queries to a detached task,
+    // mirroring `ReviewView.load()` — the wait for the ingest queue happens
+    // off the main thread rather than blocking the settings window.
+    @MainActor
+    private func reloadHistorySummary() async {
+        guard let store = historyStore else { return }
+        let (count, size, oldest) = await Task.detached(priority: .userInitiated) {
+            (store.eventCount(), store.databaseSizeBytes(), store.oldestEventDate())
+        }.value
+        historyEventCount = count
+        historySizeBytes = size
+        historyOldestDate = oldest
     }
 
     private static let accentPurple = SessionTheme.processingColor
@@ -127,7 +162,14 @@ struct SettingsView: View {
                 case .claude:
                     ClaudeSettingsTab(appViewModel: appViewModel)
                 case .advanced:
-                    AdvancedSettingsTab(appViewModel: appViewModel)
+                    AdvancedSettingsTab(
+                        appViewModel: appViewModel,
+                        historyStore: historyStore,
+                        historyEventCount: historyEventCount,
+                        historySizeBytes: historySizeBytes,
+                        historyOldestDate: historyOldestDate,
+                        reloadHistorySummary: reloadHistorySummary
+                    )
                 case .about:
                     AboutSettingsTab()
                 }
@@ -669,10 +711,52 @@ struct ClaudeSettingsTab: View {
 
 // MARK: - Advanced
 
+enum ClearHistoryOutcome: Equatable, Hashable {
+    case idle
+    case cleared
+    case failed
+
+    /// The only two ways `clear()` resolves. Pulling this into a pure
+    /// function (rather than setting `.cleared`/`.failed` directly at each
+    /// call site) is what makes the outcome testable without standing up a
+    /// `HistoryStore`.
+    static func afterClearing(didSucceed: Bool) -> ClearHistoryOutcome {
+        didSucceed ? .cleared : .failed
+    }
+}
+
 struct AdvancedSettingsTab: View {
     @ObservedObject var appViewModel: AppViewModel
+    let historyStore: HistoryStore?
+
+    // Loaded and owned by `SettingsView` (keyed off `selectedTab` there),
+    // not here — see the comment on `SettingsView.historyEventCount`. This
+    // view only displays them and asks for a reload after clearing.
+    let historyEventCount: Int
+    let historySizeBytes: Int64
+    let historyOldestDate: Date?
+    let reloadHistorySummary: () async -> Void
+
     @State private var resetConfirmation = false
     @State private var resetDone = false
+
+    @State private var clearHistoryConfirmation = false
+    // Three mutually exclusive outcomes rather than a second bool: a
+    // `clear()` failure (e.g. `VACUUM` hitting a full disk) must not be
+    // representable alongside a "cleared" success flash — the two booleans
+    // this replaced could both be false but nothing stopped a caller from
+    // setting `clearHistoryDone = true` on the failure path, which is
+    // exactly the bug this enum forecloses.
+    @State private var clearHistoryOutcome: ClearHistoryOutcome = .idle
+    // Guards against re-entrancy: `clear()` runs a `VACUUM`, which can take
+    // a moment, and the button stayed clickable while it ran. A second
+    // click during that window could re-arm the confirmation just before
+    // the first click's completion overwrote it with `.cleared`/`.failed`
+    // and then reverted to `.idle` — silently dismissing a confirmation the
+    // user had just triggered. Disabling the button for the whole clear
+    // lifecycle (confirm -> clear -> reload -> outcome flash -> idle)
+    // forecloses that.
+    @State private var isClearingHistory = false
 
     var body: some View {
         SettingsSection(title: "Data") {
@@ -747,13 +831,90 @@ struct AdvancedSettingsTab: View {
             }
         }
 
+        SettingsSection(title: "History") {
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Session history")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white)
+                    // Retention is manual by design, so the cost has to be
+                    // visible. Cleanup the user cannot see the need for is
+                    // not cleanup.
+                    Text(historySummaryText)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(white: 0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let store = historyStore {
+                    Button(action: {
+                        if clearHistoryConfirmation {
+                            clearHistoryConfirmation = false
+                            isClearingHistory = true
+                            Task {
+                                do {
+                                    // Off the main actor, same shape as
+                                    // `reloadHistorySummary()` below and
+                                    // `ReviewView.load()`: DELETE + VACUUM
+                                    // can run for a while on a multi-megabyte
+                                    // database, and it takes the store's
+                                    // serial ingest queue, which a concurrent
+                                    // ingest tick may already be holding.
+                                    // Neither should be able to freeze the UI.
+                                    try await Task.detached(priority: .userInitiated) {
+                                        try store.clear()
+                                    }.value
+                                    clearHistoryOutcome = .afterClearing(didSucceed: true)
+                                } catch {
+                                    // Advisory-only clear: the failure is
+                                    // reported to the user as a short,
+                                    // factual line (no raw error text) and
+                                    // logged here for diagnosis.
+                                    ClydeLog.general.error("History: clear failed: \(error.localizedDescription, privacy: .public)")
+                                    clearHistoryOutcome = .afterClearing(didSucceed: false)
+                                }
+                                // Reload regardless of outcome, so the
+                                // summary always reflects what the database
+                                // actually contains rather than what the
+                                // button assumed happened.
+                                await reloadHistorySummary()
+                                try? await Task.sleep(for: .seconds(2))
+                                clearHistoryOutcome = .idle
+                                isClearingHistory = false
+                            }
+                        } else {
+                            clearHistoryConfirmation = true
+                            Task {
+                                try? await Task.sleep(for: .seconds(4))
+                                clearHistoryConfirmation = false
+                            }
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: clearHistoryIcon)
+                                .font(.system(size: 11))
+                            Text(clearHistoryLabel)
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(clearHistoryColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(clearHistoryBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isClearingHistory)
+                }
+            }
+        }
+
         SettingsSection(title: "Reset") {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reset tracking state")
                         .font(.system(size: 12))
                         .foregroundStyle(.white)
-                    Text("Wipes all session and event files in ~/.clyde/. Sessions will reappear on the next hook fire or pgrep poll. Use this if Clyde gets stuck in a wrong state.")
+                    Text("Wipes the live session and event markers in ~/.clyde/ — not the history database above. Sessions will reappear on the next hook fire or pgrep poll. Use this if Clyde gets stuck in a wrong state.")
                         .font(.system(size: 10))
                         .foregroundStyle(Color(white: 0.45))
                         .fixedSize(horizontal: false, vertical: true)
@@ -791,6 +952,64 @@ struct AdvancedSettingsTab: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private var clearHistoryIcon: String {
+        switch clearHistoryOutcome {
+        case .cleared: return "checkmark"
+        case .failed: return "exclamationmark.triangle.fill"
+        case .idle: return clearHistoryConfirmation ? "exclamationmark.triangle.fill" : "trash"
+        }
+    }
+
+    private var clearHistoryLabel: String {
+        switch clearHistoryOutcome {
+        case .cleared: return "History cleared"
+        case .failed: return "Couldn't clear history"
+        case .idle: return clearHistoryConfirmation ? "Click again to confirm" : "Clear history"
+        }
+    }
+
+    private var clearHistoryColor: Color {
+        switch clearHistoryOutcome {
+        case .cleared: return .green
+        case .failed: return .red
+        case .idle: return clearHistoryConfirmation ? .orange : Color(white: 0.8)
+        }
+    }
+
+    private var clearHistoryBackground: Color {
+        let base: Color
+        switch clearHistoryOutcome {
+        case .cleared: base = .green
+        case .failed: base = .red
+        case .idle: base = clearHistoryConfirmation ? .orange : Color(white: 0.18)
+        }
+        return base.opacity(clearHistoryConfirmation ? 0.15 : 0.6)
+    }
+
+    private var historySummaryText: String {
+        guard historyStore != nil else { return "History tracking is unavailable." }
+        return Self.historySummary(
+            eventCount: historyEventCount,
+            sizeBytes: historySizeBytes,
+            oldestDate: historyOldestDate
+        )
+    }
+
+    static func historySummary(eventCount: Int, sizeBytes: Int64, oldestDate: Date?) -> String {
+        guard eventCount > 0 else { return "No history recorded yet." }
+        let oldest = oldestDate.map {
+            DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .none)
+        } ?? "—"
+        return "\(eventCount) events, \(formatSize(bytes: sizeBytes)), since \(oldest)."
+    }
+
+    static func formatSize(bytes: Int64) -> String {
+        let mb = Double(bytes) / 1_048_576
+        return mb < 1
+            ? String(format: "%.0f KB", Double(bytes) / 1024)
+            : String(format: "%.1f MB", mb)
     }
 }
 
