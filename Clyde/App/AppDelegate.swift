@@ -98,6 +98,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsObserver: NSObjectProtocol?
     private var diagnosticsObserver: NSObjectProtocol?
 
+    private(set) var historyStore: HistoryStore?
+    private var historyIngestTimer: Timer?
+
     deinit {
         if let token = settingsObserver {
             NotificationCenter.default.removeObserver(token)
@@ -129,6 +132,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             processMonitor: appViewModel.processMonitor,
             attentionMonitor: appViewModel.attentionMonitor
         )
+
+        // History is best-effort: if the store cannot be opened, Clyde
+        // carries on with tracking and the review window reports itself
+        // unavailable. Session tracking must never break because of a
+        // statistics feature.
+        do {
+            let store = try HistoryStore(directory: AppPaths.historyDir)
+            historyStore = store
+            DispatchQueue.global(qos: .utility).async { store.ingestPending() }
+            // 30s, not the 3s poll: the review needs no second-level
+            // freshness, and writing to the database that often is work
+            // with no reader.
+            let timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+                DispatchQueue.global(qos: .utility).async { store.ingestPending() }
+            }
+            historyIngestTimer = timer
+        } catch {
+            ClydeLog.general.error("History disabled: \(error.localizedDescription, privacy: .public)")
+        }
 
         let screenFrame = NSScreen.main?.visibleFrame ?? .zero
         let initialOrigin = NSPoint(
@@ -258,6 +280,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         applyWidgetVisibility(appViewModel.widgetVisible)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        historyIngestTimer?.invalidate()
+        historyStore?.ingestPending()
     }
 
     /// Show or hide the WIDGET panel based on the user preference.
