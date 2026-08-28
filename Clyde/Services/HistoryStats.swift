@@ -134,6 +134,51 @@ final class HistoryStats {
         }
     }
 
+    /// Per-day buckets for the activity grid. Uses the same turn pairing as
+    /// `totals`, so a period's days always sum to the period's minutes
+    /// rather than drifting from the number shown right above them.
+    func dailyActivity(from: Date, to: Date) -> [DayActivity] {
+        var result: [DayActivity] = []
+        let sql = """
+            SELECT day, SUM(worked) AS worked, SUM(turn) AS turns FROM (
+              SELECT date(ts, 'unixepoch', 'localtime') AS day,
+                     CASE WHEN event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
+                          THEN dt ELSE 0 END AS worked,
+                     CASE WHEN event = 'UserPromptSubmit' THEN 1 ELSE 0 END AS turn
+              FROM (
+                SELECT ts, event,
+                       LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt,
+                       LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
+                FROM events WHERE ts >= ? AND ts < ?
+                  AND event IN ('UserPromptSubmit','Stop')
+              )
+            ) GROUP BY day HAVING turns > 0 ORDER BY day
+            """
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone.current
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+
+        store.read { handle in
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_int64(stmt, 1, Int64(from.timeIntervalSince1970))
+            sqlite3_bind_int64(stmt, 2, Int64(to.timeIntervalSince1970))
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                guard let dayText = sqlite3_column_text(stmt, 0),
+                      let day = formatter.date(from: String(cString: dayText)) else { continue }
+                result.append(DayActivity(
+                    day: day,
+                    workingSeconds: Int(sqlite3_column_int64(stmt, 1)),
+                    turns: Int(sqlite3_column_int64(stmt, 2))
+                ))
+            }
+        }
+        return result
+    }
+
     private func topTool(project: String, from: Date, to: Date) -> String? {
         let sql = """
             SELECT tool FROM events

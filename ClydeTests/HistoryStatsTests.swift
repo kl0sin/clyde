@@ -146,6 +146,66 @@ final class HistoryStatsTests: XCTestCase {
         XCTAssertEqual(totals.workingSeconds, 0)
     }
 
+    // MARK: - Daily activity (the heatmap's data)
+
+    /// Buckets are local-time days, because the grid a person reads is
+    /// their calendar, not UTC. Built from the same turn pairing as the
+    /// totals so a day's minutes always add up to the period's minutes.
+    func testDailyActivitySplitsWorkAcrossLocalDays() throws {
+        let store = try makeStore()
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let yesterday = cal.date(byAdding: .day, value: -1, to: today)!
+        func at(_ day: Date, _ hour: Int, _ minute: Int = 0) -> Int {
+            Int(cal.date(bySettingHour: hour, minute: minute, second: 0, of: day)!.timeIntervalSince1970)
+        }
+        try store.insert([
+            event("UserPromptSubmit", at: at(yesterday, 10)),
+            event("Stop", at: at(yesterday, 10, 5)),
+            event("UserPromptSubmit", at: at(today, 9)),
+            event("Stop", at: at(today, 9, 2)),
+            event("UserPromptSubmit", at: at(today, 14)),
+            event("Stop", at: at(today, 14, 3)),
+        ])
+
+        let days = HistoryStats(store: store).dailyActivity(
+            from: cal.date(byAdding: .day, value: -7, to: today)!,
+            to: cal.date(byAdding: .day, value: 1, to: today)!)
+
+        XCTAssertEqual(days.count, 2)
+        XCTAssertEqual(days.first?.day, yesterday)
+        XCTAssertEqual(days.first?.workingSeconds, 300)
+        XCTAssertEqual(days.first?.turns, 1)
+        XCTAssertEqual(days.last?.day, today)
+        XCTAssertEqual(days.last?.workingSeconds, 300)
+        XCTAssertEqual(days.last?.turns, 2)
+    }
+
+    /// A day whose turn never finished still counts as a day you worked —
+    /// it has a turn — but contributes no minutes, matching the totals.
+    func testDailyActivityCountsAnUnfinishedTurnWithoutMinutes() throws {
+        let store = try makeStore()
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let ts = Int(cal.date(bySettingHour: 11, minute: 0, second: 0, of: today)!.timeIntervalSince1970)
+        try store.insert([event("UserPromptSubmit", at: ts)])
+
+        let days = HistoryStats(store: store).dailyActivity(
+            from: cal.date(byAdding: .day, value: -7, to: today)!,
+            to: cal.date(byAdding: .day, value: 1, to: today)!)
+
+        XCTAssertEqual(days.count, 1)
+        XCTAssertEqual(days.first?.workingSeconds, 0)
+        XCTAssertEqual(days.first?.turns, 1)
+    }
+
+    func testDailyActivityIsEmptyWithoutEvents() throws {
+        let store = try makeStore()
+
+        XCTAssertTrue(HistoryStats(store: store)
+            .dailyActivity(from: wholeRange.from, to: wholeRange.to).isEmpty)
+    }
+
     func testRangeExcludesEventsOutsideIt() throws {
         let store = try makeStore()
         try store.insert([

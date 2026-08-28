@@ -28,3 +28,14 @@ struct ProjectRow: Equatable {
     let turns: Int
     let topTool: String?
 }
+
+/// One local-time day's worth of activity, for the calendar grid.
+///
+/// Local time on purpose: the grid a person reads is their own calendar,
+/// so a turn that starts at 23:50 belongs to that evening, not to the
+/// following UTC day.
+struct DayActivity: Equatable {
+    let day: Date
+    let workingSeconds: Int
+    let turns: Int
+}

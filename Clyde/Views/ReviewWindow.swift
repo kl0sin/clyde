@@ -31,10 +31,28 @@ struct ReviewView: View {
     // zero values, which reads the same as a genuinely empty period.
     @State private var totals = PeriodTotals(workingSeconds: 0, waitingSeconds: 0, turns: 0, sessions: 0)
     @State private var projects: [ProjectRow] = []
+    /// The grid is deliberately independent of the period switch: it is the
+    /// "how have the last weeks gone" view you land on, while the tiles and
+    /// the project table answer "and what about today".
+    @State private var daily: [DayActivity] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             header
+
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("LAST 6 MONTHS")
+                    .font(.system(size: 10, weight: .semibold))
+                    .kerning(0.6)
+                    .foregroundStyle(TextColor.tertiary)
+                ActivityHeatmap(days: daily, weeks: Self.heatmapWeeks)
+            }
+
+            Rectangle()
+                .fill(Color(white: 0.18))
+                .frame(height: 1)
+                .padding(.vertical, Spacing.xxs)
+
             periodSwitch
 
             HStack(spacing: Spacing.sm) {
@@ -76,7 +94,7 @@ struct ReviewView: View {
             Spacer(minLength: 0)
         }
         .padding(Spacing.lg)
-        .frame(minWidth: 560, minHeight: 420)
+        .frame(minWidth: 560, minHeight: 560)
         .background(Color(nsColor: NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)))
         .task(id: period) {
             // Reload once immediately, then keep reloading on the same
@@ -111,12 +129,19 @@ struct ReviewView: View {
     private func load() async {
         let range = period.range
         let s = stats
-        let (newTotals, newProjects) = await Task.detached(priority: .userInitiated) {
-            (s.totals(from: range.from, to: range.to), s.projects(from: range.from, to: range.to))
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let gridFrom = calendar.date(byAdding: .day, value: -(Self.heatmapWeeks * 7), to: today) ?? today
+        let gridTo = calendar.date(byAdding: .day, value: 1, to: today) ?? Date()
+        let (newTotals, newProjects, newDaily) = await Task.detached(priority: .userInitiated) {
+            (s.totals(from: range.from, to: range.to),
+             s.projects(from: range.from, to: range.to),
+             s.dailyActivity(from: gridFrom, to: gridTo))
         }.value
         guard !Task.isCancelled else { return }
         totals = newTotals
         projects = newProjects
+        daily = newDaily
     }
 
     // `accessibilityValue` lets the "Turns" tile speak "1 turn" / "2 turns"
@@ -284,6 +309,11 @@ struct ReviewView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Nothing recorded for this period yet")
     }
+
+    /// Half a year. Twelve weeks left two thirds of the window empty and made
+    /// the grid read as a fragment; at this density 26 columns fill the width
+    /// the way the shape people know from a contribution graph does.
+    static let heatmapWeeks = 26
 
     static func duration(_ seconds: Int) -> String {
         if seconds < 60 { return "\(seconds)s" }
