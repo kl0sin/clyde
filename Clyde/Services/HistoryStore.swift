@@ -21,19 +21,22 @@ final class HistoryStore {
     /// need to reconstruct the crash-between-commit-and-unlink window.
     private(set) var lastClaimedFileName: String?
 
-    /// Serializes `ingestPending()`. The store is reachable from three
+    /// Serializes every access to `db`. The store is reachable from three
     /// independent callers — the launch path, a repeating 30s timer, and
-    /// (via `HistoryStats`) the UI — and nothing stops two of them from
-    /// overlapping (a slow tick still running when the next one fires, or
-    /// launch racing the first tick). Without this queue that overlap is
-    /// only harmless by accident: the claim-by-rename is atomic and
-    /// `markIngested` shares a transaction with the inserts, so the loser
-    /// of a leftover-sweep race trips the `ingested_files` primary key and
-    /// rolls back — and all of that also assumes the system libsqlite3 was
-    /// built in serialized mode. That is correctness by constraint, not by
-    /// design. Running the whole method body through this serial queue
-    /// makes single-flight the actual contract instead of a side effect of
-    /// how the tables happen to be shaped.
+    /// (via `HistoryStats`) the UI — and nothing stops any two of them
+    /// from overlapping: a slow ingest tick still running when the next
+    /// one fires, launch racing the first tick, or the review window
+    /// opening while a tick is mid-transaction. Reads and writes share one
+    /// connection, so an unsynchronized read issued while a write's
+    /// transaction is open would observe that transaction's uncommitted
+    /// rows — nothing is corrupted, but the window could briefly show a
+    /// half-written batch, which is exactly the "quietly wrong number"
+    /// this feature exists to avoid. Every public entry point below takes
+    /// this queue before touching `db`; nothing reaches the connection
+    /// any other way. The internal (`…Inner` / private) methods do not
+    /// take the queue themselves — they assume the caller already holds
+    /// it, either because it's an entry point's own `sync` block or
+    /// because it's inside `ingestPending()`'s.
     private let ingestQueue = DispatchQueue(label: "com.clyde.historystore.ingest")
 
     init(directory: URL) throws {
@@ -50,7 +53,9 @@ final class HistoryStore {
         // Same posture as the state markers: readable by this user only.
         try? FileManager.default.setAttributes([.posixPermissions: 0o600],
                                                ofItemAtPath: databaseURL.path)
-        try exec("""
+        // No lock needed here: init runs before this instance is shared
+        // with any other thread, so there is nothing to race yet.
+        try execInner("""
             CREATE TABLE IF NOT EXISTS events (
               id INTEGER PRIMARY KEY,
               ts INTEGER NOT NULL,
@@ -71,77 +76,54 @@ final class HistoryStore {
 
     deinit { sqlite3_close(db) }
 
+    // MARK: - Public entry points (queue-locked; safe to call from any thread)
+
     func insert(_ events: [HistoryEvent]) throws {
         guard !events.isEmpty else { return }
-        try exec("BEGIN")
-        do {
-            try insertWithinTransaction(events)
-            try exec("COMMIT")
-        } catch {
-            try? exec("ROLLBACK")
-            throw error
-        }
-    }
-
-    /// Insert without opening a transaction — used by the ingest path,
-    /// which needs the events and the claimed filename to commit together.
-    func insertWithinTransaction(_ events: [HistoryEvent]) throws {
-        var stmt: OpaquePointer?
-        let sql = "INSERT INTO events (ts, event, session_id, project, tool, summary) VALUES (?,?,?,?,?,?)"
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            throw StoreError.statementFailed(lastError())
-        }
-        defer { sqlite3_finalize(stmt) }
-
-        for event in events {
-            sqlite3_reset(stmt)
-            sqlite3_bind_int64(stmt, 1, Int64(event.ts.timeIntervalSince1970))
-            bindText(stmt, 2, event.event)
-            bindText(stmt, 3, event.sessionID)
-            bindText(stmt, 4, event.project)
-            if let tool = event.tool { bindText(stmt, 5, tool) } else { sqlite3_bind_null(stmt, 5) }
-            if let summary = event.summary { bindText(stmt, 6, summary) } else { sqlite3_bind_null(stmt, 6) }
-            guard sqlite3_step(stmt) == SQLITE_DONE else {
-                throw StoreError.statementFailed(lastError())
+        try ingestQueue.sync {
+            try execInner("BEGIN")
+            do {
+                try insertWithinTransaction(events)
+                try execInner("COMMIT")
+            } catch {
+                try? execInner("ROLLBACK")
+                throw error
             }
         }
     }
 
     func eventCount() -> Int {
-        scalarInt("SELECT COUNT(*) FROM events") ?? 0
+        ingestQueue.sync { scalarIntInner("SELECT COUNT(*) FROM events") ?? 0 }
     }
 
     func oldestEventDate() -> Date? {
-        guard let ts = scalarInt("SELECT MIN(ts) FROM events"), ts > 0 else { return nil }
-        return Date(timeIntervalSince1970: TimeInterval(ts))
+        ingestQueue.sync {
+            guard let ts = scalarIntInner("SELECT MIN(ts) FROM events"), ts > 0 else { return nil }
+            return Date(timeIntervalSince1970: TimeInterval(ts))
+        }
     }
 
     func databaseSizeBytes() -> Int64 {
+        // File-system metadata, not a connection access — no lock needed.
         let attrs = try? FileManager.default.attributesOfItem(atPath: databaseURL.path)
         return (attrs?[.size] as? NSNumber)?.int64Value ?? 0
     }
 
     func clear() throws {
-        try exec("DELETE FROM events; DELETE FROM ingested_files; VACUUM;")
-    }
-
-    // MARK: - Internals shared with HistoryStats
-
-    func exec(_ sql: String) throws {
-        guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
-            throw StoreError.statementFailed(lastError())
+        try ingestQueue.sync {
+            try execInner("DELETE FROM events; DELETE FROM ingested_files; VACUUM;")
         }
     }
 
-    func scalarInt(_ sql: String) -> Int? {
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
-        defer { sqlite3_finalize(stmt) }
-        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
-        return Int(sqlite3_column_int64(stmt, 0))
+    /// General read accessor for callers (namely `HistoryStats`) that need
+    /// the raw connection to build their own queries. `body` receives the
+    /// handle and must run its *entire* prepare/step/finalize sequence
+    /// inside this closure — the lock is held only for the closure's
+    /// duration, so a prepared statement must never be smuggled out to be
+    /// stepped later, unlocked.
+    func read<T>(_ body: (OpaquePointer?) -> T) -> T {
+        ingestQueue.sync { body(db) }
     }
-
-    func handle() -> OpaquePointer? { db }
 
     /// Drain the spool into the database.
     ///
@@ -181,6 +163,34 @@ final class HistoryStore {
         }
     }
 
+    // MARK: - Inner implementations (unlocked; caller must already hold ingestQueue)
+
+    /// Insert without opening a transaction — used by the ingest path,
+    /// which needs the events and the claimed filename to commit together.
+    /// Unlocked: only called from `insert(_:)` and `ingestClaimed(named:in:)`,
+    /// both of which already run inside `ingestQueue`.
+    private func insertWithinTransaction(_ events: [HistoryEvent]) throws {
+        var stmt: OpaquePointer?
+        let sql = "INSERT INTO events (ts, event, session_id, project, tool, summary) VALUES (?,?,?,?,?,?)"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.statementFailed(lastError())
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        for event in events {
+            sqlite3_reset(stmt)
+            sqlite3_bind_int64(stmt, 1, Int64(event.ts.timeIntervalSince1970))
+            bindText(stmt, 2, event.event)
+            bindText(stmt, 3, event.sessionID)
+            bindText(stmt, 4, event.project)
+            if let tool = event.tool { bindText(stmt, 5, tool) } else { sqlite3_bind_null(stmt, 5) }
+            if let summary = event.summary { bindText(stmt, 6, summary) } else { sqlite3_bind_null(stmt, 6) }
+            guard sqlite3_step(stmt) == SQLITE_DONE else {
+                throw StoreError.statementFailed(lastError())
+            }
+        }
+    }
+
     private func ingestClaimed(named name: String, in directory: URL) -> Int {
         let url = directory.appendingPathComponent(name)
 
@@ -202,12 +212,12 @@ final class HistoryStore {
         }
 
         do {
-            try exec("BEGIN")
+            try execInner("BEGIN")
             try insertWithinTransaction(events)
             try markIngested(name)
-            try exec("COMMIT")
+            try execInner("COMMIT")
         } catch {
-            try? exec("ROLLBACK")
+            try? execInner("ROLLBACK")
             ClydeLog.general.error("History: ingest failed, spool kept: \(error.localizedDescription, privacy: .public)")
             return 0
         }
@@ -218,12 +228,30 @@ final class HistoryStore {
 
     private func alreadyIngested(_ name: String) -> Bool {
         let escaped = name.replacingOccurrences(of: "'", with: "''")
-        return (scalarInt("SELECT COUNT(*) FROM ingested_files WHERE name = '\(escaped)'") ?? 0) > 0
+        return (scalarIntInner("SELECT COUNT(*) FROM ingested_files WHERE name = '\(escaped)'") ?? 0) > 0
     }
 
     private func markIngested(_ name: String) throws {
         let escaped = name.replacingOccurrences(of: "'", with: "''")
-        try exec("INSERT INTO ingested_files (name, ingested_at) VALUES ('\(escaped)', \(Int(Date().timeIntervalSince1970)))")
+        try execInner("INSERT INTO ingested_files (name, ingested_at) VALUES ('\(escaped)', \(Int(Date().timeIntervalSince1970)))")
+    }
+
+    /// Unlocked exec. Only called from `init` (nothing to race with yet)
+    /// and from other inner methods that already run inside `ingestQueue`.
+    private func execInner(_ sql: String) throws {
+        guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
+            throw StoreError.statementFailed(lastError())
+        }
+    }
+
+    /// Unlocked scalar query. Only called from other inner/entry-point
+    /// bodies that already run inside `ingestQueue`.
+    private func scalarIntInner(_ sql: String) -> Int? {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        return Int(sqlite3_column_int64(stmt, 0))
     }
 
     private func lastError() -> String {

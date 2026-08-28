@@ -16,6 +16,12 @@ import SQLite3
 /// spent working or time the session spent waiting on a finished answer.
 /// Do not "fix" the two totals to sum to elapsed time; that would misbill
 /// that gap into one bucket or the other.
+///
+/// Every query here goes through `store.read`, which serializes against
+/// `HistoryStore`'s own ingest queue — this window can be opened while a
+/// 30s ingest tick is mid-transaction, and without that serialization a
+/// query issued at that moment would observe the transaction's
+/// not-yet-committed rows.
 final class HistoryStats {
     private let store: HistoryStore
 
@@ -49,9 +55,9 @@ final class HistoryStats {
                 AND event IN ('UserPromptSubmit','Stop')
             ) WHERE event = 'Stop' AND next_event = 'UserPromptSubmit' AND dt IS NOT NULL
             """)
-        let promptCount = store.scalarInt(
+        let promptCount = scalarInt(
             "SELECT COUNT(*) FROM events WHERE event = 'UserPromptSubmit' AND ts >= \(epoch(from)) AND ts < \(epoch(to))") ?? 0
-        let sessionCount = store.scalarInt(
+        let sessionCount = scalarInt(
             "SELECT COUNT(DISTINCT session_id) FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))") ?? 0
 
         let workingSeconds: Int64? = turns.first?.first ?? nil
@@ -74,7 +80,6 @@ final class HistoryStats {
     /// that only just started.
     func projects(from: Date, to: Date) -> [ProjectRow] {
         var worked: [String: (seconds: Int, topTool: String?)] = [:]
-        var stmt: OpaquePointer?
         let workedSQL = """
             SELECT project, SUM(dt) AS worked FROM (
               SELECT project, session_id, event,
@@ -85,14 +90,16 @@ final class HistoryStats {
             ) WHERE event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
             GROUP BY project
             """
-        if sqlite3_prepare_v2(store.handle(), workedSQL, -1, &stmt, nil) == SQLITE_OK {
-            while sqlite3_step(stmt) == SQLITE_ROW {
-                let project = String(cString: sqlite3_column_text(stmt, 0))
-                worked[project] = (Int(sqlite3_column_int64(stmt, 1)), nil)
+        store.read { handle in
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(handle, workedSQL, -1, &stmt, nil) == SQLITE_OK {
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    let project = String(cString: sqlite3_column_text(stmt, 0))
+                    worked[project] = (Int(sqlite3_column_int64(stmt, 1)), nil)
+                }
             }
+            sqlite3_finalize(stmt)
         }
-        sqlite3_finalize(stmt)
-        stmt = nil
 
         var turnsByProject: [String: Int] = [:]
         let turnsSQL = """
@@ -100,13 +107,16 @@ final class HistoryStats {
             WHERE event = 'UserPromptSubmit' AND ts >= \(epoch(from)) AND ts < \(epoch(to))
             GROUP BY project
             """
-        if sqlite3_prepare_v2(store.handle(), turnsSQL, -1, &stmt, nil) == SQLITE_OK {
-            while sqlite3_step(stmt) == SQLITE_ROW {
-                let project = String(cString: sqlite3_column_text(stmt, 0))
-                turnsByProject[project] = Int(sqlite3_column_int64(stmt, 1))
+        store.read { handle in
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(handle, turnsSQL, -1, &stmt, nil) == SQLITE_OK {
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    let project = String(cString: sqlite3_column_text(stmt, 0))
+                    turnsByProject[project] = Int(sqlite3_column_int64(stmt, 1))
+                }
             }
+            sqlite3_finalize(stmt)
         }
-        sqlite3_finalize(stmt)
 
         let projects = Set(worked.keys).union(turnsByProject.keys)
         let result = projects.map { project -> ProjectRow in
@@ -125,38 +135,55 @@ final class HistoryStats {
     }
 
     private func topTool(project: String, from: Date, to: Date) -> String? {
-        var stmt: OpaquePointer?
         let sql = """
             SELECT tool FROM events
             WHERE tool IS NOT NULL AND project = ?
               AND ts >= ? AND ts < ?
             GROUP BY tool ORDER BY COUNT(*) DESC, tool ASC LIMIT 1
             """
-        guard sqlite3_prepare_v2(store.handle(), sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
-        defer { sqlite3_finalize(stmt) }
-        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-        sqlite3_bind_text(stmt, 1, project, -1, transient)
-        sqlite3_bind_int64(stmt, 2, Int64(epoch(from)))
-        sqlite3_bind_int64(stmt, 3, Int64(epoch(to)))
-        guard sqlite3_step(stmt) == SQLITE_ROW, let text = sqlite3_column_text(stmt, 0) else { return nil }
-        return String(cString: text)
+        return store.read { handle in
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+            defer { sqlite3_finalize(stmt) }
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, project, -1, transient)
+            sqlite3_bind_int64(stmt, 2, Int64(epoch(from)))
+            sqlite3_bind_int64(stmt, 3, Int64(epoch(to)))
+            guard sqlite3_step(stmt) == SQLITE_ROW, let text = sqlite3_column_text(stmt, 0) else { return nil }
+            return String(cString: text)
+        }
     }
 
     private func epoch(_ date: Date) -> Int { Int(date.timeIntervalSince1970) }
 
-    private func rows(_ sql: String) -> [[Int64?]] {
-        var out: [[Int64?]] = []
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(store.handle(), sql, -1, &stmt, nil) == SQLITE_OK else { return out }
-        defer { sqlite3_finalize(stmt) }
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            var row: [Int64?] = []
-            for column in 0..<sqlite3_column_count(stmt) {
-                row.append(sqlite3_column_type(stmt, column) == SQLITE_NULL
-                           ? nil : sqlite3_column_int64(stmt, column))
-            }
-            out.append(row)
+    /// Scalar-query helper, mirroring `HistoryStore`'s old `scalarInt` but
+    /// routed through `store.read` so it takes the store's serial queue
+    /// like every other access here.
+    private func scalarInt(_ sql: String) -> Int? {
+        store.read { handle in
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+            defer { sqlite3_finalize(stmt) }
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+            return Int(sqlite3_column_int64(stmt, 0))
         }
-        return out
+    }
+
+    private func rows(_ sql: String) -> [[Int64?]] {
+        store.read { handle in
+            var out: [[Int64?]] = []
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else { return out }
+            defer { sqlite3_finalize(stmt) }
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                var row: [Int64?] = []
+                for column in 0..<sqlite3_column_count(stmt) {
+                    row.append(sqlite3_column_type(stmt, column) == SQLITE_NULL
+                               ? nil : sqlite3_column_int64(stmt, column))
+                }
+                out.append(row)
+            }
+            return out
+        }
     }
 }
