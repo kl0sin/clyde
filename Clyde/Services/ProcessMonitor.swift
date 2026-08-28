@@ -155,22 +155,15 @@ final class ProcessMonitor: ObservableObject {
         // poll() path this is a cheap duplicate dir listing.
         refreshPIDRuntimes()
 
-        // Two sources, unified into one PID set:
+        // One source, and it must be evidence rather than inference:
         //
         //  1. -info files written by the SessionStart hook. These give us
         //     full session metadata (session_id + cwd) and classify
         //     accurately via -busy markers.
         //
-        //  2. pgrep claude. Catches sessions that were already running when
-        //     Clyde was installed (no -info file). They appear immediately
-        //     as ready and only flip to busy if a UserPromptSubmit hook
-        //     fires for them (which it will the next time the user types).
-        //
-        // CRITICAL: pgrep is ONLY used here, for discovery. classifyStatus
-        // never inspects child processes — that historic fallback caused
-        // false positives for every long-lived helper (sourcekit-lsp, MCP
-        // servers, language servers). Hook state is the sole source of
-        // truth for busy/idle.
+        // That is the only source. Discovery by process name was removed
+        // after it turned every process merely called `claude` — including
+        // this project's own test fixtures — into a phantom session.
         var pids: Set<pid_t> = []
         var hookInfo: [pid_t: HookInfo] = [:]
 
@@ -207,15 +200,26 @@ final class ProcessMonitor: ObservableObject {
         }
         hookInfoByPID = hookInfo
 
-        // Add any claude binary that pgrep finds, regardless of hook state.
-        if let output = try? await shell.run("pgrep -x claude"), !output.isEmpty {
-            for line in output.components(separatedBy: "\n") {
-                if let pid = Int32(line.trimmingCharacters(in: .whitespaces)) {
-                    pids.insert(pid)
-                }
-            }
-        }
-
+        // Deliberately NO process-name discovery here.
+        //
+        // This used to add every PID that `pgrep -x claude` returned,
+        // "regardless of hook state". A process name is not evidence of a
+        // Claude Code session, and the cost of pretending otherwise was
+        // paid by the user: Clyde's own HookScriptTests spawn a symlink
+        // named `claude` (the hook looks for an ancestor with that name, so
+        // the fixture must have it), and running the suite filled the panel
+        // with phantom rows named after the package directory. They never
+        // showed as working — no markers exist for a process that is not a
+        // session — and they lingered as "Ended" ghosts once the test
+        // process exited. Any binary called `claude` on the user's PATH did
+        // the same thing.
+        //
+        // A session now appears when the hook writes something for it, which
+        // is the same evidence the rest of this class already treats as the
+        // sole source of truth for status. Sessions that predate Clyde's
+        // install surface on their first hook event of any kind — see the
+        // -info backfill in clyde-hook.sh, which covers tool calls and not
+        // just prompts, so an actively working session appears in seconds.
         return pids.sorted()
     }
 

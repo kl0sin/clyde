@@ -87,6 +87,70 @@ final class ProcessMonitorTests: XCTestCase {
         try? body.write(to: url, atomically: true, encoding: .utf8)
     }
 
+    // MARK: - Discovery requires evidence, not a process name
+
+    /// A process merely *named* `claude` is not a Claude Code session.
+    /// Clyde's own HookScriptTests spawn a symlink named `claude` pointing
+    /// at /bin/bash — the hook looks for an ancestor with that name, so the
+    /// fixture has to have it. Running the suite therefore filled the panel
+    /// with phantom rows named after the package directory, none of which
+    /// ever showed as working (no markers exist for them) and all of which
+    /// lingered as "Ended" ghosts after the test process exited. Reproduced
+    /// live: three processes named claude, five rows in the panel.
+    ///
+    /// The same applies to any binary called `claude` on the user's PATH.
+    func testProcessNamedClaudeWithoutHookStateIsNotASession() async throws {
+        let dir = tempStateDir()
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = "\(getpid())"
+
+        let monitor = ProcessMonitor(
+            shell: shell, pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.count, 0,
+                       "a PID with no hook state must not become a session")
+    }
+
+    /// And it must not leave a ghost behind when it dies, either — the
+    /// "Ended" rows were the most misleading part of the symptom.
+    func testProcessNamedClaudeLeavesNoGhostWhenItExits() async throws {
+        let dir = tempStateDir()
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = "\(getpid())"
+        let monitor = ProcessMonitor(
+            shell: shell, pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        shell.responses["pgrep"] = ""
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.count, 0)
+    }
+
+    /// The evidence that replaces the process-name guess: a session Clyde
+    /// never saw start becomes visible as soon as the hook writes anything
+    /// for it. Task 1 of the fix makes PreToolUse backfill -info, so an
+    /// actively working session appears within seconds rather than waiting
+    /// for the user's next prompt.
+    func testSessionWithHookStateButNoSessionStartIsDiscovered() async throws {
+        let dir = tempStateDir()
+        let sid = "pre-existing"
+        _ = writeInfoFile(in: dir, sessionId: sid, cwd: "/Users/me/repo")
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+
+        let monitor = ProcessMonitor(
+            shell: shell, pollingInterval: 1, stateDir: dir,
+            isLiveClaudeProcessCheck: { _ in true })
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.count, 1)
+        XCTAssertEqual(monitor.sessions.first?.workingDirectory, "/Users/me/repo")
+    }
+
     func testDiscoverPIDsReadsInfoFiles() async {
         let dir = tempStateDir()
         let sid = UUID().uuidString
@@ -440,7 +504,13 @@ final class ProcessMonitorTests: XCTestCase {
     /// new session that just happens to coincide with a recent ghost),
     /// the second appearance must render normally — we don't want to
     /// hide a real session indefinitely.
-    func testPgrepOnlyPIDRendersOnSecondAppearance() async {
+    /// Was `testPgrepOnlyPIDRendersOnSecondAppearance`, which pinned the
+    /// opposite contract: a PID that only `pgrep` knew about used to become
+    /// a visible session. That is exactly the behaviour that filled the
+    /// panel with phantom rows for anything named `claude`, so the
+    /// assertion is inverted rather than deleted — the scenario it walks
+    /// through (ghost, then a fresh unrelated PID) is still worth pinning.
+    func testGhostIsNotRevivedByAnUnrelatedProcessNamedClaude() async {
         let dir = tempStateDir()
         let sid = UUID().uuidString
         _ = writeInfoFile(in: dir, sessionId: sid)
@@ -456,29 +526,18 @@ final class ProcessMonitorTests: XCTestCase {
         await monitor.poll()
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-info"))
         await monitor.poll()
-        // Confirm we have a ghost.
-        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false)
+        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false, "precondition: a ghost exists")
 
-        // Brand-new (non-resume) pgrep-only PID arrives. Pid 1 again
-        // for the same kill(pid, 0) reason as the previous test.
-        let newPID: pid_t = 1
-        shell.responses["pgrep"] = "\(newPID)"
-
-        // First appearance — deferred.
+        // A brand-new process named `claude` appears. With no hook state of
+        // its own it must stay invisible, and it must not resurrect the
+        // ghost either.
+        shell.responses["pgrep"] = "1"
         await monitor.poll()
-        XCTAssertEqual(monitor.sessions.count, 1)
-        XCTAssertTrue(monitor.sessions.first?.isGhost ?? false)
 
-        // Second appearance — must render even though hookInfo never arrived.
-        await monitor.poll()
-        let live = monitor.sessions.filter { !$0.isGhost }
-        XCTAssertEqual(live.count, 1, "deferred PID must surface on second tick")
-        XCTAssertEqual(live.first?.pid, newPID)
+        XCTAssertTrue(monitor.sessions.allSatisfy(\.isGhost),
+                      "no live session may appear without hook state")
     }
 
-    /// Regression for the inverse: when the identity check rejects a
-    /// PID (e.g. PID got recycled to a non-claude binary), the marker
-    /// MUST be cleaned up so we don't keep a stale "busy" forever.
     func testBusyMarkerRemovedWhenIdentityCheckFails() async {
         let dir = tempStateDir()
         let sid = UUID().uuidString
