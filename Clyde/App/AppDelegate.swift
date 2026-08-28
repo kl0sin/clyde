@@ -681,7 +681,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let settingsView = SettingsView(appViewModel: appViewModel)
+        let settingsView = SettingsView(appViewModel: appViewModel, historyStore: historyStore)
             .environment(\.colorScheme, .dark)
         let hostingController = NSHostingController(rootView: settingsView)
         let window = NSWindow(contentViewController: hostingController)

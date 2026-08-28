@@ -50,12 +50,14 @@ struct SettingsView: View {
     @ObservedObject var appViewModel: AppViewModel
     @ObservedObject var notificationService: NotificationService
     @ObservedObject var pushService: PushService
+    let historyStore: HistoryStore?
     @State private var selectedTab: SettingsTab = .general
 
-    init(appViewModel: AppViewModel) {
+    init(appViewModel: AppViewModel, historyStore: HistoryStore?) {
         self.appViewModel = appViewModel
         self.notificationService = appViewModel.notificationService
         self.pushService = appViewModel.pushService
+        self.historyStore = historyStore
     }
 
     var body: some View {
@@ -127,7 +129,7 @@ struct SettingsView: View {
                 case .claude:
                     ClaudeSettingsTab(appViewModel: appViewModel)
                 case .advanced:
-                    AdvancedSettingsTab(appViewModel: appViewModel)
+                    AdvancedSettingsTab(appViewModel: appViewModel, historyStore: historyStore)
                 case .about:
                     AboutSettingsTab()
                 }
@@ -671,8 +673,22 @@ struct ClaudeSettingsTab: View {
 
 struct AdvancedSettingsTab: View {
     @ObservedObject var appViewModel: AppViewModel
+    let historyStore: HistoryStore?
     @State private var resetConfirmation = false
     @State private var resetDone = false
+
+    // `eventCount`/`databaseSizeBytes`/`oldestEventDate` each take
+    // `HistoryStore`'s serial ingest queue (mirroring the note on
+    // `ReviewView.totals`/`projects`), so they're loaded once into state
+    // rather than recomputed on every body pass — a computed property here
+    // would retake that lock on every SwiftUI re-render and could stall the
+    // main thread behind a 30s ingest tick. `.task` loads them when the
+    // section appears; clearing reloads explicitly afterwards.
+    @State private var historyEventCount: Int = 0
+    @State private var historySizeBytes: Int64 = 0
+    @State private var historyOldestDate: Date?
+    @State private var clearHistoryConfirmation = false
+    @State private var clearHistoryDone = false
 
     var body: some View {
         SettingsSection(title: "Data") {
@@ -747,6 +763,60 @@ struct AdvancedSettingsTab: View {
             }
         }
 
+        SettingsSection(title: "History") {
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Session history")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white)
+                    // Retention is manual by design, so the cost has to be
+                    // visible. Cleanup the user cannot see the need for is
+                    // not cleanup.
+                    Text(historySummaryText)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(white: 0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if historyStore != nil {
+                    Button(action: {
+                        if clearHistoryConfirmation {
+                            try? historyStore?.clear()
+                            clearHistoryConfirmation = false
+                            clearHistoryDone = true
+                            Task {
+                                await loadHistorySummary()
+                                try? await Task.sleep(for: .seconds(2))
+                                clearHistoryDone = false
+                            }
+                        } else {
+                            clearHistoryConfirmation = true
+                            Task {
+                                try? await Task.sleep(for: .seconds(4))
+                                clearHistoryConfirmation = false
+                            }
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: clearHistoryDone ? "checkmark" : (clearHistoryConfirmation ? "exclamationmark.triangle.fill" : "trash"))
+                                .font(.system(size: 11))
+                            Text(clearHistoryDone ? "History cleared" : (clearHistoryConfirmation ? "Click again to confirm" : "Clear history"))
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(clearHistoryDone ? .green : (clearHistoryConfirmation ? .orange : Color(white: 0.8)))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background((clearHistoryDone ? Color.green : (clearHistoryConfirmation ? Color.orange : Color(white: 0.18))).opacity(clearHistoryConfirmation ? 0.15 : 0.6))
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .task {
+            await loadHistorySummary()
+        }
+
         SettingsSection(title: "Reset") {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -791,6 +861,45 @@ struct AdvancedSettingsTab: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private var historySummaryText: String {
+        guard historyStore != nil else { return "History tracking is unavailable." }
+        return Self.historySummary(
+            eventCount: historyEventCount,
+            sizeBytes: historySizeBytes,
+            oldestDate: historyOldestDate
+        )
+    }
+
+    // Runs on the main actor (so assigning back to `@State` is safe) but
+    // hands the actual synchronous, lock-taking queries to a detached task,
+    // mirroring `ReviewView.load()` — the wait for the ingest queue happens
+    // off the main thread rather than blocking the settings window.
+    @MainActor
+    private func loadHistorySummary() async {
+        guard let store = historyStore else { return }
+        let (count, size, oldest) = await Task.detached(priority: .userInitiated) {
+            (store.eventCount(), store.databaseSizeBytes(), store.oldestEventDate())
+        }.value
+        historyEventCount = count
+        historySizeBytes = size
+        historyOldestDate = oldest
+    }
+
+    static func historySummary(eventCount: Int, sizeBytes: Int64, oldestDate: Date?) -> String {
+        guard eventCount > 0 else { return "No history recorded yet." }
+        let oldest = oldestDate.map {
+            DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .none)
+        } ?? "—"
+        return "\(eventCount) events, \(formatSize(bytes: sizeBytes)), since \(oldest)."
+    }
+
+    static func formatSize(bytes: Int64) -> String {
+        let mb = Double(bytes) / 1_048_576
+        return mb < 1
+            ? String(format: "%.0f KB", Double(bytes) / 1024)
+            : String(format: "%.1f MB", mb)
     }
 }
 
