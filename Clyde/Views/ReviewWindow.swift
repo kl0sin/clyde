@@ -22,15 +22,15 @@ struct ReviewView: View {
 
     @State private var period: Period = .day
 
-    private var totals: PeriodTotals {
-        let range = period.range
-        return stats.totals(from: range.from, to: range.to)
-    }
-
-    private var projects: [ProjectRow] {
-        let range = period.range
-        return stats.projects(from: range.from, to: range.to)
-    }
+    // `totals` and `projects` used to be computed properties, but every
+    // read goes through `HistoryStore`'s ingest queue lock — if the window
+    // is open during a 30s ingest tick, a body pass would block the main
+    // thread until that transaction commits. Loading them off the main
+    // actor and holding the result in state avoids that; a `.task(id:)`
+    // reload on period change means the tiles briefly show the seeded
+    // zero values, which reads the same as a genuinely empty period.
+    @State private var totals = PeriodTotals(workingSeconds: 0, waitingSeconds: 0, turns: 0, sessions: 0)
+    @State private var projects: [ProjectRow] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -83,6 +83,31 @@ struct ReviewView: View {
         }
         .padding(20)
         .frame(minWidth: 560, minHeight: 420)
+        .task(id: period) {
+            await load()
+        }
+    }
+
+    // Runs on the main actor (so assigning back to `@State` is safe) but
+    // hands the actual synchronous, lock-taking queries to a detached task
+    // so the wait for the ingest queue happens off the main thread.
+    // `.task(id: period)` cancels the previous task whenever `period`
+    // changes, so a rapid double switch can't have the first load's
+    // result land after the second's — the in-flight detached work isn't
+    // itself cancelled mid-query (the SQLite call has no cancellation
+    // check), but its result is only ever assigned from the `.task` body
+    // that owns it, and that body is torn down before ever reaching the
+    // assignment once a new `period` supersedes it.
+    @MainActor
+    private func load() async {
+        let range = period.range
+        let s = stats
+        let (newTotals, newProjects) = await Task.detached(priority: .userInitiated) {
+            (s.totals(from: range.from, to: range.to), s.projects(from: range.from, to: range.to))
+        }.value
+        guard !Task.isCancelled else { return }
+        totals = newTotals
+        projects = newProjects
     }
 
     private func tile(_ label: String, _ value: String) -> some View {

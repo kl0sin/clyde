@@ -632,6 +632,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Review Window
 
     private var reviewWindow: NSWindow?
+    private var reviewWindowDelegate: SettingsWindowDelegate?
 
     @MainActor @objc func openReview() {
         guard let store = historyStore else {
@@ -648,6 +649,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Session review"
         window.styleMask = [.titled, .closable, .resizable]
         window.center()
+
+        // Unlike the settings window, the review window doesn't need to
+        // flip the activation policy — `NSApp.activate(ignoringOtherApps:)`
+        // alone is enough to give it key focus as an accessory app. On
+        // close, drop the reference so the hosting controller and its view
+        // graph (and the stale numbers it's holding) are released rather
+        // than sitting hidden for the rest of the process.
+        let delegate = SettingsWindowDelegate { [weak self] in
+            self?.reviewWindow = nil
+            self?.reviewWindowDelegate = nil
+        }
+        window.delegate = delegate
+        reviewWindowDelegate = delegate
+
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         reviewWindow = window
