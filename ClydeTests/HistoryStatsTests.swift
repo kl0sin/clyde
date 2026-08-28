@@ -146,6 +146,50 @@ final class HistoryStatsTests: XCTestCase {
         XCTAssertEqual(totals.workingSeconds, 0)
     }
 
+    // MARK: - Decision-driving totals
+
+    /// The total waiting time is misleading on its own: leave a session
+    /// overnight and it reads fourteen hours, which dominates the tile and
+    /// means nothing. The longest single wait is the number you can act on
+    /// — it names the moment you left Claude hanging.
+    func testLongestWaitIsTheBiggestSingleGapNotTheSum() throws {
+        let store = try makeStore()
+        try store.insert([
+            event("UserPromptSubmit", at: 0), event("Stop", at: 10),
+            event("UserPromptSubmit", at: 70), event("Stop", at: 80),      // 60s wait
+            event("UserPromptSubmit", at: 380), event("Stop", at: 390),    // 300s wait
+        ])
+
+        let totals = HistoryStats(store: store).totals(from: wholeRange.from, to: wholeRange.to)
+
+        XCTAssertEqual(totals.waitingSeconds, 360, "the sum still exists")
+        XCTAssertEqual(totals.longestWaitSeconds, 300, "and the worst single wait is separate")
+    }
+
+    /// How often a session sat blocked on a permission prompt — the other
+    /// moment where time disappears without anyone deciding to spend it.
+    func testBlockedCountsPermissionPrompts() throws {
+        let store = try makeStore()
+        try store.insert([
+            event("PermissionRequest", at: 100),
+            event("PermissionRequest", at: 200),
+            event("PreToolUse", at: 300, tool: "Bash"),
+        ])
+
+        XCTAssertEqual(HistoryStats(store: store)
+            .totals(from: wholeRange.from, to: wholeRange.to).blockedCount, 2)
+    }
+
+    func testLongestWaitIsZeroWithoutAnyGap() throws {
+        let store = try makeStore()
+        try store.insert([event("UserPromptSubmit", at: 0), event("Stop", at: 10)])
+
+        let totals = HistoryStats(store: store).totals(from: wholeRange.from, to: wholeRange.to)
+
+        XCTAssertEqual(totals.longestWaitSeconds, 0)
+        XCTAssertEqual(totals.blockedCount, 0)
+    }
+
     // MARK: - Activity trail
 
     /// The trail answers "what did Claude actually do", so it carries the

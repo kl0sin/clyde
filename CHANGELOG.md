@@ -6,6 +6,11 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **The review window opens on a calendar of your activity.** Six months of days, one square each, shaded by how long Claude worked — the shape you already know from a contribution graph. Hovering a day tells you the date, the time worked, the number of turns and which project took most of it; days with nothing recorded say so rather than hiding among the quiet ones.
+- **A new Activity list shows what Claude actually did**, newest first: the time, the tool and what it ran. Clicking a project narrows the list to it. The numbers above deliberately keep describing the whole period, so filtering the list never quietly changes what they mean.
+- **Two of the summary numbers now answer a question you can act on.** "Waiting on you" as a running total was misleading — leave a session overnight and it reports fourteen hours — and a session count told you nothing. In their place: the longest single wait, which names the moment Claude sat idle on you, and how many times a permission prompt stopped the work.
+- **The review window looks like the rest of Clyde**, rather than a system form: the mascot header, the app's own palette and typography, and figures that hold their place instead of shuffling as they update.
+
 - **No more sessions that were never there.** Clyde used to treat any running program named `claude` as a Claude Code session, without checking whether it was one. Its own test suite trips that — and so does anything else on your machine with that name — so the panel could fill with rows named after a directory, none of which ever showed as working, each lingering as "Ended" after it vanished. Sessions are now recognised from what Claude Code actually reports, so a row appears when there is genuinely a session behind it.
 - **Sessions that started before Clyde did now show up while they work.** Previously such a session stayed invisible until you sent it your next message, even if it was busy the whole time. It now appears within seconds of doing anything.
 - **A session running a single agent shows it.** The panel announced agents only from two upwards, so one agent working on its own looked like nothing was happening. It now reads `1 agent · 0:12` with the agent listed underneath, the same as any larger group.

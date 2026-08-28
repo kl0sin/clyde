@@ -29,7 +29,8 @@ struct ReviewView: View {
     // actor and holding the result in state avoids that; a `.task(id:)`
     // reload on period change means the tiles briefly show the seeded
     // zero values, which reads the same as a genuinely empty period.
-    @State private var totals = PeriodTotals(workingSeconds: 0, waitingSeconds: 0, turns: 0, sessions: 0)
+    @State private var totals = PeriodTotals(workingSeconds: 0, waitingSeconds: 0, turns: 0,
+                                             sessions: 0, longestWaitSeconds: 0, blockedCount: 0)
     @State private var projects: [ProjectRow] = []
     /// The grid is deliberately independent of the period switch: it is the
     /// "how have the last weeks gone" view you land on, while the tiles and
@@ -61,10 +62,16 @@ struct ReviewView: View {
             periodSwitch
 
             HStack(spacing: Spacing.sm) {
+                // "Waiting on you" as a total was misleading (an overnight
+                // gap dominates it and means nothing) and "Sessions" drove
+                // no decision at all. The pair that replaced them names
+                // moments you can act on: the worst single wait, and how
+                // often a permission prompt stopped the work.
                 tile("Working", Self.duration(totals.workingSeconds))
-                tile("Waiting on you", Self.duration(totals.waitingSeconds))
                 tile("Turns", "\(totals.turns)", accessibilityValue: Self.turnLabel(totals.turns))
-                tile("Sessions", "\(totals.sessions)")
+                tile("Longest wait", Self.duration(totals.longestWaitSeconds))
+                tile("Blocked", "\(totals.blockedCount)",
+                     accessibilityValue: totals.blockedCount == 1 ? "1 permission prompt" : "\(totals.blockedCount) permission prompts")
             }
 
             Text("PROJECTS")

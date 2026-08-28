@@ -20,6 +20,14 @@ struct PeriodTotals: Equatable {
     let waitingSeconds: Int
     let turns: Int
     let sessions: Int
+    /// The single worst gap between Claude finishing and the human coming
+    /// back. Kept apart from `waitingSeconds` because the sum is
+    /// misleading on its own — leave a session overnight and it reads
+    /// fourteen hours — while the worst single wait names a moment you can
+    /// actually do something about.
+    let longestWaitSeconds: Int
+    /// How often a session sat blocked on a permission prompt.
+    let blockedCount: Int
 }
 
 struct ProjectRow: Equatable {
