@@ -53,6 +53,20 @@ struct SettingsView: View {
     let historyStore: HistoryStore?
     @State private var selectedTab: SettingsTab = .general
 
+    // Owned here, not inside `AdvancedSettingsTab`, so a reload can be tied
+    // to `selectedTab` itself via `.task(id:)` below rather than to that
+    // tab view's appear/disappear lifecycle. Relying on the tab switch
+    // tearing down and rebuilding `AdvancedSettingsTab` (so its own `.task`
+    // reruns) was found to leave a stale reading live: switching away and
+    // back to Advanced did not always refetch, because nothing here forces
+    // that view's identity to change. Keying a `.task` directly off
+    // `selectedTab` reloads deterministically every time the tab becomes
+    // `.advanced`, regardless of whatever identity SwiftUI happens to
+    // assign the switch's branches.
+    @State private var historyEventCount: Int = 0
+    @State private var historySizeBytes: Int64 = 0
+    @State private var historyOldestDate: Date?
+
     init(appViewModel: AppViewModel, historyStore: HistoryStore?) {
         self.appViewModel = appViewModel
         self.notificationService = appViewModel.notificationService
@@ -72,6 +86,25 @@ struct SettingsView: View {
         }
         .frame(minWidth: 560, minHeight: 440)
         .background(SettingsTheme.panelBackground)
+        .task(id: selectedTab) {
+            guard selectedTab == .advanced else { return }
+            await reloadHistorySummary()
+        }
+    }
+
+    // Runs on the main actor (so assigning back to `@State` is safe) but
+    // hands the actual synchronous, lock-taking queries to a detached task,
+    // mirroring `ReviewView.load()` — the wait for the ingest queue happens
+    // off the main thread rather than blocking the settings window.
+    @MainActor
+    private func reloadHistorySummary() async {
+        guard let store = historyStore else { return }
+        let (count, size, oldest) = await Task.detached(priority: .userInitiated) {
+            (store.eventCount(), store.databaseSizeBytes(), store.oldestEventDate())
+        }.value
+        historyEventCount = count
+        historySizeBytes = size
+        historyOldestDate = oldest
     }
 
     private static let accentPurple = SessionTheme.processingColor
@@ -129,7 +162,14 @@ struct SettingsView: View {
                 case .claude:
                     ClaudeSettingsTab(appViewModel: appViewModel)
                 case .advanced:
-                    AdvancedSettingsTab(appViewModel: appViewModel, historyStore: historyStore)
+                    AdvancedSettingsTab(
+                        appViewModel: appViewModel,
+                        historyStore: historyStore,
+                        historyEventCount: historyEventCount,
+                        historySizeBytes: historySizeBytes,
+                        historyOldestDate: historyOldestDate,
+                        reloadHistorySummary: reloadHistorySummary
+                    )
                 case .about:
                     AboutSettingsTab()
                 }
@@ -688,19 +728,18 @@ enum ClearHistoryOutcome: Equatable, Hashable {
 struct AdvancedSettingsTab: View {
     @ObservedObject var appViewModel: AppViewModel
     let historyStore: HistoryStore?
+
+    // Loaded and owned by `SettingsView` (keyed off `selectedTab` there),
+    // not here — see the comment on `SettingsView.historyEventCount`. This
+    // view only displays them and asks for a reload after clearing.
+    let historyEventCount: Int
+    let historySizeBytes: Int64
+    let historyOldestDate: Date?
+    let reloadHistorySummary: () async -> Void
+
     @State private var resetConfirmation = false
     @State private var resetDone = false
 
-    // `eventCount`/`databaseSizeBytes`/`oldestEventDate` each take
-    // `HistoryStore`'s serial ingest queue (mirroring the note on
-    // `ReviewView.totals`/`projects`), so they're loaded once into state
-    // rather than recomputed on every body pass — a computed property here
-    // would retake that lock on every SwiftUI re-render and could stall the
-    // main thread behind a 30s ingest tick. `.task` loads them when the
-    // section appears; clearing reloads explicitly afterwards.
-    @State private var historyEventCount: Int = 0
-    @State private var historySizeBytes: Int64 = 0
-    @State private var historyOldestDate: Date?
     @State private var clearHistoryConfirmation = false
     // Three mutually exclusive outcomes rather than a second bool: a
     // `clear()` failure (e.g. `VACUUM` hitting a full disk) must not be
@@ -709,6 +748,15 @@ struct AdvancedSettingsTab: View {
     // setting `clearHistoryDone = true` on the failure path, which is
     // exactly the bug this enum forecloses.
     @State private var clearHistoryOutcome: ClearHistoryOutcome = .idle
+    // Guards against re-entrancy: `clear()` runs a `VACUUM`, which can take
+    // a moment, and the button stayed clickable while it ran. A second
+    // click during that window could re-arm the confirmation just before
+    // the first click's completion overwrote it with `.cleared`/`.failed`
+    // and then reverted to `.idle` — silently dismissing a confirmation the
+    // user had just triggered. Disabling the button for the whole clear
+    // lifecycle (confirm -> clear -> reload -> outcome flash -> idle)
+    // forecloses that.
+    @State private var isClearingHistory = false
 
     var body: some View {
         SettingsSection(title: "Data") {
@@ -802,6 +850,7 @@ struct AdvancedSettingsTab: View {
                     Button(action: {
                         if clearHistoryConfirmation {
                             clearHistoryConfirmation = false
+                            isClearingHistory = true
                             Task {
                                 do {
                                     try store.clear()
@@ -818,9 +867,10 @@ struct AdvancedSettingsTab: View {
                                 // summary always reflects what the database
                                 // actually contains rather than what the
                                 // button assumed happened.
-                                await loadHistorySummary()
+                                await reloadHistorySummary()
                                 try? await Task.sleep(for: .seconds(2))
                                 clearHistoryOutcome = .idle
+                                isClearingHistory = false
                             }
                         } else {
                             clearHistoryConfirmation = true
@@ -843,11 +893,9 @@ struct AdvancedSettingsTab: View {
                         .clipShape(RoundedRectangle(cornerRadius: Radius.small))
                     }
                     .buttonStyle(.plain)
+                    .disabled(isClearingHistory)
                 }
             }
-        }
-        .task {
-            await loadHistorySummary()
         }
 
         SettingsSection(title: "Reset") {
@@ -937,21 +985,6 @@ struct AdvancedSettingsTab: View {
             sizeBytes: historySizeBytes,
             oldestDate: historyOldestDate
         )
-    }
-
-    // Runs on the main actor (so assigning back to `@State` is safe) but
-    // hands the actual synchronous, lock-taking queries to a detached task,
-    // mirroring `ReviewView.load()` — the wait for the ingest queue happens
-    // off the main thread rather than blocking the settings window.
-    @MainActor
-    private func loadHistorySummary() async {
-        guard let store = historyStore else { return }
-        let (count, size, oldest) = await Task.detached(priority: .userInitiated) {
-            (store.eventCount(), store.databaseSizeBytes(), store.oldestEventDate())
-        }.value
-        historyEventCount = count
-        historySizeBytes = size
-        historyOldestDate = oldest
     }
 
     static func historySummary(eventCount: Int, sizeBytes: Int64, oldestDate: Date?) -> String {
