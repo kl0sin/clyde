@@ -42,3 +42,24 @@ final class AdvancedSettingsTabTests: XCTestCase {
         XCTAssertEqual(AdvancedSettingsTab.formatSize(bytes: 0), "0 KB")
     }
 }
+
+extension AdvancedSettingsTabTests {
+
+    func testAfterClearingSucceedsResultsInClearedOutcome() {
+        XCTAssertEqual(ClearHistoryOutcome.afterClearing(didSucceed: true), .cleared)
+    }
+
+    func testAfterClearingFailsResultsInFailedOutcome() {
+        XCTAssertEqual(ClearHistoryOutcome.afterClearing(didSucceed: false), .failed)
+    }
+
+    func testClearedAndFailedAreDistinctFromIdleAndEachOther() {
+        // The bug this enum forecloses: a caller could previously leave two
+        // independent booleans in a state that read as both "cleared" and
+        // "failed" at once. `ClearHistoryOutcome` only has one active case
+        // at a time, so this is really asserting the type itself, but it
+        // pins down that idle/cleared/failed remain three distinct values.
+        let states: Set<ClearHistoryOutcome> = [.idle, .cleared, .failed]
+        XCTAssertEqual(states.count, 3)
+    }
+}

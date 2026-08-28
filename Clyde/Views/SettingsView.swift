@@ -671,6 +671,20 @@ struct ClaudeSettingsTab: View {
 
 // MARK: - Advanced
 
+enum ClearHistoryOutcome: Equatable, Hashable {
+    case idle
+    case cleared
+    case failed
+
+    /// The only two ways `clear()` resolves. Pulling this into a pure
+    /// function (rather than setting `.cleared`/`.failed` directly at each
+    /// call site) is what makes the outcome testable without standing up a
+    /// `HistoryStore`.
+    static func afterClearing(didSucceed: Bool) -> ClearHistoryOutcome {
+        didSucceed ? .cleared : .failed
+    }
+}
+
 struct AdvancedSettingsTab: View {
     @ObservedObject var appViewModel: AppViewModel
     let historyStore: HistoryStore?
@@ -688,7 +702,13 @@ struct AdvancedSettingsTab: View {
     @State private var historySizeBytes: Int64 = 0
     @State private var historyOldestDate: Date?
     @State private var clearHistoryConfirmation = false
-    @State private var clearHistoryDone = false
+    // Three mutually exclusive outcomes rather than a second bool: a
+    // `clear()` failure (e.g. `VACUUM` hitting a full disk) must not be
+    // representable alongside a "cleared" success flash — the two booleans
+    // this replaced could both be false but nothing stopped a caller from
+    // setting `clearHistoryDone = true` on the failure path, which is
+    // exactly the bug this enum forecloses.
+    @State private var clearHistoryOutcome: ClearHistoryOutcome = .idle
 
     var body: some View {
         SettingsSection(title: "Data") {
@@ -778,16 +798,29 @@ struct AdvancedSettingsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if historyStore != nil {
+                if let store = historyStore {
                     Button(action: {
                         if clearHistoryConfirmation {
-                            try? historyStore?.clear()
                             clearHistoryConfirmation = false
-                            clearHistoryDone = true
                             Task {
+                                do {
+                                    try store.clear()
+                                    clearHistoryOutcome = .afterClearing(didSucceed: true)
+                                } catch {
+                                    // Advisory-only clear: the failure is
+                                    // reported to the user as a short,
+                                    // factual line (no raw error text) and
+                                    // logged here for diagnosis.
+                                    ClydeLog.general.error("History: clear failed: \(error.localizedDescription, privacy: .public)")
+                                    clearHistoryOutcome = .afterClearing(didSucceed: false)
+                                }
+                                // Reload regardless of outcome, so the
+                                // summary always reflects what the database
+                                // actually contains rather than what the
+                                // button assumed happened.
                                 await loadHistorySummary()
                                 try? await Task.sleep(for: .seconds(2))
-                                clearHistoryDone = false
+                                clearHistoryOutcome = .idle
                             }
                         } else {
                             clearHistoryConfirmation = true
@@ -798,15 +831,15 @@ struct AdvancedSettingsTab: View {
                         }
                     }) {
                         HStack {
-                            Image(systemName: clearHistoryDone ? "checkmark" : (clearHistoryConfirmation ? "exclamationmark.triangle.fill" : "trash"))
+                            Image(systemName: clearHistoryIcon)
                                 .font(.system(size: 11))
-                            Text(clearHistoryDone ? "History cleared" : (clearHistoryConfirmation ? "Click again to confirm" : "Clear history"))
+                            Text(clearHistoryLabel)
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .foregroundStyle(clearHistoryDone ? .green : (clearHistoryConfirmation ? .orange : Color(white: 0.8)))
+                        .foregroundStyle(clearHistoryColor)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
-                        .background((clearHistoryDone ? Color.green : (clearHistoryConfirmation ? Color.orange : Color(white: 0.18))).opacity(clearHistoryConfirmation ? 0.15 : 0.6))
+                        .background(clearHistoryBackground)
                         .clipShape(RoundedRectangle(cornerRadius: Radius.small))
                     }
                     .buttonStyle(.plain)
@@ -861,6 +894,40 @@ struct AdvancedSettingsTab: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private var clearHistoryIcon: String {
+        switch clearHistoryOutcome {
+        case .cleared: return "checkmark"
+        case .failed: return "exclamationmark.triangle.fill"
+        case .idle: return clearHistoryConfirmation ? "exclamationmark.triangle.fill" : "trash"
+        }
+    }
+
+    private var clearHistoryLabel: String {
+        switch clearHistoryOutcome {
+        case .cleared: return "History cleared"
+        case .failed: return "Couldn't clear history"
+        case .idle: return clearHistoryConfirmation ? "Click again to confirm" : "Clear history"
+        }
+    }
+
+    private var clearHistoryColor: Color {
+        switch clearHistoryOutcome {
+        case .cleared: return .green
+        case .failed: return .red
+        case .idle: return clearHistoryConfirmation ? .orange : Color(white: 0.8)
+        }
+    }
+
+    private var clearHistoryBackground: Color {
+        let base: Color
+        switch clearHistoryOutcome {
+        case .cleared: base = .green
+        case .failed: base = .red
+        case .idle: base = clearHistoryConfirmation ? .orange : Color(white: 0.18)
+        }
+        return base.opacity(clearHistoryConfirmation ? 0.15 : 0.6)
     }
 
     private var historySummaryText: String {
