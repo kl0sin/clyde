@@ -92,6 +92,23 @@ struct Session: Identifiable, Equatable {
     /// are. Derived from `activeSubagents` rather than stored, so the
     /// timeline and the panel cannot disagree.
     var primarySubagentType: String? { activeSubagents.first?.type }
+
+    /// How the row names the agents this session has in flight, or nil when
+    /// it has none.
+    ///
+    /// Every agent affordance used to be gated on `count >= 2`, because a
+    /// single agent was covered by the legacy `-subagent` marker's own
+    /// indicator. v0.7.0 retired that marker and nothing took over the
+    /// one-agent case, so a session with exactly one agent running showed
+    /// no sign of it at all — the row fell back to the tool line and the
+    /// work looked like it was happening nowhere.
+    var activeAgentsLabel: String? {
+        switch activeSubagents.count {
+        case 0: return nil
+        case 1: return "1 agent"
+        case let n: return "\(n) agents"
+        }
+    }
     /// Non-nil while a built-in or MCP tool call is in flight. The hook
     /// writes this on PreToolUse and clears it on PostToolUse / Stop /
     /// SessionEnd, so it tracks the same per-tool-call lifecycle.

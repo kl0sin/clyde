@@ -126,12 +126,13 @@ struct SessionRow: View {
                     .frame(minHeight: 18)
                 }
 
-                if session.activeSubagents.count >= 2 {
+                // One agent counts. This was `>= 2` because the legacy
+                // -subagent marker carried the single-agent case; v0.7.0
+                // retired that marker and left one agent showing nothing.
+                if let agentsLabel = session.activeAgentsLabel {
                     SubagentSummaryLine(session: session)
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel(
-                            "\(session.activeSubagents.count) agents running"
-                        )
+                        .accessibilityLabel("\(agentsLabel) running")
                         .accessibilityAddTraits(.updatesFrequently)
                 } else {
                     ZStack(alignment: .leading) {
@@ -198,7 +199,7 @@ struct SessionRow: View {
             }
         }
 
-        if session.activeSubagents.count >= 2 {
+        if !session.activeSubagents.isEmpty {
             SubagentList(
                 session: session,
                 isExpanded: expandedSubagentSessions.contains(session.id),
@@ -347,8 +348,8 @@ struct SessionRow: View {
             : "\(session.displayName) session"
         var parts: [String] = [nameWithRole, accessibilityStatusDescription]
 
-        if session.activeSubagents.count >= 2 {
-            parts.append("\(session.activeSubagents.count) agents running")
+        if let agentsLabel = session.activeAgentsLabel {
+            parts.append("\(agentsLabel) running")
         } else if let tool = session.activeTool, let label = session.toolDisplayLabel {
             let elapsed = max(0, Int(Date().timeIntervalSince(tool.startedAt)))
             let elapsedStr = elapsed == 1 ? "1 second elapsed" : "\(elapsed) seconds elapsed"
@@ -665,7 +666,7 @@ private struct SubagentSummaryLine: View {
             let oldest = session.activeSubagents.first?.startedAt ?? ctx.date
             let elapsed = max(0, Int(ctx.date.timeIntervalSince(oldest)))
             HStack(spacing: 4) {
-                Text("\(session.activeSubagents.count) agents")
+                Text(session.activeAgentsLabel ?? "")
                 Text("·")
                 Text(formatElapsed(elapsed))
                     .monospacedDigit()

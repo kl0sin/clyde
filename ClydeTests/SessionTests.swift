@@ -75,6 +75,39 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(session.primarySubagentType, "Explore", "oldest agent names the entry")
     }
 
+    // MARK: - Agent summary label
+
+    /// A single running subagent used to be surfaced by the legacy
+    /// `-subagent` marker, which v0.7.0 retired. Every agent affordance in
+    /// the row is gated on `count >= 2`, so retiring the marker left the
+    /// one-agent case showing nothing at all: the row falls back to the
+    /// tool line and the user cannot tell an agent is running. Reported
+    /// from a real session, where four dispatched agents were invisible
+    /// while they worked.
+    func testAgentsLabelNamesASingleAgent() {
+        var session = Session(pid: 123, workingDirectory: "/Users/me/Projects/shipyard")
+        session.activeSubagents = [
+            ActiveSubagent(id: "a1", type: "Explore", summary: "find code",
+                           startedAt: Date(), isIdle: false)
+        ]
+
+        XCTAssertEqual(session.activeAgentsLabel, "1 agent")
+    }
+
+    func testAgentsLabelPluralisesBeyondOne() {
+        var session = Session(pid: 123, workingDirectory: "/Users/me/Projects/shipyard")
+        session.activeSubagents = [
+            ActiveSubagent(id: "a1", type: "Explore", summary: "", startedAt: Date(), isIdle: false),
+            ActiveSubagent(id: "a2", type: "Plan", summary: "", startedAt: Date(), isIdle: false),
+        ]
+
+        XCTAssertEqual(session.activeAgentsLabel, "2 agents")
+    }
+
+    func testAgentsLabelIsNilWithNoAgents() {
+        XCTAssertNil(Session(pid: 123, workingDirectory: "/Users/me/Projects/shipyard").activeAgentsLabel)
+    }
+
     func testToolDisplayLabelIsNilWhenNoActiveTool() {
         let session = Session(pid: 123, workingDirectory: "/tmp")
         XCTAssertNil(session.toolDisplayLabel)
