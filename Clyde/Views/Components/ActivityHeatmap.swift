@@ -22,6 +22,12 @@ struct ActivityHeatmap: View {
     let days: [DayActivity]
     let weeks: Int
 
+    /// The day under the cursor. A native `.help()` tooltip was the first
+    /// attempt and it is the wrong tool here: it waits about a second, it
+    /// cannot be styled, and on a grid of 180 small squares the delay makes
+    /// the whole thing feel dead. This is drawn by us and appears at once.
+    @State private var hovered: Date?
+
     private static let cell: CGFloat = 11
     private static let gap: CGFloat = 3
     private static let gutter: CGFloat = 26
@@ -85,11 +91,22 @@ struct ActivityHeatmap: View {
                 }
                 .accessibilityHidden(true)
 
-                ForEach(Array(columns.enumerated()), id: \.offset) { _, week in
-                    VStack(spacing: Self.gap) {
-                        ForEach(week, id: \.self) { day in
-                            cellView(for: day, activity: lookup[day], peak: peak)
+                ZStack(alignment: .topLeading) {
+                    HStack(alignment: .top, spacing: Self.gap) {
+                        ForEach(Array(columns.enumerated()), id: \.offset) { _, week in
+                            VStack(spacing: Self.gap) {
+                                ForEach(week, id: \.self) { day in
+                                    cellView(for: day, activity: lookup[day], peak: peak)
+                                }
+                            }
                         }
+                    }
+
+                    if let hovered, let position = Self.position(of: hovered, in: columns) {
+                        tooltip(for: hovered, activity: lookup[hovered])
+                            .offset(x: position.x - Self.tooltipWidth / 2,
+                                    y: position.y - Self.tooltipHeight - Self.gap)
+                            .allowsHitTesting(false)
                     }
                 }
             }
@@ -118,10 +135,89 @@ struct ActivityHeatmap: View {
                 RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                     .stroke(isToday ? TextColor.secondary.opacity(0.7) : .clear, lineWidth: 1)
             )
-            // Tooltip and label carry the numbers, because the lowest
-            // shades cannot be told apart by eye against this surface.
-            .help(Self.describe(day: day, seconds: seconds, turns: turns))
+            // The label still carries the numbers for a screen reader,
+            // because the lowest shades cannot be told apart by eye against
+            // this surface — the hover card is the sighted equivalent.
+            .overlay(
+                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                    .stroke(hovered == day ? TextColor.primary.opacity(0.8) : .clear, lineWidth: 1)
+            )
+            .onHover { inside in
+                if inside {
+                    hovered = day
+                } else if hovered == day {
+                    hovered = nil
+                }
+            }
             .accessibilityLabel(Self.describe(day: day, seconds: seconds, turns: turns))
+    }
+
+    private static let tooltipWidth: CGFloat = 168
+    private static let tooltipHeight: CGFloat = 52
+
+    /// Where the centre-top of a day's cell sits inside the grid, so the
+    /// card can be anchored to the square the cursor is actually over.
+    /// Computed from the layout constants rather than measured: the grid is
+    /// a fixed lattice, so geometry readers per cell would be 180 of them
+    /// for a number we already know.
+    static func position(of day: Date, in columns: [[Date]]) -> CGPoint? {
+        for (column, week) in columns.enumerated() {
+            if let row = week.firstIndex(of: day) {
+                return CGPoint(
+                    x: gutter + gap + CGFloat(column) * (cell + gap) + cell / 2,
+                    y: CGFloat(row) * (cell + gap)
+                )
+            }
+        }
+        return nil
+    }
+
+    private func tooltip(for day: Date, activity: DayActivity?) -> some View {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, d MMM"
+
+        return VStack(alignment: .leading, spacing: 3) {
+            Text(formatter.string(from: day))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(TextColor.primary)
+
+            if let activity, activity.turns > 0 {
+                HStack(spacing: Spacing.xxs) {
+                    Text(ReviewView.duration(activity.workingSeconds))
+                        .monospacedDigit()
+                        .foregroundStyle(SessionTheme.processingColor)
+                    Text("·").foregroundStyle(TextColor.tertiary)
+                    Text(ReviewView.turnLabel(activity.turns))
+                        .monospacedDigit()
+                        .foregroundStyle(TextColor.secondary)
+                }
+                .font(.system(size: 10))
+
+                if let project = activity.topProject {
+                    Text((project as NSString).lastPathComponent)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(TextColor.tertiary)
+                        .lineLimit(1)
+                }
+            } else {
+                Text(day > Date() ? "Not yet" : "Nothing recorded")
+                    .font(.system(size: 10))
+                    .foregroundStyle(TextColor.tertiary)
+            }
+        }
+        .padding(.horizontal, Spacing.xs)
+        .padding(.vertical, 6)
+        .frame(width: Self.tooltipWidth, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                .fill(Color(white: 0.16))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                .stroke(Color(white: 0.26), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.45), radius: 8, y: 3)
+        .accessibilityHidden(true)
     }
 
     private var legend: some View {

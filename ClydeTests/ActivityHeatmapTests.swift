@@ -82,6 +82,34 @@ final class ActivityHeatmapTests: XCTestCase {
         }
     }
 
+    /// The hover card is anchored from the layout constants rather than
+    /// measured per cell, so the arithmetic has to be right: a day in the
+    /// first column and top row sits at the grid origin plus the gutter,
+    /// and each further column and row steps by exactly one cell + gap.
+    func testTooltipAnchorsToTheHoveredCell() {
+        let days = ActivityHeatmap.days(endingOn: Date(), weeks: 4)
+        let columns = stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
+
+        let first = ActivityHeatmap.position(of: columns[0][0], in: columns)
+        let nextColumn = ActivityHeatmap.position(of: columns[1][0], in: columns)
+        let nextRow = ActivityHeatmap.position(of: columns[0][1], in: columns)
+
+        XCTAssertNotNil(first)
+        XCTAssertEqual((nextColumn?.x ?? 0) - (first?.x ?? 0), 14, accuracy: 0.01)
+        XCTAssertEqual((nextRow?.y ?? 0) - (first?.y ?? 0), 14, accuracy: 0.01)
+        XCTAssertEqual(nextRow?.x, first?.x, "same column, same x")
+    }
+
+    /// A day outside the grid has no anchor, and asking for one must not
+    /// crash or invent a position off-screen.
+    func testTooltipHasNoAnchorForADayOutsideTheGrid() {
+        let days = ActivityHeatmap.days(endingOn: Date(), weeks: 4)
+        let columns = stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
+        let longAgo = Calendar.current.date(byAdding: .year, value: -1, to: Date())!
+
+        XCTAssertNil(ActivityHeatmap.position(of: Calendar.current.startOfDay(for: longAgo), in: columns))
+    }
+
     /// Today has to be in the grid — a calendar that stops yesterday looks
     /// broken the moment you glance at it.
     func testGridIncludesToday() {

@@ -38,4 +38,7 @@ struct DayActivity: Equatable {
     let day: Date
     let workingSeconds: Int
     let turns: Int
+    /// The project that took the most time that day — the first thing
+    /// anyone wants to know about a busy square.
+    let topProject: String?
 }

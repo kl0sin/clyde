@@ -199,6 +199,29 @@ final class HistoryStatsTests: XCTestCase {
         XCTAssertEqual(days.first?.turns, 1)
     }
 
+    /// The tooltip needs something to say beyond minutes: which project a
+    /// day went to is the first question anyone asks of a busy square.
+    func testDailyActivityNamesTheBusiestProjectOfTheDay() throws {
+        let store = try makeStore()
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        func at(_ hour: Int, _ minute: Int = 0) -> Int {
+            Int(cal.date(bySettingHour: hour, minute: minute, second: 0, of: today)!.timeIntervalSince1970)
+        }
+        try store.insert([
+            event("UserPromptSubmit", at: at(9), session: "s1", project: "/repos/small"),
+            event("Stop", at: at(9, 2), session: "s1", project: "/repos/small"),
+            event("UserPromptSubmit", at: at(10), session: "s2", project: "/repos/big"),
+            event("Stop", at: at(10, 30), session: "s2", project: "/repos/big"),
+        ])
+
+        let days = HistoryStats(store: store).dailyActivity(
+            from: cal.date(byAdding: .day, value: -1, to: today)!,
+            to: cal.date(byAdding: .day, value: 1, to: today)!)
+
+        XCTAssertEqual(days.first?.topProject, "/repos/big")
+    }
+
     func testDailyActivityIsEmptyWithoutEvents() throws {
         let store = try makeStore()
 

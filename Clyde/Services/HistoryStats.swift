@@ -140,8 +140,27 @@ final class HistoryStats {
     func dailyActivity(from: Date, to: Date) -> [DayActivity] {
         var result: [DayActivity] = []
         let sql = """
-            SELECT day, SUM(worked) AS worked, SUM(turn) AS turns FROM (
+            SELECT day, SUM(worked) AS worked, SUM(turn) AS turns,
+                   -- The project with the most seconds that day. Grouping
+                   -- inside an aggregate needs a correlated pick, and
+                   -- SQLite's bare-column rule makes MAX() carry its row.
+                   (SELECT p.project FROM (
+                      SELECT project, SUM(worked) AS pworked FROM (
+                        SELECT date(ts, 'unixepoch', 'localtime') AS d, project,
+                               CASE WHEN event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
+                                    THEN dt ELSE 0 END AS worked
+                        FROM (
+                          SELECT ts, event, project,
+                                 LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt,
+                                 LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
+                          FROM events WHERE ts >= ?1 AND ts < ?2
+                            AND event IN ('UserPromptSubmit','Stop')
+                        )
+                      ) WHERE d = outer_day GROUP BY project
+                    ) p ORDER BY p.pworked DESC, p.project ASC LIMIT 1) AS top_project
+            FROM (
               SELECT date(ts, 'unixepoch', 'localtime') AS day,
+                     date(ts, 'unixepoch', 'localtime') AS outer_day,
                      CASE WHEN event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
                           THEN dt ELSE 0 END AS worked,
                      CASE WHEN event = 'UserPromptSubmit' THEN 1 ELSE 0 END AS turn
@@ -149,7 +168,7 @@ final class HistoryStats {
                 SELECT ts, event,
                        LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt,
                        LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
-                FROM events WHERE ts >= ? AND ts < ?
+                FROM events WHERE ts >= ?1 AND ts < ?2
                   AND event IN ('UserPromptSubmit','Stop')
               )
             ) GROUP BY day HAVING turns > 0 ORDER BY day
@@ -169,10 +188,12 @@ final class HistoryStats {
             while sqlite3_step(stmt) == SQLITE_ROW {
                 guard let dayText = sqlite3_column_text(stmt, 0),
                       let day = formatter.date(from: String(cString: dayText)) else { continue }
+                let topProject = sqlite3_column_text(stmt, 3).map { String(cString: $0) }
                 result.append(DayActivity(
                     day: day,
                     workingSeconds: Int(sqlite3_column_int64(stmt, 1)),
-                    turns: Int(sqlite3_column_int64(stmt, 2))
+                    turns: Int(sqlite3_column_int64(stmt, 2)),
+                    topProject: topProject
                 ))
             }
         }
