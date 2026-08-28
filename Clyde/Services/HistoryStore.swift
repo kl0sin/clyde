@@ -17,6 +17,10 @@ final class HistoryStore {
     private var db: OpaquePointer?
     let databaseURL: URL
 
+    /// Name of the most recently claimed spool file. Exposed for tests that
+    /// need to reconstruct the crash-between-commit-and-unlink window.
+    private(set) var lastClaimedFileName: String?
+
     init(directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         databaseURL = directory.appendingPathComponent("history.sqlite")
@@ -123,6 +127,87 @@ final class HistoryStore {
     }
 
     func handle() -> OpaquePointer? { db }
+
+    /// Drain the spool into the database.
+    ///
+    /// The spool is *claimed* by renaming rather than read in place: the
+    /// rename is atomic, so the hook's next append transparently creates a
+    /// fresh spool and never notices the handover. Reading in place would
+    /// mean truncating a file another process is appending to, and with
+    /// parallel hooks that race fires sooner rather than later.
+    @discardableResult
+    func ingestPending() -> Int {
+        let directory = databaseURL.deletingLastPathComponent()
+        var total = 0
+
+        // Leftovers first: a claimed file still on disk means a previous
+        // run died before unlinking it.
+        let leftovers = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? [])
+            .filter { $0.hasPrefix("spool.") && $0.hasSuffix(".ingesting") }
+            .sorted()
+        for name in leftovers {
+            total += ingestClaimed(named: name, in: directory)
+        }
+
+        let spool = directory.appendingPathComponent("spool.jsonl")
+        guard FileManager.default.fileExists(atPath: spool.path) else { return total }
+
+        let claimedName = "spool.\(Int(Date().timeIntervalSince1970)).\(UUID().uuidString.prefix(8)).ingesting"
+        do {
+            try FileManager.default.moveItem(at: spool, to: directory.appendingPathComponent(claimedName))
+        } catch {
+            ClydeLog.general.error("History: could not claim spool: \(error.localizedDescription, privacy: .public)")
+            return total
+        }
+        lastClaimedFileName = claimedName
+        total += ingestClaimed(named: claimedName, in: directory)
+        return total
+    }
+
+    private func ingestClaimed(named name: String, in directory: URL) -> Int {
+        let url = directory.appendingPathComponent(name)
+
+        if alreadyIngested(name) {
+            try? FileManager.default.removeItem(at: url)
+            return 0
+        }
+
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+            ClydeLog.general.error("History: unreadable claimed spool \(name, privacy: .public)")
+            return 0
+        }
+
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        let events = lines.compactMap { HistorySpool.parse(line: String($0)) }
+        let skipped = lines.count - events.count
+        if skipped > 0 {
+            ClydeLog.general.info("History: skipped \(skipped, privacy: .public) malformed spool line(s)")
+        }
+
+        do {
+            try exec("BEGIN")
+            try insertWithinTransaction(events)
+            try markIngested(name)
+            try exec("COMMIT")
+        } catch {
+            try? exec("ROLLBACK")
+            ClydeLog.general.error("History: ingest failed, spool kept: \(error.localizedDescription, privacy: .public)")
+            return 0
+        }
+
+        try? FileManager.default.removeItem(at: url)
+        return events.count
+    }
+
+    private func alreadyIngested(_ name: String) -> Bool {
+        let escaped = name.replacingOccurrences(of: "'", with: "''")
+        return (scalarInt("SELECT COUNT(*) FROM ingested_files WHERE name = '\(escaped)'") ?? 0) > 0
+    }
+
+    private func markIngested(_ name: String) throws {
+        let escaped = name.replacingOccurrences(of: "'", with: "''")
+        try exec("INSERT INTO ingested_files (name, ingested_at) VALUES ('\(escaped)', \(Int(Date().timeIntervalSince1970)))")
+    }
 
     private func lastError() -> String {
         db.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown"

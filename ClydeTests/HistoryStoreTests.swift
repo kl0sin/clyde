@@ -83,4 +83,61 @@ final class HistoryStoreTests: XCTestCase {
 
         XCTAssertGreaterThan(store.databaseSizeBytes(), 0)
     }
+
+    private func writeSpool(_ lines: [String], in dir: URL, named name: String = "spool.jsonl") {
+        let text = lines.joined(separator: "\n") + "\n"
+        try? text.write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
+    }
+
+    private func spoolLine(_ event: String, ts: Int) -> String {
+        #"{"ts": \#(ts), "event": "\#(event)", "session_id": "s1", "cwd": "/repo"}"#
+    }
+
+    func testIngestMovesSpoolEventsIntoTheStore() throws {
+        let dir = tempDir()
+        writeSpool([spoolLine("UserPromptSubmit", ts: 100), spoolLine("Stop", ts: 160)], in: dir)
+        let store = try HistoryStore(directory: dir)
+
+        let count = store.ingestPending()
+
+        XCTAssertEqual(count, 2)
+        XCTAssertEqual(store.eventCount(), 2)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("spool.jsonl").path),
+            "the claimed spool must be gone so the hook starts a fresh one")
+    }
+
+    func testIngestSkipsMalformedLinesAndKeepsTheRest() throws {
+        let dir = tempDir()
+        writeSpool([spoolLine("Stop", ts: 100), #"{"ts": 1787"#, spoolLine("Stop", ts: 200)], in: dir)
+        let store = try HistoryStore(directory: dir)
+
+        XCTAssertEqual(store.ingestPending(), 2)
+    }
+
+    /// The important one. A crash between COMMIT and unlink leaves the
+    /// claimed file on disk; re-ingesting it would double every duration
+    /// in the review with no way for the user to guess why.
+    func testLeftoverClaimedFileIsNotIngestedTwice() throws {
+        let dir = tempDir()
+        writeSpool([spoolLine("Stop", ts: 100)], in: dir)
+        let store = try HistoryStore(directory: dir)
+        store.ingestPending()
+
+        // Simulate the crash: put the claimed file back under a name the
+        // store has already recorded as ingested.
+        let claimed = try XCTUnwrap(store.lastClaimedFileName)
+        writeSpool([spoolLine("Stop", ts: 100)], in: dir, named: claimed)
+
+        let secondPass = store.ingestPending()
+
+        XCTAssertEqual(secondPass, 0)
+        XCTAssertEqual(store.eventCount(), 1)
+    }
+
+    func testIngestWithNoSpoolIsANoOp() throws {
+        let store = try HistoryStore(directory: tempDir())
+
+        XCTAssertEqual(store.ingestPending(), 0)
+    }
 }
