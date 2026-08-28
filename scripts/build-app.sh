@@ -35,6 +35,23 @@ if [ -f "Clyde/Assets/AppIcon.icns" ]; then
         /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$CONTENTS/Info.plist"
 fi
 
+# Embed Sparkle. The executable links it, so without this the bundle dies
+# at launch with `dyld: Library not loaded: @rpath/Sparkle.framework`.
+# SwiftPM leaves the framework in the build dir rather than in the bundle,
+# which is why running the raw binary or `swift run` never works for this app.
+SPARKLE=$(find .build -maxdepth 4 -name 'Sparkle.framework' -type d 2>/dev/null | head -1)
+if [ -n "$SPARKLE" ]; then
+    mkdir -p "$CONTENTS/Frameworks"
+    cp -R "$SPARKLE" "$CONTENTS/Frameworks/"
+    # Order matters: rewrite the load path BEFORE signing. Signing first and
+    # patching after leaves an inconsistent signature and macOS kills the
+    # process on launch with SIGKILL (exit 137) and no useful message.
+    install_name_tool -add_rpath @executable_path/../Frameworks "$MACOS/$APP_NAME" 2>/dev/null || true
+    codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+else
+    echo "⚠️  Sparkle.framework not found under .build — the bundle will not launch."
+fi
+
 echo "✓ Built $APP_DIR"
 echo ""
 echo "To run: open '$APP_DIR'"
