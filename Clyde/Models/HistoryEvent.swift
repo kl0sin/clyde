@@ -11,3 +11,20 @@ struct HistoryEvent: Equatable {
     let tool: String?
     let summary: String?
 }
+
+/// Totals for one period, computed on read. Nothing is pre-aggregated —
+/// storing answers instead of facts would mean guessing today which
+/// questions get asked later.
+struct PeriodTotals: Equatable {
+    let workingSeconds: Int
+    let waitingSeconds: Int
+    let turns: Int
+    let sessions: Int
+}
+
+struct ProjectRow: Equatable {
+    let project: String
+    let workingSeconds: Int
+    let turns: Int
+    let topTool: String?
+}
