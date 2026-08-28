@@ -1098,4 +1098,68 @@ final class HookScriptTests: XCTestCase {
 
         XCTAssertEqual(toolJSON(in: home, sessionId: sid)["summary"] as? String, "dashboard.html")
     }
+
+    // MARK: - History spool
+
+    private func spoolLines(in home: URL) -> [[String: Any]] {
+        let url = home.appendingPathComponent(".clyde/history/spool.jsonl")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        return text.split(separator: "\n").compactMap {
+            guard let data = $0.data(using: .utf8) else { return nil }
+            return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        }
+    }
+
+    func testSpoolRecordsAToolCallWithItsSummary() throws {
+        let home = tempHome()
+        let sid = "spool-0001"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_s1","tool_input":{"command":"swift test"}}"#, home: home)
+
+        let lines = spoolLines(in: home)
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertEqual(lines[0]["event"] as? String, "PreToolUse")
+        XCTAssertEqual(lines[0]["session_id"] as? String, sid)
+        XCTAssertEqual(lines[0]["cwd"] as? String, "/repo")
+        XCTAssertEqual(lines[0]["tool"] as? String, "Bash")
+        XCTAssertEqual(lines[0]["summary"] as? String, "swift test")
+        XCTAssertNotNil(lines[0]["ts"] as? Int)
+    }
+
+    /// Turn boundaries are what every duration in the review is computed
+    /// from, so they have to land in the spool even though they write no
+    /// tool summary.
+    func testSpoolRecordsTurnBoundaries() throws {
+        let home = tempHome()
+        let sid = "spool-0002"
+
+        try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        try runHook(payload: #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/repo","last_assistant_message":"done"}"#, home: home)
+
+        XCTAssertEqual(spoolLines(in: home).map { $0["event"] as? String },
+                       ["UserPromptSubmit", "Stop"])
+    }
+
+    /// The spool must never carry message bodies — that decision was made
+    /// in v0.7.0 and the store does not get to reopen it.
+    func testSpoolNeverCarriesTheAssistantMessage() throws {
+        let home = tempHome()
+        let sid = "spool-0003"
+
+        try runHook(payload: #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/repo","last_assistant_message":"secret sentence"}"#, home: home)
+
+        let text = try String(contentsOf: home.appendingPathComponent(".clyde/history/spool.jsonl"), encoding: .utf8)
+        XCTAssertFalse(text.contains("secret sentence"))
+    }
+
+    /// The spool is additive: every existing marker keeps working.
+    func testSpoolWritingDoesNotDisturbStateMarkers() throws {
+        let home = tempHome()
+        let sid = "spool-0004"
+
+        try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: home.appendingPathComponent(".clyde/state/\(sid)-busy").path))
+    }
 }

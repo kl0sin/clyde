@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 35
+# clyde-hook-version: 36
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -45,8 +45,9 @@
 EVENTS_DIR="$HOME/.clyde/events"
 STATE_DIR="$HOME/.clyde/state"
 LOG_DIR="$HOME/.clyde/logs"
+HISTORY_DIR="$HOME/.clyde/history"
 HOOK_LOG="$LOG_DIR/hook.log"
-mkdir -p "$EVENTS_DIR" "$STATE_DIR" "$LOG_DIR" 2>/dev/null || true
+mkdir -p "$EVENTS_DIR" "$STATE_DIR" "$LOG_DIR" "$HISTORY_DIR" 2>/dev/null || true
 
 # Catch any unexpected error so it lands in the log instead of
 # bubbling out as a non-zero exit. Claude treats non-zero exits as
@@ -597,6 +598,18 @@ atomic_write() {
     mv -f "$tmp" "$target"
 }
 
+# Append one structured line to the history spool. Deliberately a plain
+# append, not an atomic-write: O_APPEND writes below the pipe buffer are
+# atomic, so parallel hooks cannot interleave, and Clyde claims the file
+# by renaming it rather than truncating it. Any failure is ignored — the
+# spool is a convenience, the user's session is not.
+spool_append() {
+    local extra=$1
+    printf '{"ts": %s, "event": "%s", "session_id": "%s", "cwd": "%s"%s}\n' \
+        "$TIMESTAMP" "$HOOK_EVENT" "$ESC_SID" "$ESC_CWD" "$extra" \
+        >>"$HISTORY_DIR/spool.jsonl" 2>/dev/null || true
+}
+
 # --- Subagent record merging -------------------------------------------
 #
 # A running subagent is described by two hook events that share NO
@@ -1138,5 +1151,22 @@ for tc in (d.get('tool_calls') or []):
         :
         ;;
 esac
+
+# History spool. Built from fields already extracted above, so this adds
+# no parsing work. Note what is absent: last_assistant_message never
+# reaches the spool — the -lastmsg marker is a live preview, not history.
+SPOOL_EXTRA=""
+if [ -n "$TOOL_NAME" ]; then
+    ESC_TOOL=$(printf '%s' "$TOOL_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    SPOOL_EXTRA="$SPOOL_EXTRA, \"tool\": \"$ESC_TOOL\""
+fi
+if [ -n "${TOOL_SUMMARY:-}" ]; then
+    # Escape freshly rather than reusing ESC_SUMMARY: that variable is
+    # reassigned at line 948 to carry an Agent's description, so by the end
+    # of the dispatch it may not be this tool's summary at all.
+    ESC_TSUM=$(printf '%s' "$TOOL_SUMMARY" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    SPOOL_EXTRA="$SPOOL_EXTRA, \"summary\": \"$ESC_TSUM\""
+fi
+spool_append "$SPOOL_EXTRA"
 
 exit 0
