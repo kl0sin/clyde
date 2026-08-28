@@ -73,10 +73,11 @@ The stability work that does *not* need special hardware, split out from the spr
 
 Clyde answers "what is Claude doing right now" well. It answers "what did Claude do today" not at all, even though `ActivityLog` already records most of the raw material. A local review surface is the natural next step and the most screenshot-friendly feature on this roadmap.
 
-- [ ] Daily / weekly session review — time spent working, turns taken, most-used tools, how often a session sat waiting on you !hi #ux
-- [ ] Per-project breakdown, so multi-repo days are legible !md #ux
-- [ ] Decide the retention window and make it configurable — stats need history, and history is the one thing Clyde has so far avoided keeping !md #ux
-- [ ] Stays local by construction — no telemetry, no accounts, no network, matching the privacy-first promise in the README !hi #ux
+- [x] Daily / weekly session review — a Session review window shows time spent working and time spent waiting, derived from `UserPromptSubmit`/`Stop` pairs within a session rather than stored as running totals, alongside turn counts !hi #ux
+- [x] Per-project breakdown, so multi-repo days are legible — the review window includes a per-project table built from the same stored events !md #ux
+- [x] Retention decided: unbounded, kept forever unless the user clears it. History lives in SQLite at `~/.clyde/history/`, written by the hook to a JSONL spool and drained into the database by the app. Settings → Advanced shows the event count, size on disk and oldest recorded date, and clears the store behind a two-click confirm !md #ux
+- [x] Stays local by construction — history lives only in the SQLite file under `~/.clyde/history/` on disk; no telemetry, no accounts, no network involved in collecting or reviewing it !hi #ux
+- [ ] Filterable event list in the review window — deliberately deferred from this pass; the tiles and per-project table are what make the window worth opening, and a searchable/filterable list is additive once the store holds a real backlog of events !md #ux
 
 ## Phase: v0.9.0 — Panel actions (two-way channel)
 
