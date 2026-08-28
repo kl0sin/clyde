@@ -620,7 +620,14 @@ spool_append() {
     # run, or right after Clyde claims/renames the previous one) —
     # every other call is a plain append inheriting that mode.
     if [ ! -e "$spool" ]; then
-        (umask 077; : >"$spool") 2>/dev/null || true
+        # Append, not truncate: two hooks can both pass this existence
+        # check (the spool is legitimately absent for a moment right
+        # after Clyde renames it away to claim it, and Claude fires
+        # batched tool calls' hooks in parallel), and a truncating
+        # create would let the second one wipe a line the first already
+        # appended. `>>` creates the file under the same umask just as
+        # well, so the 0600 mode is unaffected.
+        (umask 077; : >>"$spool") 2>/dev/null || true
     fi
     printf '{"ts": %s, "event": "%s", "session_id": "%s", "cwd": "%s"%s}\n' \
         "$TIMESTAMP" "$HOOK_EVENT" "$ESC_SPOOL_SID" "$ESC_CWD" "$extra" \
