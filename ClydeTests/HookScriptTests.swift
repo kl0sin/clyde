@@ -657,16 +657,20 @@ final class HookScriptTests: XCTestCase {
         XCTAssertEqual(info["cwd"] as? String, "/repo/sub")
     }
 
-    /// No `-info` means no session Clyde knows about; CwdChanged must not
-    /// conjure one, or a dead session reappears in the panel.
-    func testCwdChangedWithoutExistingInfoWritesNothing() throws {
+    /// This used to assert the opposite — that CwdChanged must never create
+    /// an `-info` — back when `pgrep` could also surface a session and a
+    /// stray marker risked resurrecting a dead one. Now that hook state is
+    /// the ONLY way a session becomes visible, refusing to record a live
+    /// session is the bigger failure: it would stay invisible until its
+    /// next prompt. A dead PID is still pruned on the next poll.
+    func testCwdChangedForAnUnseenSessionBackfillsInfo() throws {
         let home = tempHome()
         let sid = "ev-0004"
 
         try runHook(payload: #"{"hook_event_name":"CwdChanged","session_id":"\#(sid)","cwd":"/repo/sub"}"#, home: home)
 
-        XCTAssertFalse(FileManager.default.fileExists(
-            atPath: stateFile(in: home, sessionId: sid, suffix: "info").path))
+        let info = try json(at: stateFile(in: home, sessionId: sid, suffix: "info"))
+        XCTAssertEqual(info["cwd"] as? String, "/repo/sub")
     }
 
     /// SessionEnd is the one event that has to leave nothing behind —
@@ -800,19 +804,81 @@ final class HookScriptTests: XCTestCase {
             atPath: stateFile(in: home, sessionId: sid, suffix: "plan").path))
     }
 
-    /// Compaction is logged, never surfaced: it says nothing about
-    /// whether the session needs the human.
-    func testCompactionEventsWriteNoStateFiles() throws {
+    /// Compaction says nothing about whether the session needs the human,
+    /// so it must not raise an attention event or touch the busy/tool
+    /// markers. It does prove the session is alive, so — unlike before the
+    /// discovery rework — it is allowed to backfill `-info`.
+    func testCompactionEventsRaiseNoAttentionAndTouchNoActivityMarkers() throws {
         let home = tempHome()
         let sid = "ev-0015"
 
         try runHook(payload: #"{"hook_event_name":"PreCompact","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
         try runHook(payload: #"{"hook_event_name":"PostCompact","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
 
-        let stateDir = home.appendingPathComponent(".clyde/state")
-        let contents = (try? FileManager.default.contentsOfDirectory(atPath: stateDir.path)) ?? []
-        XCTAssertEqual(contents, [], "compaction must not write state")
+        for suffix in ["busy", "tool", "plan", "error", "lastmsg", "command"] {
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: stateFile(in: home, sessionId: sid, suffix: suffix).path),
+                "compaction must not write -\(suffix)")
+        }
         XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path))
+    }
+
+    // MARK: - Info backfill for sessions Clyde never saw start
+
+    /// Discovery by process name is gone, so the hook is now the only way a
+    /// session becomes visible. A session that predates Clyde's install
+    /// never fired SessionStart, and waiting for the user's next prompt
+    /// would hide a session that is actively working right now. Any event
+    /// that proves the session is alive backfills `-info`.
+    func testPreToolUseBackfillsInfoForAnUnseenSession() throws {
+        let home = tempHome()
+        let sid = "backfill-0001"
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Read","tool_use_id":"toolu_bf1","tool_input":{"file_path":"/repo/a.swift"}}"#, home: home)
+
+        let info = try json(at: stateFile(in: home, sessionId: sid, suffix: "info"))
+        XCTAssertEqual(info["cwd"] as? String, "/repo")
+        XCTAssertEqual(info["session_id"] as? String, sid)
+    }
+
+    func testStopAlsoBackfillsInfoForAnUnseenSession() throws {
+        let home = tempHome()
+        let sid = "backfill-0002"
+
+        try runHook(payload: #"{"hook_event_name":"Stop","session_id":"\#(sid)","cwd":"/repo","last_assistant_message":"done"}"#, home: home)
+
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: stateFile(in: home, sessionId: sid, suffix: "info").path))
+    }
+
+    /// The backfill must not resurrect a session that just ended. SessionEnd
+    /// removes every marker; recreating -info from the same event would
+    /// leave a row that never goes away.
+    func testSessionEndDoesNotLeaveABackfilledInfoBehind() throws {
+        let home = tempHome()
+        let sid = "backfill-0003"
+        try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: stateFile(in: home, sessionId: sid, suffix: "info").path), "precondition")
+
+        try runHook(payload: #"{"hook_event_name":"SessionEnd","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: stateFile(in: home, sessionId: sid, suffix: "info").path))
+    }
+
+    /// An existing -info must be left alone: SessionStart records `source`,
+    /// and a backfill overwriting it would erase the compact/resume
+    /// distinction the activity timeline depends on.
+    func testBackfillDoesNotOverwriteAnExistingInfo() throws {
+        let home = tempHome()
+        let sid = "backfill-0004"
+        try runHook(payload: #"{"hook_event_name":"SessionStart","session_id":"\#(sid)","cwd":"/repo","source":"compact"}"#, home: home)
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Read","tool_use_id":"toolu_bf4","tool_input":{"file_path":"/repo/a.swift"}}"#, home: home)
+
+        let info = try json(at: stateFile(in: home, sessionId: sid, suffix: "info"))
+        XCTAssertEqual(info["source"] as? String, "compact")
     }
 
     // MARK: - Worktree marker

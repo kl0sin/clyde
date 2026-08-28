@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 37
+# clyde-hook-version: 38
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -787,6 +787,36 @@ else:
     release_agents_lock
     return $MERGE_RC
 }
+
+# --- Info backfill --------------------------------------------------
+# Clyde discovers sessions from -info files and from nothing else. It used
+# to also trust `pgrep -x claude`, but a process name is not evidence of a
+# session: that path turned every binary merely called `claude` — including
+# this project's own test fixtures, which must carry that name because this
+# very script looks for an ancestor with it — into a phantom row that never
+# showed as working and lingered as a ghost.
+#
+# So this is now the only way a session that predates Clyde's install ever
+# becomes visible. SessionStart writes -info; a session that was already
+# running when the hook was installed never fires it. Backfilling on any
+# event that proves the session is alive means an actively working session
+# shows up within seconds, instead of staying invisible until the user's
+# next prompt.
+#
+# Only when the file is missing: SessionStart records `source`, and
+# overwriting it would erase the compact/resume distinction the activity
+# timeline reads.
+case "$HOOK_EVENT" in
+    SessionEnd)
+        # Tearing down — the dispatch below removes -info anyway.
+        ;;
+    *)
+        if [ -n "$SESSION_ID" ] && [ ! -f "$STATE_DIR/$KEY-info" ]; then
+            atomic_write "$STATE_DIR/$KEY-info" \
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$INFO_RUNTIME_FIELDS}"
+        fi
+        ;;
+esac
 
 # --- Worktree badge -------------------------------------------------
 # Derived from the cwd every event carries, deliberately NOT from the
