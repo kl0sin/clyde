@@ -114,5 +114,8 @@ Items that need real hardware or long wall time to verify.
 - [ ] Test on Intel Mac (universal binary) !md #qa
 - [ ] Test with multiple Claude sessions across multiple terminals simultaneously !md #qa
 - [ ] Test all three terminal adapters (Terminal.app, Warp, Ghostty) end-to-end !md #qa
-- [ ] Test on a fresh user account (no `~/.claude`, no `~/.clyde`) !md #qa
+- [x] Test the first-run path — a real fresh `~/.clyde` is recreated cleanly (app makes `events/` + `state/`, hook makes `logs/`) and running sessions still appear via the `pgrep` discovery path, so installing Clyde mid-session works. Turned up the accessibility-permission gap (below). A genuinely fresh *user account* is still untested: `$HOME` is ignored by `homeDirectoryForCurrentUser`, so faking one is impossible without creating a real account !md #qa
+- [x] Surface the missing accessibility permission — `AXIsProcessTrusted` was absent from the codebase entirely, so the advertised ⌃⌘C did nothing with no explanation whenever macOS had not granted access (which happens to any install whose bundle signature changes). New `.accessibilityNotTrusted` health issue, ranked below every real breakage, dismissable, carrying its own "Open Accessibility" button since Clyde's own Settings cannot grant it !hi #ux
+- [x] Refresh the welcome modal — it described the v0.2.x feature set; now leads with what the session row shows and warns about the accessibility prompt. Fixed a truncation bug found by looking at the rendered window: the description line never wrapped !md #ux
+- [ ] Audit the onboarding modal under VoiceOver — System Events reports SwiftUI's accessibility labels inconsistently, so the v0.3.1 pass could not be re-verified here; needs VoiceOver or Accessibility Inspector !lo #qa #ux
 - [ ] 24h memory leak / long-running stress test !lo #qa

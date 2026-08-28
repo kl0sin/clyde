@@ -6,6 +6,9 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **Clyde now tells you when the ⌃⌘C shortcut can't work.** The global shortcut needs accessibility access from macOS, and without it macOS silently ignores the keypress — so the shortcut Clyde advertises on first run simply did nothing, with no explanation. Clyde now notices and shows a dismissable banner with a button that takes you straight to the right System Settings pane. Everything else keeps working; only the shortcut needs the permission.
+- **The welcome screen describes what Clyde actually does now.** It still advertised the v0.2 feature set and said nothing about the tool line, plan progress, subagents or the badges added since. It also warns up front that macOS may ask for accessibility access, which is the most likely reason a new install seems to ignore the shortcut.
+
 ## [0.7.1] — 2026-08-27
 
 A bugfix release, and the headline is one you would rather never have needed: Clyde could overwrite your Claude Code settings. It took an unreadable `settings.json` to trigger it, but when it did, the file came back holding nothing but Clyde's own hooks. That is fixed, along with three smaller faults found while auditing the same code — all of them the kind that stay invisible until the day they aren't.
