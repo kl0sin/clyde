@@ -42,8 +42,14 @@ struct OnboardingView: View {
                 featureRow(
                     icon: "bolt.circle.fill",
                     color: .orange,
-                    title: "Real-time session tracking",
-                    description: "See when Claude is working, ready, or needs your input"
+                    title: "Every session, live",
+                    description: "Working, done, or waiting on you — at a glance"
+                )
+                featureRow(
+                    icon: "list.bullet.rectangle.fill",
+                    color: .purple,
+                    title: "What Claude is actually doing",
+                    description: "The running tool, plan progress and subagents"
                 )
                 featureRow(
                     icon: "hand.tap.fill",
@@ -55,17 +61,22 @@ struct OnboardingView: View {
                     icon: "keyboard",
                     color: .green,
                     title: "Press ⌃⌘C from anywhere",
-                    description: "Toggle the expanded view with a global shortcut"
-                )
-                featureRow(
-                    icon: "gearshape.fill",
-                    color: Color(white: 0.7),
-                    title: "Hook auto-installed",
-                    description: "Claude Code hook at ~/.claude/hooks/. Manage it in Settings."
+                    description: "Toggles this panel. May need accessibility access."
                 )
             }
             .padding(.horizontal, 32)
-            .padding(.bottom, 28)
+            .padding(.bottom, 14)
+
+            // Kept out of the feature list on purpose: it is a matter of
+            // trust rather than a feature, and a fifth row risks
+            // overflowing the adaptive window on short displays.
+            Text("Clyde installs a Claude Code hook at ~/.claude/hooks/ — manage it in Settings.")
+                .font(.system(size: 10))
+                .foregroundStyle(Color(white: 0.45))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 20)
 
             Spacer(minLength: 0)
 
@@ -81,6 +92,8 @@ struct OnboardingView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Open Settings")
+                .accessibilityHint("Opens Clyde's settings and closes this welcome window")
 
                 Button(action: onGetStarted) {
                     Text("Get started")
@@ -99,6 +112,8 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
+                .accessibilityLabel("Get started")
+                .accessibilityHint("Closes this welcome window")
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
@@ -131,6 +146,11 @@ struct OnboardingView: View {
                 Text(description)
                     .font(.system(size: 11))
                     .foregroundStyle(Color(white: 0.55))
+                    // Wrap rather than truncate. Without this the row
+                    // silently ellipsised any copy longer than the
+                    // window width, which is how the first draft of
+                    // this list shipped three cut-off sentences.
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 0)
