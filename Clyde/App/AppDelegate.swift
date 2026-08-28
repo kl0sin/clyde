@@ -590,6 +590,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let reviewItem = NSMenuItem(title: "Session review…", action: #selector(openReview), keyEquivalent: "")
+        reviewItem.target = self
+        menu.addItem(reviewItem)
+
         let updateItem = NSMenuItem(
             title: "Check for updates…",
             action: #selector(UpdateController.checkForUpdates(_:)),
@@ -623,6 +627,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor @objc func openSettings() {
         showSettingsWindow()
+    }
+
+    // MARK: - Review Window
+
+    private var reviewWindow: NSWindow?
+
+    @MainActor @objc func openReview() {
+        guard let store = historyStore else {
+            ClydeLog.general.info("Review requested but history is unavailable")
+            return
+        }
+        if let existing = reviewWindow {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let controller = NSHostingController(rootView: ReviewView(stats: HistoryStats(store: store)))
+        let window = NSWindow(contentViewController: controller)
+        window.title = "Session review"
+        window.styleMask = [.titled, .closable, .resizable]
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        reviewWindow = window
     }
 
     // MARK: - Settings Window

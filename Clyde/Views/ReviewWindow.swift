@@ -1,0 +1,110 @@
+import SwiftUI
+
+/// The review surface. A dedicated window rather than part of the panel:
+/// the panel is 400×420 and built for glancing mid-task, while a review is
+/// something you sit down and read.
+struct ReviewView: View {
+    let stats: HistoryStats
+
+    enum Period: String, CaseIterable, Identifiable {
+        case day = "Today", week = "This week"
+        var id: String { rawValue }
+
+        var range: (from: Date, to: Date) {
+            let now = Date()
+            let start = Calendar.current.startOfDay(for: now)
+            switch self {
+            case .day:  return (start, now)
+            case .week: return (Calendar.current.date(byAdding: .day, value: -6, to: start) ?? start, now)
+            }
+        }
+    }
+
+    @State private var period: Period = .day
+
+    private var totals: PeriodTotals {
+        let range = period.range
+        return stats.totals(from: range.from, to: range.to)
+    }
+
+    private var projects: [ProjectRow] {
+        let range = period.range
+        return stats.projects(from: range.from, to: range.to)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("", selection: $period) {
+                ForEach(Period.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 240)
+            .accessibilityLabel("Review period")
+
+            HStack(spacing: 12) {
+                tile("Working", Self.duration(totals.workingSeconds))
+                tile("Waiting on you", Self.duration(totals.waitingSeconds))
+                tile("Turns", "\(totals.turns)")
+                tile("Sessions", "\(totals.sessions)")
+            }
+
+            Text("Projects")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color(white: 0.7))
+
+            if projects.isEmpty {
+                Text("Nothing recorded for this period yet.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(white: 0.5))
+            } else {
+                ForEach(projects, id: \.project) { row in
+                    HStack {
+                        Text((row.project as NSString).lastPathComponent)
+                            .font(.system(size: 12, weight: .medium))
+                        Spacer()
+                        Text(row.topTool ?? "—")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.55))
+                        Text("\(row.turns) turns")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color(white: 0.55))
+                            .frame(width: 70, alignment: .trailing)
+                        Text(Self.duration(row.workingSeconds))
+                            .font(.system(size: 12, design: .monospaced))
+                            .frame(width: 70, alignment: .trailing)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\((row.project as NSString).lastPathComponent), \(row.turns) turns, \(Self.duration(row.workingSeconds)) working")
+                }
+            }
+
+            Spacer()
+        }
+        .padding(20)
+        .frame(minWidth: 560, minHeight: 420)
+    }
+
+    private func tile(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(Color(white: 0.55))
+            Text(value)
+                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(white: 0.14)))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
+    }
+
+    static func duration(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+}
