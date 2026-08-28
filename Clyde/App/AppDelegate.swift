@@ -284,7 +284,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         historyIngestTimer?.invalidate()
-        historyStore?.ingestPending()
+        // Dispatch async, not a blocking call on the main thread: the spool
+        // file is durable, so losing this race at quit costs nothing —
+        // anything left unclaimed, or claimed but not yet committed, is
+        // picked up by the next launch's ingest, leftover-`.ingesting`
+        // sweep included. A synchronous call here would buy freshness at
+        // a moment when no window is open to show it, and pay for that
+        // with the risk of a hang: a burst of tool calls right before quit
+        // could make ingestion slow enough that macOS force-kills the
+        // process before it returns. It would also now serialize behind
+        // `HistoryStore`'s internal ingest queue, so a synchronous call
+        // could additionally block on an ingest already in flight from the
+        // timer. Keep this async.
+        if let store = historyStore {
+            DispatchQueue.global(qos: .utility).async { store.ingestPending() }
+        }
     }
 
     /// Show or hide the WIDGET panel based on the user preference.

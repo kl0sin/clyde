@@ -21,6 +21,21 @@ final class HistoryStore {
     /// need to reconstruct the crash-between-commit-and-unlink window.
     private(set) var lastClaimedFileName: String?
 
+    /// Serializes `ingestPending()`. The store is reachable from three
+    /// independent callers — the launch path, a repeating 30s timer, and
+    /// (via `HistoryStats`) the UI — and nothing stops two of them from
+    /// overlapping (a slow tick still running when the next one fires, or
+    /// launch racing the first tick). Without this queue that overlap is
+    /// only harmless by accident: the claim-by-rename is atomic and
+    /// `markIngested` shares a transaction with the inserts, so the loser
+    /// of a leftover-sweep race trips the `ingested_files` primary key and
+    /// rolls back — and all of that also assumes the system libsqlite3 was
+    /// built in serialized mode. That is correctness by constraint, not by
+    /// design. Running the whole method body through this serial queue
+    /// makes single-flight the actual contract instead of a side effect of
+    /// how the tables happen to be shaped.
+    private let ingestQueue = DispatchQueue(label: "com.clyde.historystore.ingest")
+
     init(directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         databaseURL = directory.appendingPathComponent("history.sqlite")
@@ -137,31 +152,33 @@ final class HistoryStore {
     /// parallel hooks that race fires sooner rather than later.
     @discardableResult
     func ingestPending() -> Int {
-        let directory = databaseURL.deletingLastPathComponent()
-        var total = 0
+        ingestQueue.sync {
+            let directory = databaseURL.deletingLastPathComponent()
+            var total = 0
 
-        // Leftovers first: a claimed file still on disk means a previous
-        // run died before unlinking it.
-        let leftovers = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? [])
-            .filter { $0.hasPrefix("spool.") && $0.hasSuffix(".ingesting") }
-            .sorted()
-        for name in leftovers {
-            total += ingestClaimed(named: name, in: directory)
-        }
+            // Leftovers first: a claimed file still on disk means a previous
+            // run died before unlinking it.
+            let leftovers = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? [])
+                .filter { $0.hasPrefix("spool.") && $0.hasSuffix(".ingesting") }
+                .sorted()
+            for name in leftovers {
+                total += ingestClaimed(named: name, in: directory)
+            }
 
-        let spool = directory.appendingPathComponent("spool.jsonl")
-        guard FileManager.default.fileExists(atPath: spool.path) else { return total }
+            let spool = directory.appendingPathComponent("spool.jsonl")
+            guard FileManager.default.fileExists(atPath: spool.path) else { return total }
 
-        let claimedName = "spool.\(Int(Date().timeIntervalSince1970)).\(UUID().uuidString.prefix(8)).ingesting"
-        do {
-            try FileManager.default.moveItem(at: spool, to: directory.appendingPathComponent(claimedName))
-        } catch {
-            ClydeLog.general.error("History: could not claim spool: \(error.localizedDescription, privacy: .public)")
+            let claimedName = "spool.\(Int(Date().timeIntervalSince1970)).\(UUID().uuidString.prefix(8)).ingesting"
+            do {
+                try FileManager.default.moveItem(at: spool, to: directory.appendingPathComponent(claimedName))
+            } catch {
+                ClydeLog.general.error("History: could not claim spool: \(error.localizedDescription, privacy: .public)")
+                return total
+            }
+            lastClaimedFileName = claimedName
+            total += ingestClaimed(named: claimedName, in: directory)
             return total
         }
-        lastClaimedFileName = claimedName
-        total += ingestClaimed(named: claimedName, in: directory)
-        return total
     }
 
     private func ingestClaimed(named name: String, in directory: URL) -> Int {
