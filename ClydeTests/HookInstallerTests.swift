@@ -27,6 +27,10 @@ final class HookInstallerTests: XCTestCase {
         // assertions that expect "fully healthy" or specific issues.
         // Tests covering the cleat advisory path set their own overrides.
         CleatProbe.cleatOnPathOverride = false
+        // Default to "trusted" so existing healthy-install assertions
+        // don't flip depending on whether the machine running the suite
+        // has granted the test runner accessibility access.
+        HookInstaller.accessibilityTrustedOverride = true
     }
 
     override func tearDown() async throws {
@@ -34,6 +38,7 @@ final class HookInstallerTests: XCTestCase {
         HookInstaller.claudeInstalledOverride = nil
         CleatProbe.cleatOnPathOverride = nil
         CleatProbe.configPathOverride = nil
+        HookInstaller.accessibilityTrustedOverride = nil
         if let tempHome {
             try? FileManager.default.removeItem(at: tempHome)
         }
@@ -435,6 +440,54 @@ final class HookInstallerTests: XCTestCase {
     /// Healthy hook install + cleat installed with hooks cap disabled
     /// → healthCheck returns the cleat advisory. This is the
     /// integration test for the new advisory branch.
+    // MARK: - Accessibility permission
+
+    /// Clyde's global ⌃⌘C hotkey is an `NSEvent` global monitor, which
+    /// macOS silently ignores unless the app is trusted for accessibility.
+    /// Nothing detected that, so the welcome modal promised "Press ⌃⌘C
+    /// from anywhere", the user pressed it, and nothing happened — with
+    /// no way to find out why. Measured on a real install: the same
+    /// binary responds to the shortcut when launched from a trusted
+    /// parent process and ignores it when launched on its own.
+    func testHealthCheckFlagsMissingAccessibilityPermission() throws {
+        try HookInstaller.install()
+        HookInstaller.accessibilityTrustedOverride = false
+
+        XCTAssertEqual(HookInstaller.healthCheck(), .accessibilityNotTrusted)
+    }
+
+    func testHealthCheckStaysQuietWhenAccessibilityIsGranted() throws {
+        try HookInstaller.install()
+        HookInstaller.accessibilityTrustedOverride = true
+
+        XCTAssertNil(HookInstaller.healthCheck())
+    }
+
+    /// It is an advisory, not a breakage: tracking works fine without the
+    /// hotkey, and a user who never uses it should be able to dismiss the
+    /// reminder. It carries a direct link to the right System Settings
+    /// pane, because "open Settings" would land them in Clyde's, which
+    /// cannot grant the permission.
+    func testAccessibilityAdvisoryIsDismissableAndLinksToSystemSettings() {
+        let issue = HookInstaller.HealthIssue.accessibilityNotTrusted
+
+        XCTAssertTrue(issue.isDismissable)
+        XCTAssertFalse(issue.isActionable, "Clyde's own Settings cannot grant this")
+        XCTAssertNotNil(issue.bannerActionTitle)
+        XCTAssertEqual(issue.bannerActionURL?.absoluteString,
+                       "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    }
+
+    /// A broken hook install means Clyde tracks nothing at all; a missing
+    /// hotkey permission is a convenience. The severe one has to win.
+    func testBrokenHookInstallOutranksAccessibilityAdvisory() throws {
+        try HookInstaller.install()
+        try FileManager.default.removeItem(at: AppPaths.clydeHookScript)
+        HookInstaller.accessibilityTrustedOverride = false
+
+        XCTAssertEqual(HookInstaller.healthCheck(), .scriptMissing)
+    }
+
     // MARK: - Error paths
 
     /// The worst thing HookInstaller can do is not "fail to install" —

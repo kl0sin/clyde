@@ -163,6 +163,27 @@ private struct HookHealthBanner: View {
                     CopyableCommandChip(command: command)
                         .padding(.top, 2)
                 }
+                if let actionTitle = issue.bannerActionTitle, let actionURL = issue.bannerActionURL {
+                    // The fix lives in System Settings, not in Clyde's,
+                    // so the advisory carries its own button straight to
+                    // the right pane instead of routing through a
+                    // Settings screen that cannot grant the permission.
+                    Button(action: { NSWorkspace.shared.open(actionURL) }) {
+                        Text(actionTitle)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(Color(white: 0.24))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                    .accessibilityLabel(actionTitle)
+                    .accessibilityHint("Opens System Settings")
+                }
                 if showAffordance {
                     Text("Click to open Settings")
                         .font(.system(size: 9))

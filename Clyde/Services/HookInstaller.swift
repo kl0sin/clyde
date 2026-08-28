@@ -1,4 +1,5 @@
 import Foundation
+import ApplicationServices
 
 /// Installs the Clyde notification hook into Claude's settings.
 /// Creates the hook script at ~/.claude/hooks/clyde-hook.sh and
@@ -168,6 +169,7 @@ enum HookInstaller {
         case staleEvents([String])              // retired events still registered in settings.json
         case autoRepairFailed(reason: String)   // we tried to fix it and write threw
         case cleatHooksCapDisabled              // cleat installed but its hooks cap is off
+        case accessibilityNotTrusted            // macOS hasn't granted accessibility, so ⌃⌘C is dead
 
         /// Optional short headline rendered above the body in the
         /// banner. Use it when the long-form message has a natural
@@ -178,6 +180,8 @@ enum HookInstaller {
             switch self {
             case .cleatHooksCapDisabled:
                 return "Cleat hook bridge is off"
+            case .accessibilityNotTrusted:
+                return "Global shortcut is off"
             default:
                 return nil
             }
@@ -205,6 +209,8 @@ enum HookInstaller {
                 return "Auto-repair failed: \(reason). Open Settings and reinstall manually."
             case .cleatHooksCapDisabled:
                 return "Run this in your terminal so Clyde can track sandboxed sessions."
+            case .accessibilityNotTrusted:
+                return "macOS hasn't granted Clyde accessibility access, so ⌃⌘C does nothing from other apps. Everything else works."
             }
         }
 
@@ -235,7 +241,7 @@ enum HookInstaller {
         /// anywhere useful).
         var isActionable: Bool {
             switch self {
-            case .cleatHooksCapDisabled:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted:
                 return false
             case .claudeNotInstalled,
                  .notInstalled,
@@ -258,7 +264,7 @@ enum HookInstaller {
         /// rediscovers Settings — stay non-dismissable.
         var isDismissable: Bool {
             switch self {
-            case .cleatHooksCapDisabled:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted:
                 return true
             default:
                 return false
@@ -276,10 +282,45 @@ enum HookInstaller {
             switch self {
             case .cleatHooksCapDisabled:
                 return "cleatHooksCapDisabled"
+            case .accessibilityNotTrusted:
+                return "accessibilityNotTrusted"
             default:
                 return nil
             }
         }
+
+        /// Label + destination for an advisory whose fix lives in System
+        /// Settings rather than in Clyde. `isActionable` deliberately
+        /// stays false for these — routing the user into Clyde's own
+        /// Settings would be a dead end — so the banner renders as an
+        /// informational row with this one button on it.
+        var bannerActionTitle: String? {
+            switch self {
+            case .accessibilityNotTrusted: return "Open Accessibility"
+            default: return nil
+            }
+        }
+
+        var bannerActionURL: URL? {
+            switch self {
+            case .accessibilityNotTrusted:
+                return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            default:
+                return nil
+            }
+        }
+    }
+
+    /// Test override for `isAccessibilityTrusted`. Production never sets it.
+    nonisolated(unsafe) static var accessibilityTrustedOverride: Bool?
+
+    /// True iff macOS trusts Clyde for accessibility, which is what the
+    /// global ⌃⌘C monitor needs. Queried without the system prompt: the
+    /// banner asks for the permission in context, rather than a modal
+    /// firing out of nowhere at launch.
+    static func isAccessibilityTrusted() -> Bool {
+        if let override = accessibilityTrustedOverride { return override }
+        return AXIsProcessTrusted()
     }
 
     /// Test override for `isClaudeCodeInstalled`. When non-nil, the
@@ -395,6 +436,13 @@ enum HookInstaller {
         // otherwise fine so the user fixes the actual problem first.
         if CleatProbe.hooksCapStatus() == .hooksDisabled {
             return .cleatHooksCapDisabled
+        }
+
+        // Lowest severity: tracking works fine without it, only the
+        // global hotkey is dead. Last so a genuinely broken install is
+        // never buried under a convenience advisory.
+        if !isAccessibilityTrusted() {
+            return .accessibilityNotTrusted
         }
 
         return nil

@@ -552,6 +552,10 @@ final class AppViewModel: ObservableObject {
                 shouldAutoInstall = true
             case .autoRepairFailed:
                 shouldAutoInstall = false
+            case .accessibilityNotTrusted:
+                // Only macOS can grant this; the banner links straight
+                // to the right System Settings pane.
+                shouldAutoInstall = false
             case .cleatHooksCapDisabled:
                 // Pure advisory — Clyde can't enable cleat's capability
                 // for the user (that requires `cleat config --enable
