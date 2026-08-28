@@ -32,4 +32,16 @@ final class ReviewViewTests: XCTestCase {
         // accumulating hours rather than wrapping.
         XCTAssertEqual(ReviewView.duration(91_800), "25h 30m")
     }
+
+    func testZeroTurnsStaysPlural() {
+        XCTAssertEqual(ReviewView.turnLabel(0), "0 turns")
+    }
+
+    func testOneTurnIsSingular() {
+        XCTAssertEqual(ReviewView.turnLabel(1), "1 turn")
+    }
+
+    func testTwoTurnsIsPlural() {
+        XCTAssertEqual(ReviewView.turnLabel(2), "2 turns")
+    }
 }

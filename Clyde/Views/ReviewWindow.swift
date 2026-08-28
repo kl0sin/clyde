@@ -45,7 +45,7 @@ struct ReviewView: View {
             HStack(spacing: 12) {
                 tile("Working", Self.duration(totals.workingSeconds))
                 tile("Waiting on you", Self.duration(totals.waitingSeconds))
-                tile("Turns", "\(totals.turns)")
+                tile("Turns", "\(totals.turns)", accessibilityValue: Self.turnLabel(totals.turns))
                 tile("Sessions", "\(totals.sessions)")
             }
 
@@ -66,7 +66,7 @@ struct ReviewView: View {
                         Text(row.topTool ?? "—")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(Color(white: 0.55))
-                        Text("\(row.turns) turns")
+                        Text(Self.turnLabel(row.turns))
                             .font(.system(size: 11))
                             .foregroundStyle(Color(white: 0.55))
                             .frame(width: 70, alignment: .trailing)
@@ -75,7 +75,7 @@ struct ReviewView: View {
                             .frame(width: 70, alignment: .trailing)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\((row.project as NSString).lastPathComponent), \(row.turns) turns, \(Self.duration(row.workingSeconds)) working")
+                    .accessibilityLabel("\((row.project as NSString).lastPathComponent), \(Self.turnLabel(row.turns)), \(Self.duration(row.workingSeconds)) working")
                 }
             }
 
@@ -110,7 +110,11 @@ struct ReviewView: View {
         projects = newProjects
     }
 
-    private func tile(_ label: String, _ value: String) -> some View {
+    // `accessibilityValue` lets the "Turns" tile speak "1 turn" / "2 turns"
+    // to a screen reader while the on-screen text stays the bare number —
+    // the label above it already reads "Turns", so the visible value must
+    // not duplicate that word.
+    private func tile(_ label: String, _ value: String, accessibilityValue: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .font(.system(size: 10))
@@ -123,7 +127,7 @@ struct ReviewView: View {
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color(white: 0.14)))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(value)")
+        .accessibilityLabel("\(label): \(accessibilityValue ?? value)")
     }
 
     static func duration(_ seconds: Int) -> String {
@@ -131,5 +135,9 @@ struct ReviewView: View {
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes)m" }
         return "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    static func turnLabel(_ count: Int) -> String {
+        count == 1 ? "1 turn" : "\(count) turns"
     }
 }
