@@ -17,7 +17,8 @@ enum HistorySpool {
             sessionID: sessionID,
             project: (json["cwd"] as? String) ?? "",
             tool: json["tool"] as? String,
-            summary: json["summary"] as? String
+            summary: json["summary"] as? String,
+            durationMs: json["dur"] as? Int
         )
     }
 }

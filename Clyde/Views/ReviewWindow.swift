@@ -30,7 +30,8 @@ struct ReviewView: View {
     // reload on period change means the tiles briefly show the seeded
     // zero values, which reads the same as a genuinely empty period.
     @State private var totals = PeriodTotals(workingSeconds: 0, waitingSeconds: 0, turns: 0,
-                                             sessions: 0, longestWaitSeconds: 0, blockedCount: 0)
+                                             sessions: 0, longestWaitSeconds: 0, blockedCount: 0,
+                                             toolSeconds: 0)
     @State private var projects: [ProjectRow] = []
     /// The grid is deliberately independent of the period switch: it is the
     /// "how have the last weeks gone" view you land on, while the tiles and
@@ -67,11 +68,20 @@ struct ReviewView: View {
                 // no decision at all. The pair that replaced them names
                 // moments you can act on: the worst single wait, and how
                 // often a permission prompt stopped the work.
-                tile("Working", Self.duration(totals.workingSeconds))
+                // "Working" overstated what it measures: the figure is the
+                // wall-clock a turn was open, which includes every tool
+                // call. On a repo whose test suite takes a minute, most of
+                // it is the machine, not the model. "Busy" is what it is;
+                // the bar underneath says what it was made of.
+                tile("Busy", Self.duration(totals.workingSeconds))
                 tile("Turns", "\(totals.turns)", accessibilityValue: Self.turnLabel(totals.turns))
                 tile("Longest wait", Self.duration(totals.longestWaitSeconds))
                 tile("Blocked", "\(totals.blockedCount)",
                      accessibilityValue: totals.blockedCount == 1 ? "1 permission prompt" : "\(totals.blockedCount) permission prompts")
+            }
+
+            if totals.toolSeconds > 0 {
+                busySplit
             }
 
             Text("PROJECTS")
@@ -276,6 +286,49 @@ struct ReviewView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Review period")
+    }
+
+    /// Part-to-whole for one number, so a bar rather than a second set of
+    /// tiles: two segments with a surface gap between them and their
+    /// labels attached directly, no legend to look up.
+    ///
+    /// Hidden entirely when no durations were recorded — history from
+    /// before the hook reported them would otherwise be drawn as if every
+    /// second had been the model thinking.
+    private var busySplit: some View {
+        let total = max(1, totals.workingSeconds)
+        let toolShare = min(1, Double(totals.toolSeconds) / Double(total))
+
+        return VStack(alignment: .leading, spacing: Spacing.xxs) {
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(SessionTheme.processingColor)
+                        .frame(width: max(0, geo.size.width * (1 - toolShare) - 1))
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color(white: 0.32))
+                }
+            }
+            .frame(height: 6)
+
+            HStack(spacing: Spacing.sm) {
+                Label {
+                    Text("Thinking \(Self.duration(totals.thinkingSeconds))")
+                } icon: {
+                    Circle().fill(SessionTheme.processingColor).frame(width: 6, height: 6)
+                }
+                Label {
+                    Text("Tools \(Self.duration(totals.toolSeconds))")
+                } icon: {
+                    Circle().fill(Color(white: 0.32)).frame(width: 6, height: 6)
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(TextColor.tertiary)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Busy time split: \(Self.duration(totals.thinkingSeconds)) thinking, \(Self.duration(totals.toolSeconds)) running tools")
     }
 
     /// Mirrors SessionRow: name on top, a 10pt monospaced secondary line

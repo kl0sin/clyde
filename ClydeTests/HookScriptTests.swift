@@ -823,6 +823,36 @@ final class HookScriptTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: eventFile(in: home, sessionId: sid).path))
     }
 
+    // MARK: - Tool duration in the spool
+
+    /// `PostToolUse` is the only event that knows how long a call actually
+    /// took — Claude Code reports `duration_ms` on it. Without that figure
+    /// the review can only say how long a turn lasted, never how much of
+    /// it was the model thinking versus the machine compiling.
+    func testPostToolUseSpoolsItsDuration() throws {
+        let home = tempHome()
+        let sid = "dur-0001"
+
+        try runHook(payload: #"{"hook_event_name":"PostToolUse","session_id":"\#(sid)","cwd":"/repo","tool_name":"Bash","tool_use_id":"toolu_d1","duration_ms":4200,"tool_input":{"command":"swift test"}}"#, home: home)
+
+        let line = try XCTUnwrap(spoolLines(in: home).first)
+        XCTAssertEqual(line["event"] as? String, "PostToolUse")
+        XCTAssertEqual(line["dur"] as? Int, 4200)
+    }
+
+    /// Events without a duration must not grow a null field — the key set
+    /// is asserted elsewhere and every extra key is one more thing that
+    /// could carry something it should not.
+    func testEventsWithoutADurationCarryNoDurationKey() throws {
+        let home = tempHome()
+        let sid = "dur-0002"
+
+        try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
+
+        let line = try XCTUnwrap(spoolLines(in: home).first)
+        XCTAssertNil(line["dur"])
+    }
+
     // MARK: - Info backfill for sessions Clyde never saw start
 
     /// Discovery by process name is gone, so the hook is now the only way a
@@ -1243,7 +1273,7 @@ final class HookScriptTests: XCTestCase {
     func testEverySpoolLineKeySetIsWithinTheAllowlist() throws {
         let home = tempHome()
         let sid = "spool-keys"
-        let allowedKeys: Set<String> = ["ts", "event", "session_id", "cwd", "tool", "summary"]
+        let allowedKeys: Set<String> = ["ts", "event", "session_id", "cwd", "tool", "summary", "dur"]
 
         try runHook(payload: #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/repo"}"#, home: home)
         try runHook(payload: preToolUseAgent(

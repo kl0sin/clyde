@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 38
+# clyde-hook-version: 39
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -1221,6 +1221,14 @@ if [ -n "$TOOL_NAME" ]; then
     ESC_TOOL=$(printf '%s' "$TOOL_NAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
     SPOOL_EXTRA="$SPOOL_EXTRA, \"tool\": \"$ESC_TOOL\""
 fi
+# How long the call took. Only PostToolUse knows it, and without it the
+# review can say how long a turn ran but never how much of that was the
+# model thinking rather than the machine compiling.
+TOOL_DURATION=$(extract_field duration_ms)
+case "$TOOL_DURATION" in
+    ''|*[!0-9]*) ;;
+    *) SPOOL_EXTRA="$SPOOL_EXTRA, \"dur\": $TOOL_DURATION" ;;
+esac
 if [ -n "${TOOL_SUMMARY:-}" ]; then
     # Escape freshly rather than reusing ESC_SUMMARY: that variable is
     # reassigned at line 948 to carry an Agent's description, so by the end

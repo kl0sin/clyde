@@ -81,7 +81,8 @@ final class HistoryStats {
             turns: promptCount,
             sessions: sessionCount,
             longestWaitSeconds: longestWait.first?.first.flatMap { $0.map(Int.init) } ?? 0,
-            blockedCount: blocked
+            blockedCount: blocked,
+            toolSeconds: toolSeconds(from: from, to: to)
         )
     }
 
@@ -146,6 +147,64 @@ final class HistoryStats {
             if a.turns != b.turns { return a.turns > b.turns }
             return a.project < b.project
         }
+    }
+
+    /// Seconds spent inside tool calls — the part of a turn that was the
+    /// machine working rather than the model thinking.
+    ///
+    /// Overlapping calls within one session are counted once. Claude runs
+    /// tools in parallel batches routinely, so summing durations would
+    /// report more tool time than the turn lasted and leave "thinking"
+    /// negative. Two *different* sessions overlapping is not double
+    /// counting — they really do burn wall-clock at the same time — so the
+    /// union is taken per session and the results added.
+    ///
+    /// The merge happens in Swift rather than SQL: interval union is
+    /// awkward in SQLite and this runs over a day's calls, not a table
+    /// scan of years.
+    func toolSeconds(from: Date, to: Date) -> Int {
+        var intervals: [String: [(start: Int, end: Int)]] = [:]
+        let sql = """
+            SELECT session_id, ts, duration_ms FROM events
+            WHERE event = 'PostToolUse' AND duration_ms IS NOT NULL
+              AND ts >= ? AND ts < ?
+            ORDER BY session_id, ts
+            """
+
+        store.read { handle in
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_int64(stmt, 1, Int64(from.timeIntervalSince1970))
+            sqlite3_bind_int64(stmt, 2, Int64(to.timeIntervalSince1970))
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                let session = String(cString: sqlite3_column_text(stmt, 0))
+                let end = Int(sqlite3_column_int64(stmt, 1))
+                let seconds = Int((Double(sqlite3_column_int64(stmt, 2)) / 1000).rounded())
+                intervals[session, default: []].append((start: end - seconds, end: end))
+            }
+        }
+
+        return intervals.values.reduce(0) { $0 + Self.unionLength(of: $1) }
+    }
+
+    /// Total length covered by a set of intervals, counting overlap once.
+    static func unionLength(of intervals: [(start: Int, end: Int)]) -> Int {
+        let sorted = intervals.sorted { $0.start < $1.start }
+        var total = 0
+        var current: (start: Int, end: Int)?
+        for interval in sorted {
+            guard var open = current else { current = interval; continue }
+            if interval.start <= open.end {
+                open.end = max(open.end, interval.end)
+                current = open
+            } else {
+                total += open.end - open.start
+                current = interval
+            }
+        }
+        if let open = current { total += open.end - open.start }
+        return total
     }
 
     /// The activity trail: what Claude actually did, newest first.

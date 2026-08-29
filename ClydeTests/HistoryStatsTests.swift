@@ -146,6 +146,59 @@ final class HistoryStatsTests: XCTestCase {
         XCTAssertEqual(totals.workingSeconds, 0)
     }
 
+    // MARK: - Tool time versus thinking time
+
+    private func toolCall(at endSeconds: Int, lasting ms: Int, session: String = "s1") -> HistoryEvent {
+        HistoryEvent(ts: Date(timeIntervalSince1970: TimeInterval(endSeconds)), event: "PostToolUse",
+                     sessionID: session, project: "/repo", tool: "Bash", summary: nil, durationMs: ms)
+    }
+
+    /// Claude runs tools in parallel batches all the time. Summing their
+    /// durations would report more tool time than the turn even lasted, so
+    /// overlapping calls inside one session count once.
+    func testParallelToolCallsInOneSessionCountOnce() throws {
+        let store = try makeStore()
+        try store.insert([
+            toolCall(at: 110, lasting: 10_000),   // 100…110
+            toolCall(at: 112, lasting: 10_000),   // 102…112
+            toolCall(at: 115, lasting: 10_000),   // 105…115
+        ])
+
+        // The union is 100…115, not 30 seconds of summed duration.
+        XCTAssertEqual(HistoryStats(store: store).toolSeconds(from: wholeRange.from, to: wholeRange.to), 15)
+    }
+
+    func testSequentialToolCallsAddUp() throws {
+        let store = try makeStore()
+        try store.insert([
+            toolCall(at: 110, lasting: 10_000),   // 100…110
+            toolCall(at: 200, lasting: 5_000),    // 195…200
+        ])
+
+        XCTAssertEqual(HistoryStats(store: store).toolSeconds(from: wholeRange.from, to: wholeRange.to), 15)
+    }
+
+    /// Two sessions really do burn wall-clock at the same time, so their
+    /// overlap is not double counting — only overlap within one session is.
+    func testConcurrentSessionsBothCount() throws {
+        let store = try makeStore()
+        try store.insert([
+            toolCall(at: 110, lasting: 10_000, session: "a"),
+            toolCall(at: 110, lasting: 10_000, session: "b"),
+        ])
+
+        XCTAssertEqual(HistoryStats(store: store).toolSeconds(from: wholeRange.from, to: wholeRange.to), 20)
+    }
+
+    /// History recorded before the hook reported durations has none, and a
+    /// missing figure must read as "unknown", never as zero work.
+    func testToolTimeIsZeroWhenNoDurationsWereRecorded() throws {
+        let store = try makeStore()
+        try store.insert([event("PreToolUse", at: 100, tool: "Bash")])
+
+        XCTAssertEqual(HistoryStats(store: store).toolSeconds(from: wholeRange.from, to: wholeRange.to), 0)
+    }
+
     // MARK: - Decision-driving totals
 
     /// The total waiting time is misleading on its own: leave a session

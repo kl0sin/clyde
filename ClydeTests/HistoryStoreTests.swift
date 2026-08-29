@@ -1,4 +1,5 @@
 import XCTest
+import SQLite3
 @testable import Clyde
 
 final class HistoryStoreTests: XCTestCase {
@@ -31,6 +32,46 @@ final class HistoryStoreTests: XCTestCase {
 
         XCTAssertEqual(event?.event, "Stop")
         XCTAssertNil(event?.tool)
+    }
+
+    func testParsesAToolDuration() {
+        let line = #"{"ts": 1787660000, "event": "PostToolUse", "session_id": "s1", "cwd": "/repo", "tool": "Bash", "dur": 4200}"#
+
+        XCTAssertEqual(HistorySpool.parse(line: line)?.durationMs, 4200)
+    }
+
+    func testEventWithoutADurationParsesToNil() {
+        let line = #"{"ts": 1787660000, "event": "Stop", "session_id": "s1", "cwd": "/repo"}"#
+
+        XCTAssertNil(HistorySpool.parse(line: line)?.durationMs)
+    }
+
+    /// Databases created before v39 have no duration column. Opening one
+    /// must add it rather than failing or silently dropping every insert
+    /// that carries a duration — an install that has been collecting
+    /// history for weeks is exactly the case that matters here.
+    func testOpeningAPreDurationDatabaseMigratesIt() throws {
+        let dir = tempDir()
+        // Build the old schema by hand, exactly as v38 shipped it.
+        let old = try HistoryStore(directory: dir)
+        old.read { handle in
+            sqlite3_exec(handle, "DROP TABLE events", nil, nil, nil)
+            sqlite3_exec(handle, """
+                CREATE TABLE events (
+                  id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, event TEXT NOT NULL,
+                  session_id TEXT NOT NULL, project TEXT NOT NULL, tool TEXT, summary TEXT
+                )
+                """, nil, nil, nil)
+        }
+
+        let migrated = try HistoryStore(directory: dir)
+        try migrated.insert([
+            HistoryEvent(ts: Date(timeIntervalSince1970: 100), event: "PostToolUse",
+                         sessionID: "s1", project: "/repo", tool: "Bash",
+                         summary: nil, durationMs: 2500)
+        ])
+
+        XCTAssertEqual(migrated.eventCount(), 1)
     }
 
     private func tempDir() -> URL {

@@ -63,7 +63,8 @@ final class HistoryStore {
               session_id TEXT NOT NULL,
               project TEXT NOT NULL,
               tool TEXT,
-              summary TEXT
+              summary TEXT,
+              duration_ms INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
             CREATE INDEX IF NOT EXISTS idx_events_project_ts ON events(project, ts);
@@ -72,6 +73,12 @@ final class HistoryStore {
               ingested_at INTEGER NOT NULL
             );
             """)
+
+        // Databases created before v39 predate the duration column, and
+        // `CREATE TABLE IF NOT EXISTS` leaves them exactly as they were.
+        // Adding it is the whole migration; the error when it already
+        // exists is the expected case, not a failure.
+        try? execInner("ALTER TABLE events ADD COLUMN duration_ms INTEGER")
     }
 
     deinit { sqlite3_close(db) }
@@ -171,7 +178,7 @@ final class HistoryStore {
     /// both of which already run inside `ingestQueue`.
     private func insertWithinTransaction(_ events: [HistoryEvent]) throws {
         var stmt: OpaquePointer?
-        let sql = "INSERT INTO events (ts, event, session_id, project, tool, summary) VALUES (?,?,?,?,?,?)"
+        let sql = "INSERT INTO events (ts, event, session_id, project, tool, summary, duration_ms) VALUES (?,?,?,?,?,?,?)"
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw StoreError.statementFailed(lastError())
         }
@@ -185,6 +192,11 @@ final class HistoryStore {
             bindText(stmt, 4, event.project)
             if let tool = event.tool { bindText(stmt, 5, tool) } else { sqlite3_bind_null(stmt, 5) }
             if let summary = event.summary { bindText(stmt, 6, summary) } else { sqlite3_bind_null(stmt, 6) }
+            if let duration = event.durationMs {
+                sqlite3_bind_int64(stmt, 7, Int64(duration))
+            } else {
+                sqlite3_bind_null(stmt, 7)
+            }
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 throw StoreError.statementFailed(lastError())
             }

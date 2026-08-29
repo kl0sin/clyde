@@ -10,6 +10,11 @@ struct HistoryEvent: Equatable {
     let project: String
     let tool: String?
     let summary: String?
+    /// How long the call took, in milliseconds. Only `PostToolUse` carries
+    /// it — it is what lets the review separate the model thinking from
+    /// the machine compiling, instead of reporting one wall-clock number
+    /// and calling all of it work.
+    var durationMs: Int?
 }
 
 /// Totals for one period, computed on read. Nothing is pre-aggregated —
@@ -28,6 +33,16 @@ struct PeriodTotals: Equatable {
     let longestWaitSeconds: Int
     /// How often a session sat blocked on a permission prompt.
     let blockedCount: Int
+    /// Of the busy time, how much was spent inside tool calls. Zero also
+    /// means "not recorded" for history written before the hook reported
+    /// durations, which is why the split is hidden rather than drawn as
+    /// 100% thinking when this is zero.
+    let toolSeconds: Int
+
+    /// Busy time that was not a tool call: the model actually working.
+    /// Clamped, because a turn still open can have tool calls counted
+    /// against a turn duration that does not exist yet.
+    var thinkingSeconds: Int { max(0, workingSeconds - toolSeconds) }
 }
 
 struct ProjectRow: Equatable {
