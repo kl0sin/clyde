@@ -98,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsObserver: NSObjectProtocol?
     private var diagnosticsObserver: NSObjectProtocol?
     private var reviewObserver: NSObjectProtocol?
+    private var rebuildHistoryObserver: NSObjectProtocol?
 
     private(set) var historyStore: HistoryStore?
     private var historyIngestTimer: Timer?
@@ -113,6 +114,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NotificationCenter.default.removeObserver(token)
         }
         if let token = reviewObserver {
+            NotificationCenter.default.removeObserver(token)
+        }
+        if let token = rebuildHistoryObserver {
             NotificationCenter.default.removeObserver(token)
         }
         if let monitor = globalHotKeyMonitor {
@@ -255,6 +259,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .clydeOpenSettings, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.showSettingsWindow() }
+        }
+        rebuildHistoryObserver = NotificationCenter.default.addObserver(
+            forName: .clydeRebuildHistory, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.rebuildHistoryStore() }
         }
         reviewObserver = NotificationCenter.default.addObserver(
             forName: .clydeOpenReview, object: nil, queue: .main
@@ -653,6 +662,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var reviewWindow: NSWindow?
     private var reviewWindowDelegate: SettingsWindowDelegate?
+
+    /// Recover from a database Clyde could not read. Best-effort, like
+    /// every other history path: a failed rebuild leaves tracking off and
+    /// says so, and session tracking is untouched either way.
+    @MainActor private func rebuildHistoryStore() {
+        do {
+            let store = try HistoryStore.rebuild(directory: AppPaths.historyDir)
+            historyStore = store
+            appViewModel.historyAvailable = true
+            DispatchQueue.global(qos: .utility).async { store.ingestPending() }
+            ClydeLog.general.info("History: rebuilt the store on request")
+        } catch {
+            ClydeLog.general.error("History: rebuild failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
 
     @MainActor @objc func openReview() {
         guard let store = historyStore else {

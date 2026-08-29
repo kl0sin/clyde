@@ -79,7 +79,7 @@ Clyde answers "what is Claude doing right now" well. It answers "what did Claude
 - [x] Stays local by construction — history lives only in the SQLite file under `~/.clyde/history/` on disk; no telemetry, no accounts, no network involved in collecting or reviewing it !hi #ux
 - [x] Filterable event list in the review window — the Activity trail, newest first, filtered by clicking a project row !md #ux
 - [x] Second entry point into the review window from the panel's Activity header — a calendar button beside the chevron, hidden when the history store failed to open; the welcome screen and README now name the feature too !lo #ux
-- [ ] Rebuild-from-scratch affordance when `~/.clyde/history/history.sqlite` is missing, unopenable or corrupt — today `historyStore` is left `nil`, the review menu item silently no-ops, and Settings only says "History tracking is unavailable." with no recovery action !md #ux
+- [x] Rebuild-from-scratch affordance when the history database cannot be read — Settings → Advanced grows a "Rebuild database" button that moves the unreadable file aside (never deletes it) and reopens the store; the review menu item greys out while history is unavailable instead of swallowing the click !md #ux
 - [x] `spool.jsonl` can grow unbounded if the hook stays installed while Clyde is removed or never relaunched — hook v40 stops appending past 10 MB rather than truncating, so what was recorded still ingests when Clyde returns !lo #hooks
 
 ## Phase: v0.9.0 — Panel actions (two-way channel)
@@ -115,7 +115,7 @@ Items that need real hardware or long wall time to verify.
 
 - [ ] Confirm `TeammateIdle` against a real agent-teams session — payload fields and firing frequency, then decide whether idle earns promotion to the attention badge. Needs an environment with agent teams; measured absent on the dev machine (payload dump with `Stop` as positive control captured `Stop` twice, `TeammateIdle` zero times) !md #qa #hooks
 - [ ] Test on minimum supported macOS version (13.0 Ventura) !md #qa
-- [ ] Test on Intel Mac (universal binary) !md #qa
+- [x] Test on Intel Mac (universal binary) — x86_64 slice exercised under Rosetta: session detection, panel, and the review window with its SQLite queries all work; native Intel hardware still unverified !md #qa
 - [ ] Test with multiple Claude sessions across multiple terminals simultaneously !md #qa
 - [ ] Test all three terminal adapters (Terminal.app, Warp, Ghostty) end-to-end !md #qa
 - [x] Test the first-run path — a real fresh `~/.clyde` is recreated cleanly (app makes `events/` + `state/`, hook makes `logs/`) and running sessions still appear via the `pgrep` discovery path, so installing Clyde mid-session works. Turned up the accessibility-permission gap (below). A genuinely fresh *user account* is still untested: `$HOME` is ignored by `homeDirectoryForCurrentUser`, so faking one is impossible without creating a real account !md #qa

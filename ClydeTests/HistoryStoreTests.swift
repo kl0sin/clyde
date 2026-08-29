@@ -207,4 +207,34 @@ final class HistoryStoreTests: XCTestCase {
             atPath: dir.appendingPathComponent("spool.jsonl").path),
             "a spool with one bad byte must still be consumed, not retried forever")
     }
+    // MARK: - Recovering a broken store
+
+    /// A corrupt database left Clyde with history permanently switched
+    /// off: the review menu greys out, Settings says it is unavailable,
+    /// and nothing in the app could put it right. The file has to move
+    /// aside rather than be deleted — it is the user's data, and a
+    /// recovery that destroys what it could not read is not a recovery.
+    func testRebuildMovesTheUnreadableFileAsideAndStartsFresh() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-rebuild-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dbURL = dir.appendingPathComponent("history.sqlite")
+        try Data("this is not a database".utf8).write(to: dbURL)
+
+        XCTAssertThrowsError(try HistoryStore(directory: dir),
+                             "a corrupt file must not open as a working store")
+
+        let store = try HistoryStore.rebuild(directory: dir)
+        try store.insert([HistoryEvent(ts: Date(), event: "Stop", sessionID: "s1",
+                                       project: "/repo", tool: nil, summary: nil)])
+
+        XCTAssertEqual(store.eventCount(), 1, "the fresh store works")
+
+        let salvaged = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            .filter { $0.hasPrefix("history.sqlite.unreadable-") }
+        XCTAssertEqual(salvaged.count, 1, "the unreadable file is kept, not deleted")
+        XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent(salvaged[0]), encoding: .utf8),
+                       "this is not a database", "kept byte for byte")
+    }
+
 }

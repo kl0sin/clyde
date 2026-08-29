@@ -39,6 +39,31 @@ final class HistoryStore {
     /// because it's inside `ingestPending()`'s.
     private let ingestQueue = DispatchQueue(label: "com.clyde.historystore.ingest")
 
+    /// Reopen the store after `init` refused the file on disk.
+    ///
+    /// A database Clyde cannot read leaves history switched off for good:
+    /// the review greys out and Settings can only say so. This is the way
+    /// back. The unreadable file is moved aside, never deleted — it is the
+    /// user's data, and it may still be worth something to a tool that
+    /// knows more about SQLite than we do.
+    static func rebuild(directory: URL) throws -> HistoryStore {
+        let dbURL = directory.appendingPathComponent("history.sqlite")
+        if FileManager.default.fileExists(atPath: dbURL.path) {
+            let stamp = Int(Date().timeIntervalSince1970)
+            let aside = directory.appendingPathComponent("history.sqlite.unreadable-\(stamp)")
+            try? FileManager.default.removeItem(at: aside)
+            try FileManager.default.moveItem(at: dbURL, to: aside)
+            ClydeLog.general.info("History: moved unreadable database to \(aside.lastPathComponent, privacy: .public)")
+        }
+        // SQLite's sidecars describe the file that just moved; leaving them
+        // would have the fresh database adopt another file's journal.
+        for suffix in ["-wal", "-shm"] {
+            try? FileManager.default.removeItem(
+                at: directory.appendingPathComponent("history.sqlite\(suffix)"))
+        }
+        return try HistoryStore(directory: directory)
+    }
+
     init(directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         databaseURL = directory.appendingPathComponent("history.sqlite")

@@ -846,6 +846,24 @@ struct AdvancedSettingsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                if historyStore == nil && !appViewModel.historyAvailable {
+                    // Until now this state was a dead end: the panel hides
+                    // its route in, the menu item greys out, and nothing
+                    // anywhere could put history back.
+                    Button(action: {
+                        NotificationCenter.default.post(name: .clydeRebuildHistory, object: nil)
+                    }) {
+                        Text("Rebuild database")
+                            .font(.system(size: 11, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(Color(white: 0.18).opacity(0.6))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Moves the unreadable file aside and starts a fresh history. Nothing is deleted.")
+                }
+
                 if let store = historyStore {
                     Button(action: {
                         if clearHistoryConfirmation {
@@ -989,7 +1007,15 @@ struct AdvancedSettingsTab: View {
     }
 
     private var historySummaryText: String {
-        guard historyStore != nil else { return "History tracking is unavailable." }
+        guard historyStore != nil else {
+            // `historyAvailable` flips the moment a rebuild succeeds, but
+            // this view captured a nil store when it was built, so the
+            // figures cannot appear until it is reopened. Say that rather
+            // than leaving the old sentence standing as if nothing changed.
+            return appViewModel.historyAvailable
+                ? "History tracking is working again. Close and reopen Settings to see the figures."
+                : "History tracking is unavailable — the database could not be read."
+        }
         return Self.historySummary(
             eventCount: historyEventCount,
             sizeBytes: historySizeBytes,
@@ -1416,4 +1442,5 @@ extension Notification.Name {
     static let clydeOpenSettings = Notification.Name("clydeOpenSettings")
     static let clydeCopyDiagnostics = Notification.Name("clydeCopyDiagnostics")
     static let clydeOpenReview = Notification.Name("clydeOpenReview")
+    static let clydeRebuildHistory = Notification.Name("clydeRebuildHistory")
 }
