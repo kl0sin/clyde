@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0a0a10">
   <title>Clyde — A friendly Claude Code session monitor for macOS</title>
-  <meta name="description" content="Clyde lives in your menu bar and shows you what every Claude Code session is doing in real time. Free, open source, native macOS.">
+  <meta name="description" content="Clyde lives in your menu bar and shows you what every Claude Code session is doing in real time — then remembers where the day went. Free, open source, native macOS.">
 
   <!-- Open Graph -->
   <meta property="og:title" content="Clyde — Claude Code session monitor">
@@ -36,6 +36,7 @@
       </a>
       <nav aria-label="Primary">
         <a href="#showcase">Tour</a>
+        <a href="#review">Review</a>
         <a href="#features">Features</a>
         <a href="#how">How it works</a>
         <a href="#install">Install</a>
@@ -61,7 +62,7 @@
         <p class="tagline">Know what Claude is doing — without alt-tabbing.</p>
         <p class="subtagline">
           A friendly menu bar companion for Claude Code on macOS.
-          Real-time session tracking, attention alerts, multi-session view.
+          Real-time session tracking, attention alerts, and a review of where the day went.
         </p>
 
         <div class="cta-row">
@@ -164,6 +165,33 @@
       </div>
     </section>
 
+    <!-- SESSION REVIEW -->
+    <section class="review" id="review">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-label">New in 0.8</p>
+          <h2>Where did the day actually go?</h2>
+          <p class="section-sub">Clyde has always answered what Claude is doing right now. It now remembers what it did.</p>
+        </div>
+
+        <div class="review-layout">
+          <div class="review-copy">
+            <h3>Six months of work, one square per day.</h3>
+            <p>The review window opens on a calendar shaded by how long Claude worked — hover any day for the time, the turns and the project that took most of it. Underneath, the numbers for today or the week: how long Claude was busy, split into thinking and tool time, and the two worst moments of the period.</p>
+            <ul class="review-bullets">
+              <li><strong>Busy, honestly counted.</strong> A turn's wall-clock includes every tool call, so Clyde shows the split rather than passing your test suite off as the model thinking.</li>
+              <li><strong>Longest wait, longest turn.</strong> Running totals mislead — leave a session overnight and it reads fourteen hours. The worst single moment on each side is the one you can act on.</li>
+              <li><strong>Per project, with the tool it leaned on.</strong> Time and turns for every directory you worked in.</li>
+              <li><strong>Stays on your Mac.</strong> Kept locally and indefinitely; Settings shows what it costs and clears it in one click. Tool names and summaries only — never a word of your conversations.</li>
+            </ul>
+          </div>
+          <div class="review-image">
+            <img src="img/screenshots/review.png" alt="Clyde's session review window: a six-month activity calendar, tiles for busy time, turns, longest wait and longest turn, a thinking-versus-tools bar, per-project totals and a list of recent tool calls" loading="lazy" width="560" height="792">
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- FEATURES -->
     <section class="features" id="features">
       <div class="container">
@@ -195,6 +223,24 @@
             <div class="feature-icon icon-keys"></div>
             <h3>Quiet by default</h3>
             <p>Lives in your menu bar. Press <kbd>⌃⌘C</kbd> to expand, click to focus a session, snooze when you need quiet time.</p>
+          </div>
+
+          <div class="feature">
+            <div class="feature-icon icon-calendar"></div>
+            <h3>Session review</h3>
+            <p>An activity calendar of the last six months, plus busy time split into thinking and tools, the longest wait, and per-project totals. History stays on your Mac.</p>
+          </div>
+
+          <div class="feature">
+            <div class="feature-icon icon-agents"></div>
+            <h3>Agents &amp; plans</h3>
+            <p>See the subagents a session spawned and how far through its plan it is, nested under the session that started them — not just a spinner.</p>
+          </div>
+
+          <div class="feature">
+            <div class="feature-icon icon-branch"></div>
+            <h3>Worktrees &amp; sandboxes</h3>
+            <p>Sessions are badged with the git worktree they are working in, and Clyde tracks sessions running inside the cleat Docker sandbox alongside native ones.</p>
           </div>
 
           <div class="feature">

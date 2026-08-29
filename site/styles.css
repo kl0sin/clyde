@@ -671,6 +671,90 @@ h1 {
 .icon-shield::before { content: '🛡'; font-size: 16px; }
 .icon-source  { background: rgba(74, 144, 226, 0.15); color: var(--blue-bright); }
 .icon-source::before { content: '<>'; font-size: 14px; }
+.icon-calendar { background: rgba(191, 90, 242, 0.15); color: var(--purple-bright); }
+.icon-calendar::before { content: '\1F4C5'; font-size: 16px; }
+.icon-agents  { background: rgba(52, 199, 89, 0.15); color: var(--green-bright); }
+.icon-agents::before { content: '\21F6'; font-size: 20px; }
+.icon-branch  { background: rgba(74, 144, 226, 0.15); color: var(--blue-bright); }
+.icon-branch::before { content: '\2387'; font-size: 20px; }
+
+/* --- Session review ------------------------------------------------- */
+
+.review {
+  padding: 100px 0;
+  border-top: 1px solid var(--border);
+}
+
+.review-layout {
+  display: grid;
+  /* The screenshot is a tall window; giving the copy the wider column
+     keeps the image at a readable size instead of letting it dominate. */
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 56px;
+  align-items: center;
+  padding: 40px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.review-copy h3 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 14px;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.review-copy p {
+  font-size: 15px;
+  color: var(--text-dim);
+  line-height: 1.7;
+  margin: 0 0 22px;
+}
+
+.review-bullets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.review-bullets li {
+  position: relative;
+  padding-left: 26px;
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.review-bullets li strong { color: var(--text); font-weight: 650; }
+
+.review-bullets li::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--purple-bright);
+}
+
+.review-image {
+  display: flex;
+  justify-content: center;
+}
+
+.review-image img {
+  width: 100%;
+  max-width: 340px;
+  height: auto;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
 
 .feature h3 {
   font-size: 18px;
@@ -984,6 +1068,9 @@ footer {
   .features, .how, .install { padding: 80px 0; }
 
   .feature-grid { grid-template-columns: 1fr; }
+  .review { padding: 80px 0; }
+  .review-layout { grid-template-columns: 1fr; gap: 32px; padding: 28px; }
+  .review-copy h3 { font-size: 22px; }
   .how-grid { grid-template-columns: 1fr; }
 
   .showcase { padding: 80px 0 60px; }
