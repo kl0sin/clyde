@@ -102,8 +102,8 @@ Backlog. Pick when there's time or when community interest bumps priority.
 - [x] Parallel subagents in the panel — `clyde-hook` v20 writes `state/<sid>-agents/<tool_use_id>.json` on every `PreToolUse(Task)` and clears it on the matching `PostToolUse(Task)` / failure; `ProcessMonitor.refreshHookAgents` mirrors the existing `-tool` plumbing. `SessionRow` flips the second line to `<N> agents · <dur>` for N≥2 and renders a two-lines-per-agent block (type · duration, then summary) underneath, sorted oldest-first with a 3-visible cap and tap-to-expand `+N more` label. Defensive 30-min GC drops zombie rows; legacy `-subagent` fallback keeps v0.2.x sessions visible until next `claude` restart. !md #hooks #ux
 - [ ] Short demo video (30-60s) showing busy / ready / attention flow !md
 - [ ] Press kit folder — logos, screenshots, fact sheet !lo
-- [ ] Launch post on Product Hunt and r/ClaudeAI — hold until the v0.8.0 review surface exists, so the post has a screenshot worth clicking !md
-- [ ] Refresh the landing page around agent teams and session stats — it still sells the v0.2.x feature set !md #ux
+- [ ] Launch post on Product Hunt and r/ClaudeAI — the v0.8.0 review surface now exists, so the hold is lifted; the screenshot is at `site/img/screenshots/review.png` !md
+- [x] Refresh the landing page around agent teams and session stats — a dedicated Session review section with a screenshot, and the feature grid grown from six cards to nine !md #ux
 - [ ] Opt-in crash reporting (Sentry / KSCrash / MetricKit), off by default !lo
 - [ ] Opt-in anonymous usage analytics, off by default !lo
 - [ ] App Store yes/no decision (likely no — sandbox + StoreKit cost) !lo
