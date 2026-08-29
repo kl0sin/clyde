@@ -263,6 +263,41 @@ final class HistoryStatsTests: XCTestCase {
         XCTAssertEqual(totals.longestWaitSeconds, 0)
     }
 
+    /// The heatmap asks for half a year at once, and its first
+    /// implementation picked each day's busiest project with a correlated
+    /// subquery — re-running a window function over the whole range once
+    /// per day. On the author's small database it was instant; seeded with
+    /// a year of real usage it took 140 seconds, which is a review window
+    /// that never fills in.
+    ///
+    /// The budget here is deliberately loose. It is not measuring how fast
+    /// the query is, it is failing the shape that grows with days times
+    /// rows — that shape blows through any budget you pick.
+    func testDailyActivityStaysFastOverALongRange() throws {
+        let store = try makeStore()
+        let day = 86_400
+        var seeded: [HistoryEvent] = []
+        for d in 0..<180 {
+            for turn in 0..<50 {
+                let start = d * day + turn * 600
+                seeded.append(event("UserPromptSubmit", at: start,
+                                    session: "s\(d)", project: "/repo\(turn % 4)"))
+                seeded.append(event("Stop", at: start + 60,
+                                    session: "s\(d)", project: "/repo\(turn % 4)"))
+            }
+        }
+        try store.insert(seeded)
+
+        let started = ProcessInfo.processInfo.systemUptime
+        let days = HistoryStats(store: store).dailyActivity(
+            from: Date(timeIntervalSince1970: 0),
+            to: Date(timeIntervalSince1970: TimeInterval(180 * day)))
+        let elapsed = ProcessInfo.processInfo.systemUptime - started
+
+        XCTAssertEqual(days.count, 180, "every seeded day is reported")
+        XCTAssertLessThan(elapsed, 3.0, "took \(elapsed)s — the per-day subquery is back")
+    }
+
     // MARK: - Activity trail
 
     /// The trail answers "what did Claude actually do", so it carries the

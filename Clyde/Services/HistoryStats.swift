@@ -257,38 +257,45 @@ final class HistoryStats {
     func dailyActivity(from: Date, to: Date) -> [DayActivity] {
         var result: [DayActivity] = []
         let sql = """
-            SELECT day, SUM(worked) AS worked, SUM(turn) AS turns,
-                   -- The project with the most seconds that day. Grouping
-                   -- inside an aggregate needs a correlated pick, and
-                   -- SQLite's bare-column rule makes MAX() carry its row.
-                   (SELECT p.project FROM (
-                      SELECT project, SUM(worked) AS pworked FROM (
-                        SELECT date(ts, 'unixepoch', 'localtime') AS d, project,
-                               CASE WHEN event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
-                                    THEN dt ELSE 0 END AS worked
-                        FROM (
-                          SELECT ts, event, project,
-                                 LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt,
-                                 LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
-                          FROM events WHERE ts >= ?1 AND ts < ?2
-                            AND event IN ('UserPromptSubmit','Stop')
-                        )
-                      ) WHERE d = outer_day GROUP BY project
-                    ) p ORDER BY p.pworked DESC, p.project ASC LIMIT 1) AS top_project
-            FROM (
-              SELECT date(ts, 'unixepoch', 'localtime') AS day,
-                     date(ts, 'unixepoch', 'localtime') AS outer_day,
+            -- One pass, not one per day. The first version picked each day's
+            -- busiest project with a correlated subquery, which re-ran the
+            -- window function over the entire range for every day it
+            -- returned. Half a year of heavy use took 140 seconds; the
+            -- review window opens on this query, so it simply never filled
+            -- in. Both aggregates now read the same materialised pairs, and
+            -- the pick is a ranked join.
+            WITH pairs AS (
+              SELECT ts, event, project,
+                     LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt,
+                     LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
+              FROM events WHERE ts >= ?1 AND ts < ?2
+                AND event IN ('UserPromptSubmit','Stop')
+            ),
+            marked AS (
+              SELECT date(ts, 'unixepoch', 'localtime') AS day, project,
                      CASE WHEN event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
                           THEN dt ELSE 0 END AS worked,
                      CASE WHEN event = 'UserPromptSubmit' THEN 1 ELSE 0 END AS turn
-              FROM (
-                SELECT ts, event,
-                       LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt,
-                       LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
-                FROM events WHERE ts >= ?1 AND ts < ?2
-                  AND event IN ('UserPromptSubmit','Stop')
-              )
-            ) GROUP BY day HAVING turns > 0 ORDER BY day
+              FROM pairs
+            ),
+            per_day AS (
+              SELECT day, SUM(worked) AS worked, SUM(turn) AS turns
+              FROM marked GROUP BY day
+            ),
+            -- Same tie-break as before: most seconds wins, and an all-zero
+            -- day falls back to the alphabetically first project rather
+            -- than to whichever row the engine happened to keep.
+            ranked AS (
+              SELECT day, project,
+                     ROW_NUMBER() OVER (PARTITION BY day
+                                        ORDER BY SUM(worked) DESC, project ASC) AS rank
+              FROM marked GROUP BY day, project
+            )
+            SELECT per_day.day, per_day.worked, per_day.turns, ranked.project
+            FROM per_day LEFT JOIN ranked
+              ON ranked.day = per_day.day AND ranked.rank = 1
+            WHERE per_day.turns > 0
+            ORDER BY per_day.day
             """
 
         let formatter = DateFormatter()
