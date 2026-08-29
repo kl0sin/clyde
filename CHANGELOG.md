@@ -6,6 +6,12 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+A fix for a regression in 0.8.0: on many Macs the expanded panel opened at more than three times its intended height, running off the bottom of the screen and taking the Activity bar with it. If that is what you have been looking at, this is the release that fixes it.
+
+- **The panel is the size it says it is again.** In 0.8.0 it could open at 400×1476 instead of 400×420 — tall enough to hang off the bottom of the screen, with the Activity bar and the summary line out of reach below the edge. The session list is a scrollable area with no fixed height, and macOS was sizing the whole window to fit it. Both the panel and the widget now decline any size but their own.
+- **A history database that cannot be read can be rebuilt.** Until now a corrupt file meant history was switched off for good: the review greyed out and Settings could only tell you it was unavailable. Settings → Advanced now offers "Rebuild database", which moves the unreadable file aside — it is never deleted — and starts a fresh one. Anything still waiting in the spool is picked up straight away.
+
+
 ## [0.8.0] — 2026-08-29
 
 Clyde has always answered what Claude is doing right now. This release adds the other question: what it did. A new Session review window keeps a local history of your sessions and reports where the day went — how long Claude was busy, how much of that was the model rather than your test suite, which projects took the time, and the moments you and Claude spent waiting on each other. Alongside it, sessions that were never really there stop appearing, and one that started before Clyde did now shows up while it works.
