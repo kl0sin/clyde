@@ -32,7 +32,7 @@ final class HistoryStats {
     func totals(from: Date, to: Date) -> PeriodTotals {
         let turns = rows(
             """
-            SELECT SUM(dt), COUNT(*) FROM (
+            SELECT SUM(dt), COUNT(*), MAX(dt) FROM (
               SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt, event,
                      LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
               FROM events
@@ -65,8 +65,6 @@ final class HistoryStats {
                 AND event IN ('UserPromptSubmit','Stop')
             ) WHERE event = 'Stop' AND next_event = 'UserPromptSubmit' AND dt IS NOT NULL
             """)
-        let blocked = scalarInt(
-            "SELECT COUNT(*) FROM events WHERE event = 'PermissionRequest' AND ts >= \(epoch(from)) AND ts < \(epoch(to))") ?? 0
         let promptCount = scalarInt(
             "SELECT COUNT(*) FROM events WHERE event = 'UserPromptSubmit' AND ts >= \(epoch(from)) AND ts < \(epoch(to))") ?? 0
         let sessionCount = scalarInt(
@@ -81,7 +79,10 @@ final class HistoryStats {
             turns: promptCount,
             sessions: sessionCount,
             longestWaitSeconds: longestWait.first?.first.flatMap { $0.map(Int.init) } ?? 0,
-            blockedCount: blocked,
+            // Column 2 of the same turn query: the pairs are already built
+            // there, and asking twice would mean keeping two copies of a
+            // window function in sync.
+            longestTurnSeconds: turns.first?.dropFirst(2).first.flatMap { $0.map(Int.init) } ?? 0,
             toolSeconds: toolSeconds(from: from, to: to)
         )
     }

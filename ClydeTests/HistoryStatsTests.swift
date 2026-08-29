@@ -219,18 +219,39 @@ final class HistoryStatsTests: XCTestCase {
         XCTAssertEqual(totals.longestWaitSeconds, 300, "and the worst single wait is separate")
     }
 
-    /// How often a session sat blocked on a permission prompt — the other
-    /// moment where time disappears without anyone deciding to spend it.
-    func testBlockedCountsPermissionPrompts() throws {
+    /// The mirror of the longest wait, on Claude's side: the worst single
+    /// turn is the one worth looking at, and the sum of busy time hides it
+    /// completely. A permission-prompt count used to sit in this slot and
+    /// read 0 for anyone running without prompts, which is most of a
+    /// bypass-permissions session.
+    func testLongestTurnIsTheBiggestSinglePromptToStopNotTheSum() throws {
         let store = try makeStore()
         try store.insert([
-            event("PermissionRequest", at: 100),
-            event("PermissionRequest", at: 200),
-            event("PreToolUse", at: 300, tool: "Bash"),
+            event("UserPromptSubmit", at: 0), event("Stop", at: 30),      // 30s
+            event("UserPromptSubmit", at: 100), event("Stop", at: 400),   // 300s
+            event("UserPromptSubmit", at: 500), event("Stop", at: 520),   // 20s
         ])
 
-        XCTAssertEqual(HistoryStats(store: store)
-            .totals(from: wholeRange.from, to: wholeRange.to).blockedCount, 2)
+        let totals = HistoryStats(store: store).totals(from: wholeRange.from, to: wholeRange.to)
+
+        XCTAssertEqual(totals.workingSeconds, 350, "the sum still exists")
+        XCTAssertEqual(totals.longestTurnSeconds, 300, "and the worst single turn is separate")
+    }
+
+    /// A wait is not a turn. The two measure opposite sides of the same
+    /// event pair, and reading the gap as a turn would make an overnight
+    /// break look like Claude's longest piece of work.
+    func testLongestTurnIgnoresWaits() throws {
+        let store = try makeStore()
+        try store.insert([
+            event("UserPromptSubmit", at: 0), event("Stop", at: 10),
+            event("UserPromptSubmit", at: 6010), event("Stop", at: 6020),
+        ])
+
+        let totals = HistoryStats(store: store).totals(from: wholeRange.from, to: wholeRange.to)
+
+        XCTAssertEqual(totals.longestWaitSeconds, 6000)
+        XCTAssertEqual(totals.longestTurnSeconds, 10)
     }
 
     func testLongestWaitIsZeroWithoutAnyGap() throws {
@@ -240,7 +261,6 @@ final class HistoryStatsTests: XCTestCase {
         let totals = HistoryStats(store: store).totals(from: wholeRange.from, to: wholeRange.to)
 
         XCTAssertEqual(totals.longestWaitSeconds, 0)
-        XCTAssertEqual(totals.blockedCount, 0)
     }
 
     // MARK: - Activity trail

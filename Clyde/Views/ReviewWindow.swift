@@ -30,7 +30,7 @@ struct ReviewView: View {
     // reload on period change means the tiles briefly show the seeded
     // zero values, which reads the same as a genuinely empty period.
     @State private var totals = PeriodTotals(workingSeconds: 0, waitingSeconds: 0, turns: 0,
-                                             sessions: 0, longestWaitSeconds: 0, blockedCount: 0,
+                                             sessions: 0, longestWaitSeconds: 0, longestTurnSeconds: 0,
                                              toolSeconds: 0)
     @State private var projects: [ProjectRow] = []
     /// The grid is deliberately independent of the period switch: it is the
@@ -76,8 +76,12 @@ struct ReviewView: View {
                 tile("Busy", Self.duration(totals.workingSeconds))
                 tile("Turns", "\(totals.turns)", accessibilityValue: Self.turnLabel(totals.turns))
                 tile("Longest wait", Self.duration(totals.longestWaitSeconds))
-                tile("Blocked", "\(totals.blockedCount)",
-                     accessibilityValue: totals.blockedCount == 1 ? "1 permission prompt" : "\(totals.blockedCount) permission prompts")
+                // Was "Blocked", a count of permission prompts — which reads
+                // 0 for every session running without them, so the tile
+                // spent most of its life saying nothing. The worst single
+                // turn is always populated and is the one you would go look
+                // at.
+                tile("Longest turn", Self.duration(totals.longestTurnSeconds))
             }
 
             if totals.toolSeconds > 0 {

@@ -31,8 +31,10 @@ struct PeriodTotals: Equatable {
     /// fourteen hours — while the worst single wait names a moment you can
     /// actually do something about.
     let longestWaitSeconds: Int
-    /// How often a session sat blocked on a permission prompt.
-    let blockedCount: Int
+    /// The longest single prompt-to-Stop turn. The mirror of
+    /// `longestWaitSeconds`: the sum tells you the day was busy, this tells
+    /// you which turn to go look at.
+    let longestTurnSeconds: Int
     /// Of the busy time, how much was spent inside tool calls. Zero also
     /// means "not recorded" for history written before the hook reported
     /// durations, which is why the split is hidden rather than drawn as
