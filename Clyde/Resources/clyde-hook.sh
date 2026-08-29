@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 39
+# clyde-hook-version: 40
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -610,9 +610,28 @@ atomic_write() {
 # atomic, so parallel hooks cannot interleave, and Clyde claims the file
 # by renaming it rather than truncating it. Any failure is ignored — the
 # spool is a convenience, the user's session is not.
+# Nothing drains the spool but a running Clyde. If the app is removed or
+# simply never launched again while the hook stays installed, this file
+# grows by a line per event forever. Past the cap the hook stops
+# appending rather than truncating: whatever was already recorded still
+# gets ingested when Clyde comes back, and the events dropped in between
+# are ones no reader existed for.
+SPOOL_MAX_BYTES=10485760
+
 spool_append() {
     local extra=$1
     local spool="$HISTORY_DIR/spool.jsonl"
+
+    # `wc -c` rather than stat: one process either way, and this spelling
+    # is the portable one. A missing file reads as 0 and appends.
+    local size
+    size=$(wc -c <"$spool" 2>/dev/null | tr -d ' ')
+    case "$size" in
+        ''|*[!0-9]*) size=0 ;;
+    esac
+    if [ "$size" -ge "$SPOOL_MAX_BYTES" ]; then
+        return 0
+    fi
     # The spool accumulates Bash commands, Grep patterns and search
     # queries, so it gets the same 0600 posture as the database and
     # state markers rather than the default 0644. Only pay for the

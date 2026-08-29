@@ -1206,6 +1206,45 @@ final class HookScriptTests: XCTestCase {
         }
     }
 
+    /// Nothing drains the spool but a running Clyde. Uninstall the app,
+    /// or simply never launch it again, and the hook keeps appending a
+    /// line per event forever — a file that grows without bound in a
+    /// directory the user has no reason to look in. Past the cap the hook
+    /// stops appending rather than deleting: when Clyde comes back it
+    /// ingests everything that was already recorded, and the events lost
+    /// in between are the ones nobody could have been looking at.
+    func testSpoolStopsGrowingPastItsCap() throws {
+        let home = tempHome()
+        let spool = home.appendingPathComponent(".clyde/history/spool.jsonl")
+        try FileManager.default.createDirectory(at: spool.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        let oversized = String(repeating: "x", count: 11 * 1024 * 1024) + "\n"
+        try oversized.write(to: spool, atomically: true, encoding: .utf8)
+        let sizeBefore = try FileManager.default
+            .attributesOfItem(atPath: spool.path)[.size] as? Int
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"capped","cwd":"/repo","tool_name":"Bash","tool_input":{"command":"swift test"}}"#, home: home)
+
+        let sizeAfter = try FileManager.default
+            .attributesOfItem(atPath: spool.path)[.size] as? Int
+        XCTAssertEqual(sizeAfter, sizeBefore, "an oversized spool must neither grow nor be truncated")
+    }
+
+    /// The cap must not cost the common case anything: a spool of ordinary
+    /// size keeps taking every line.
+    func testSpoolBelowTheCapStillRecords() throws {
+        let home = tempHome()
+        let spool = home.appendingPathComponent(".clyde/history/spool.jsonl")
+        try FileManager.default.createDirectory(at: spool.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try (String(repeating: "x", count: 1024) + "\n")
+            .write(to: spool, atomically: true, encoding: .utf8)
+
+        try runHook(payload: #"{"hook_event_name":"PreToolUse","session_id":"under","cwd":"/repo","tool_name":"Bash","tool_input":{"command":"swift test"}}"#, home: home)
+
+        XCTAssertEqual(spoolLines(in: home).count, 1, "the JSON line was appended after the padding")
+    }
+
     func testSpoolRecordsAToolCallWithItsSummary() throws {
         let home = tempHome()
         let sid = "spool-0001"
