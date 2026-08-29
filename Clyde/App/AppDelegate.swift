@@ -602,6 +602,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let reviewItem = NSMenuItem(title: "Session review…", action: #selector(openReview), keyEquivalent: "")
         reviewItem.target = self
+        // A menu item that silently does nothing is the same defect as a
+        // button that does: when the history store failed to open, the
+        // panel hides its route into the review, and this one greys out
+        // and says why instead of swallowing the click. Settings carries
+        // the same message in full.
+        if historyStore == nil {
+            reviewItem.isEnabled = false
+            reviewItem.toolTip = "History tracking is unavailable — see Settings › Advanced."
+            menu.autoenablesItems = false
+        }
         menu.addItem(reviewItem)
 
         let updateItem = NSMenuItem(
