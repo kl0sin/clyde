@@ -7,7 +7,16 @@ final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    /// The widget's one permitted size. Same reasoning as
+    /// `ExpandedPanel.fixedSize`, and the same exposure: the comment where
+    /// this panel is built records an earlier round of SwiftUI content
+    /// pushing it a few points taller, which drifts the anchor maths that
+    /// places the expanded panel beside it. That was corrected with a
+    /// one-shot setFrame — the same defence that failed to hold in v0.8.0.
+    private let fixedSize: NSSize
+
     init(contentRect: NSRect) {
+        fixedSize = contentRect.size
         super.init(
             contentRect: contentRect,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -28,6 +37,19 @@ final class FloatingPanel: NSPanel {
         hasShadow = true
         animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    }
+
+    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+        super.setFrame(NSRect(origin: frameRect.origin, size: fixedSize), display: flag)
+    }
+
+    override func setFrame(_ frameRect: NSRect, display flag: Bool, animate: Bool) {
+        super.setFrame(NSRect(origin: frameRect.origin, size: fixedSize),
+                       display: flag, animate: animate)
+    }
+
+    override func setContentSize(_ size: NSSize) {
+        super.setContentSize(fixedSize)
     }
 }
 
@@ -180,7 +202,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.maxSize = widgetSize
 
         let widgetRoot = WidgetView(viewModel: appViewModel)
-        let widgetHostingView = NSHostingView(rootView: widgetRoot)
+        let widgetHostingView = NSHostingView(
+            rootView: widgetRoot.frame(width: widgetSize.width, height: widgetSize.height)
+        )
         widgetHostingView.translatesAutoresizingMaskIntoConstraints = true
         widgetHostingView.autoresizingMask = [.width, .height]
         widgetHostingView.frame = NSRect(origin: .zero, size: widgetSize)

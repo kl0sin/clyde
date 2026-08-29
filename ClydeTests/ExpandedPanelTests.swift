@@ -61,4 +61,21 @@ final class ExpandedPanelTests: XCTestCase {
 
         XCTAssertEqual(panel.frame.size, fixed)
     }
+    // MARK: - The widget panel, same exposure
+
+    /// The widget is 130×46 and the comment beside it records an earlier
+    /// incident of exactly this kind: SwiftUI content pushing the panel a
+    /// few points taller, which drifts the anchor maths that positions the
+    /// expanded panel beside it. It was corrected with the same one-shot
+    /// setFrame that failed to hold for the expanded panel in v0.8.0, so
+    /// it gets the same refusal rather than waiting for its turn.
+    func testWidgetPanelKeepsItsSize() {
+        let widget = FloatingPanel(contentRect: NSRect(x: 0, y: 0, width: 130, height: 46))
+
+        widget.setFrame(NSRect(x: 40, y: 60, width: 130, height: 300), display: false)
+
+        XCTAssertEqual(widget.frame.size, NSSize(width: 130, height: 46))
+        XCTAssertEqual(widget.frame.origin, NSPoint(x: 40, y: 60), "dragging the widget still works")
+    }
+
 }
