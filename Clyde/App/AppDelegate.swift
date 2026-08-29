@@ -99,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var diagnosticsObserver: NSObjectProtocol?
     private var reviewObserver: NSObjectProtocol?
     private var rebuildHistoryObserver: NSObjectProtocol?
+    private var panelResizeObserver: NSObjectProtocol?
 
     private(set) var historyStore: HistoryStore?
     private var historyIngestTimer: Timer?
@@ -117,6 +118,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NotificationCenter.default.removeObserver(token)
         }
         if let token = rebuildHistoryObserver {
+            NotificationCenter.default.removeObserver(token)
+        }
+        if let token = panelResizeObserver {
             NotificationCenter.default.removeObserver(token)
         }
         if let monitor = globalHotKeyMonitor {
@@ -210,7 +214,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appViewModel: appViewModel,
             sessionViewModel: sessionViewModel
         )
-        let expandedHostingView = NSHostingView(rootView: expandedRoot)
+        // Pin the SwiftUI content to the panel's size. AppKit sizes a
+        // window to its content view's fitting size, and the session list
+        // is a scroll view with no fixed height — so on the SDK the
+        // release is built against, that fitting size came out at 1476 and
+        // took the window with it. A pinned root has nothing to grow to,
+        // whichever SwiftUI is doing the measuring.
+        let expandedHostingView = NSHostingView(
+            rootView: expandedRoot.frame(width: expandedSize.width,
+                                         height: expandedSize.height)
+        )
         expandedHostingView.translatesAutoresizingMaskIntoConstraints = true
         expandedHostingView.autoresizingMask = [.width, .height]
         expandedHostingView.frame = NSRect(origin: .zero, size: expandedSize)
@@ -259,6 +272,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .clydeOpenSettings, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.showSettingsWindow() }
+        }
+        // Last line of defence for the panel's geometry. The overrides on
+        // ExpandedPanel block the documented paths, but this bug arrived
+        // from a layout pass on an SDK that cannot be reproduced here, so
+        // the assumption that those are the only paths is exactly the kind
+        // of assumption that shipped it. Every resize, by any route, ends
+        // in this notification.
+        panelResizeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification, object: expandedPanel, queue: .main
+        ) { [weak self] _ in
+            guard let self, self.expandedPanel.frame.size != self.expandedSize else { return }
+            ClydeLog.general.error("Panel was resized to \(NSStringFromSize(self.expandedPanel.frame.size), privacy: .public) — restoring")
+            self.expandedPanel.setFrame(
+                NSRect(origin: self.expandedPanel.frame.origin, size: self.expandedSize),
+                display: true
+            )
         }
         rebuildHistoryObserver = NotificationCenter.default.addObserver(
             forName: .clydeRebuildHistory, object: nil, queue: .main

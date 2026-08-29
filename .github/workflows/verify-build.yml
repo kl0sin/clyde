@@ -1,0 +1,40 @@
+name: Verify build
+
+# Builds the app exactly the way a release does — same runner, same SDK —
+# and uploads the bundle as an artifact. Publishes nothing.
+#
+# It exists because v0.8.0 shipped a panel three times its intended height
+# that could not be reproduced on the development machine: the runner
+# builds against an older macOS SDK whose SwiftUI sizes the view tree
+# differently, so every local screenshot was of a binary without the
+# defect. Anything about window geometry has to be checked on a bundle
+# built here, and until now the only way to get one was to publish a
+# release.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'verify/**'
+
+jobs:
+  build:
+    runs-on: macos-14   # Same runner as release.yml — the SDK is the point
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: scripts/release/build.sh
+
+      - name: Report the SDK it was built against
+        run: |
+          otool -l build/release/Clyde.app/Contents/MacOS/Clyde \
+            | grep -A4 LC_BUILD_VERSION | grep -E 'minos|sdk' | head -4
+
+      - name: Package
+        run: ditto -c -k --keepParent build/release/Clyde.app Clyde-app.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Clyde-app
+          path: Clyde-app.zip
+          retention-days: 3
