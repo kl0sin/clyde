@@ -6,22 +6,34 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+Clyde has always answered what Claude is doing right now. This release adds the other question: what it did. A new Session review window keeps a local history of your sessions and reports where the day went — how long Claude was busy, how much of that was the model rather than your test suite, which projects took the time, and the moments you and Claude spent waiting on each other. Alongside it, sessions that were never really there stop appearing, and one that started before Clyde did now shows up while it works.
+
+### Session review
+
 - **The review window opens on a calendar of your activity.** Six months of days, one square each, shaded by how long Claude worked — the shape you already know from a contribution graph. Hovering a day tells you the date, the time worked, the number of turns and which project took most of it; days with nothing recorded say so rather than hiding among the quiet ones.
-- **A new Activity list shows what Claude actually did**, newest first: the time, the tool and what it ran. Clicking a project narrows the list to it. The numbers above deliberately keep describing the whole period, so filtering the list never quietly changes what they mean.
-- **The summary numbers answer questions you can act on.** Running totals were misleading: "waiting on you" reports fourteen hours if you leave a session overnight, and a session count told you nothing at all. In their place are the two worst moments of the period — the longest single wait, when Claude sat idle on you, and the longest single turn, when you sat waiting on Claude.
-- **"Working" is now "Busy", and it says what it was made of.** The figure was never time the model spent thinking: it is wall-clock with a turn open, so a minute of it can be a test suite your machine ran. A bar under the tiles now splits it — `Thinking 21m · Tools 34m` — using the duration Claude Code reports for every tool call. Parallel calls inside one turn are counted once, not once each. Days recorded before this release have no split and show none, rather than being drawn as if every second were thinking.
-- **The session review is now reachable from the panel.** A calendar button sits beside the Activity header's chevron, and the welcome screen names the feature — until now the window opened only from the menu bar menu, which meant most people would never have found the thing this release is built around.
-- **The activity calendar no longer stalls on a real history.** Picking each day's busiest project re-ran a query across the whole six-month range once per day, which is unnoticeable on a week of history and took over two minutes on a year of it — long enough that the calendar simply never appeared.
-- **The history spool no longer grows without limit.** Only a running Clyde empties it, so leaving the hook installed while the app sits unused meant a file that grew forever. It now stops at 10 MB and keeps everything already recorded, which is ingested the next time Clyde runs.
-- **The review window looks like the rest of Clyde**, rather than a system form: the mascot header, the app's own palette and typography, and figures that hold their place instead of shuffling as they update.
+- **"Busy" says what it was made of.** The headline figure was never time the model spent thinking: it is wall-clock with a turn open, so a minute of it can be a test suite your machine ran. A bar under the tiles now splits it — `Thinking 21m · Tools 34m` — using the duration Claude Code reports for every tool call. Parallel calls inside one turn are counted once, not once each. Days recorded before this release have no split and show none, rather than being drawn as if every second were thinking.
+- **The other numbers answer questions you can act on.** Running totals mislead: "waiting on you" reads fourteen hours if you leave a session overnight, and a session count told you nothing at all. In their place are the two worst moments of the period — the longest single wait, when Claude sat idle on you, and the longest single turn, when you sat waiting on Claude.
+- **An Activity list shows what Claude actually did**, newest first: the time, the tool and what it ran. Clicking a project narrows the list to it. The numbers above deliberately keep describing the whole period, so filtering the list never quietly changes what they mean.
+- **A per-project breakdown** of time, turns and the tool each project leaned on.
+- **History stays on your Mac, indefinitely.** Settings shows what it costs and clears it behind a confirmation. Nothing from your conversations is stored — only the same tool names and summaries the panel already shows you.
+- **Reachable from the panel**, not just the menu bar: a calendar button sits beside the Activity header's chevron, and the welcome screen names the feature.
+- **It looks like the rest of Clyde**, rather than a system form: the mascot header, the app's own palette and typography, and figures that hold their place instead of shuffling as they update.
+
+### Sessions Clyde gets right now
 
 - **No more sessions that were never there.** Clyde used to treat any running program named `claude` as a Claude Code session, without checking whether it was one. Its own test suite trips that — and so does anything else on your machine with that name — so the panel could fill with rows named after a directory, none of which ever showed as working, each lingering as "Ended" after it vanished. Sessions are now recognised from what Claude Code actually reports, so a row appears when there is genuinely a session behind it.
 - **Sessions that started before Clyde did now show up while they work.** Previously such a session stayed invisible until you sent it your next message, even if it was busy the whole time. It now appears within seconds of doing anything.
 - **A session running a single agent shows it.** The panel announced agents only from two upwards, so one agent working on its own looked like nothing was happening. It now reads `1 agent · 0:12` with the agent listed underneath, the same as any larger group.
 
+### First run, and the shortcut that did nothing
+
 - **Clyde now tells you when the ⌃⌘C shortcut can't work.** The global shortcut needs accessibility access from macOS, and without it macOS silently ignores the keypress — so the shortcut Clyde advertises on first run simply did nothing, with no explanation. Clyde now notices and shows a dismissable banner with a button that takes you straight to the right System Settings pane. Everything else keeps working; only the shortcut needs the permission.
 - **The welcome screen describes what Clyde actually does now.** It still advertised the v0.2 feature set and said nothing about the tool line, plan progress, subagents or the badges added since. It also warns up front that macOS may ask for accessibility access, which is the most likely reason a new install seems to ignore the shortcut.
-- **Clyde remembers what happened.** A new Session review window answers where the day went: how long Claude spent working, how long sessions sat waiting on you, how many turns you took, and which projects took the time. History is kept locally and indefinitely — Settings shows what it costs and a confirm-then-clear button lets you wipe it. Nothing from your conversations is stored: only the same tool names and summaries the panel already shows you.
+
+### Under the hood
+
+- **The activity calendar no longer stalls on a real history.** Picking each day's busiest project re-ran a query across the whole six-month range once per day — unnoticeable on a week of history, and over two minutes on a year of it, which is a calendar that never appears.
+- **The history spool no longer grows without limit.** Only a running Clyde empties it, so leaving the hook installed while the app sits unused meant a file that grew forever. It now stops at 10 MB and keeps everything already recorded, which is ingested the next time Clyde runs.
 
 ## [0.7.1] — 2026-08-27
 
