@@ -6,6 +6,8 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-29
+
 Clyde has always answered what Claude is doing right now. This release adds the other question: what it did. A new Session review window keeps a local history of your sessions and reports where the day went — how long Claude was busy, how much of that was the model rather than your test suite, which projects took the time, and the moments you and Claude spent waiting on each other. Alongside it, sessions that were never really there stop appearing, and one that started before Clyde did now shows up while it works.
 
 ### Session review
