@@ -84,7 +84,7 @@ struct ReviewView: View {
                 tile("Longest turn", Self.duration(totals.longestTurnSeconds))
             }
 
-            if totals.toolSeconds > 0 {
+            if Self.showsBusySplit(working: totals.workingSeconds, tools: totals.toolSeconds) {
                 busySplit
             }
 
@@ -292,6 +292,22 @@ struct ReviewView: View {
         .accessibilityLabel("Review period")
     }
 
+    /// The bar divides busy time, so it can only be drawn when there is
+    /// busy time and the parts fit inside it.
+    ///
+    /// Tool time is recorded as each call ends; busy time only exists once
+    /// a turn reaches its Stop. Mid-turn the parts therefore exceed the
+    /// whole, and a period whose only turn is still running has tools
+    /// inside a busy total of zero — which the first version drew as a
+    /// full-width bar under a tile reading "0s".
+    ///
+    /// Zero tool time means "not recorded" for history from before the
+    /// hook reported durations, so that hides the bar too rather than
+    /// claiming every second was thinking.
+    static func showsBusySplit(working: Int, tools: Int) -> Bool {
+        working > 0 && tools > 0 && tools <= working
+    }
+
     /// Part-to-whole for one number, so a bar rather than a second set of
     /// tiles: two segments with a surface gap between them and their
     /// labels attached directly, no legend to look up.
@@ -478,10 +494,15 @@ struct ReviewView: View {
             Text("Nothing recorded yet")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(TextColor.disabled)
+            // fixedSize, because the surrounding layout squeezed this to
+            // one line and truncated it to "…and it…" — a sentence that
+            // stops mid-clause in the one place a new user is guaranteed
+            // to look.
             Text("Work in any Claude session and it\nwill show up here.")
                 .font(.system(size: 11))
                 .foregroundStyle(Color(white: 0.4))
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.lg)
