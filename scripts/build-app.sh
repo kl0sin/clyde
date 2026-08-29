@@ -28,6 +28,18 @@ cp "$BUILD_DIR/$APP_NAME" "$MACOS/$APP_NAME"
 # Copy Info.plist
 cp Clyde/Info.plist "$CONTENTS/Info.plist"
 
+# Copy SwiftPM's resource bundle. Without it `Bundle.module` finds nothing,
+# so the app cannot install its own hook and reports the bundled script as
+# missing — while a hook copied there by hand keeps the app looking healthy.
+# scripts/release/build.sh has always done this; this script did not, which
+# meant every live scenario ran against a bundle unlike the shipped one.
+RESOURCE_BUNDLE="$BUILD_DIR/${APP_NAME}_${APP_NAME}.bundle"
+if [ -d "$RESOURCE_BUNDLE" ]; then
+    cp -R "$RESOURCE_BUNDLE" "$RESOURCES/"
+else
+    echo "⚠️  ${APP_NAME}_${APP_NAME}.bundle not found — the app will not find its hook script."
+fi
+
 # Copy app icon if present
 if [ -f "Clyde/Assets/AppIcon.icns" ]; then
     cp Clyde/Assets/AppIcon.icns "$RESOURCES/AppIcon.icns"
