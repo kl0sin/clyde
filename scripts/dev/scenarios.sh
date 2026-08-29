@@ -96,6 +96,7 @@ list)
     note "fresh-install      a brand-new ~/.clyde must rebuild and still find sessions"
     note "history-review     seed history and open the review window"
     note "upgrade            install the last release, then upgrade to this build over it"
+    note "panel-size         measure the running app's panel — run it against a RELEASED build"
     note "settings-history   history size, and whether the numbers go stale"
     note "accessibility      the banner shown when the global shortcut has no permission"
     note "restore            put ~/.clyde and the installed hook back"
@@ -238,6 +239,38 @@ OSA
     note "bundled script), or no history/ directory (the store failed to open)"
     note "your real history is at $HISTORY_BACKUP — restore with:"
     note "  killall Clyde; rm -rf $CLYDE_DIR/history; cp -R $HISTORY_BACKUP $CLYDE_DIR/history"
+    ;;
+
+# v0.8.0 shipped a panel three times its intended height. It never
+# reproduced locally: the release workflow builds against an older macOS
+# SDK whose SwiftUI sizes the view tree differently, so every local check
+# measured a binary that did not have the defect. The lesson is that
+# window geometry has to be measured on the artifact users install, which
+# is what this scenario is for. Run it after every release, against the
+# DMG — not against a local build.
+panel-size)
+    EXPECTED_W=400
+    EXPECTED_H=420
+    say "Measuring the panel of whatever Clyde is currently running"
+    note "version: $(defaults read /Applications/Clyde.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo unknown)"
+    open_panel
+    SIZE=$(osascript <<'OSA' 2>/dev/null
+tell application "System Events" to tell process "Clyde"
+  repeat with w in windows
+    set sz to size of w
+    if (item 1 of sz) is 400 then return ((item 1 of sz) as text) & "x" & ((item 2 of sz) as text)
+  end repeat
+  return "no-panel"
+end tell
+OSA
+)
+    note "panel: $SIZE (expected ${EXPECTED_W}x${EXPECTED_H})"
+    if [ "$SIZE" = "${EXPECTED_W}x${EXPECTED_H}" ]; then
+        say "PASS"
+    else
+        say "FAIL — the panel is not the size it declares"
+        note "a panel taller than the screen loses its Activity bar off the bottom edge"
+    fi
     ;;
 
 settings-history)
