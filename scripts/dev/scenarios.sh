@@ -95,6 +95,7 @@ list)
     note "single-agent       one running subagent must be visible in its parent row"
     note "fresh-install      a brand-new ~/.clyde must rebuild and still find sessions"
     note "history-review     seed history and open the review window"
+    note "upgrade            install the last release, then upgrade to this build over it"
     note "settings-history   history size, and whether the numbers go stale"
     note "accessibility      the banner shown when the global shortcut has no permission"
     note "restore            put ~/.clyde and the installed hook back"
@@ -178,6 +179,65 @@ OSA
     sleep 3
     shot history-review
     say "PASS if working time reads 15m, waiting 10m, turns 2, and the project is listed"
+    ;;
+
+# The path every existing user takes, and the one no unit test covers: a
+# released build is already running, with its older hook installed and no
+# history database. Everything the upgrade has to do — reinstall the hook,
+# create the store, open the review window — happens on their machine, once,
+# unattended. If it goes wrong there is no second chance to notice.
+upgrade)
+    snapshot_once
+    PREV=$(git -C "$REPO_ROOT" tag --sort=-v:refname | head -1)
+    say "Installing the last release ($PREV) as the starting point"
+    DMG="$SNAPSHOT/$PREV.dmg"
+    if [ ! -f "$DMG" ]; then
+        gh release download "$PREV" --repo kl0sin/clyde --pattern '*.dmg' \
+            --dir "$SNAPSHOT" --clobber >/dev/null 2>&1 || { note "could not download $PREV"; exit 1; }
+        mv "$SNAPSHOT"/*.dmg "$DMG" 2>/dev/null
+    fi
+    kill_all_clyde
+    # Start from no history at all, the way an upgrading user does — but
+    # keep a copy per run. snapshot_once only captures the FIRST run, so
+    # without this a second run deletes real history with no backup behind
+    # it. That is not hypothetical: it happened here.
+    HISTORY_BACKUP="$SNAPSHOT/history-before-upgrade"
+    if [ -d "$CLYDE_DIR/history" ]; then
+        rm -rf "$HISTORY_BACKUP"
+        cp -R "$CLYDE_DIR/history" "$HISTORY_BACKUP"
+        note "history backed up to $HISTORY_BACKUP"
+    fi
+    rm -rf "$CLYDE_DIR/history"
+    rm -f "$HOOK_INSTALLED"
+    MOUNT=$(hdiutil attach -nobrowse -readonly "$DMG" | tail -1 | awk -F'\t' '{print $NF}')
+    rm -rf /Applications/Clyde.app
+    cp -R "$MOUNT/Clyde.app" /Applications/Clyde.app
+    hdiutil detach "$MOUNT" >/dev/null
+    open /Applications/Clyde.app
+    sleep 6
+    note "released version: $(defaults read /Applications/Clyde.app/Contents/Info.plist CFBundleShortVersionString)"
+    note "hook it installed: $(grep -m1 'clyde-hook-version' "$HOOK_INSTALLED" 2>/dev/null || echo NONE)"
+
+    say "Upgrading in place to this working tree"
+    build_and_run
+    sleep 8
+    note "hook after upgrade: $(grep -m1 'clyde-hook-version' "$HOOK_INSTALLED" 2>/dev/null || echo NONE)"
+    note "history dir: $(ls "$CLYDE_DIR/history" 2>/dev/null | tr '\n' ' ')"
+    osascript >/dev/null 2>&1 <<'OSA'
+tell application "System Events" to tell process "Clyde"
+  click menu bar item 1 of menu bar 2
+  delay 1
+  click menu item "Session review…" of menu 1 of menu bar item 1 of menu bar 2
+end tell
+OSA
+    sleep 3
+    shot upgrade
+    say "PASS if the hook version rose to the bundled one, history.sqlite exists,"
+    note "and the review window opened without an error dialog"
+    note "FAIL looks like: hook still at the old version (the app cannot find its"
+    note "bundled script), or no history/ directory (the store failed to open)"
+    note "your real history is at $HISTORY_BACKUP — restore with:"
+    note "  killall Clyde; rm -rf $CLYDE_DIR/history; cp -R $HISTORY_BACKUP $CLYDE_DIR/history"
     ;;
 
 settings-history)
