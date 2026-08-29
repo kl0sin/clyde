@@ -59,7 +59,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// widget anchor through `WidgetAnchor.expandedOrigin`.
     var expandedPanel: ExpandedPanel!
     var appViewModel: AppViewModel!
-    private var reviewObserver: NSObjectProtocol?
     var sessionViewModel: SessionListViewModel!
     var statusItem: NSStatusItem?
 
@@ -98,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var widgetMoveObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     private var diagnosticsObserver: NSObjectProtocol?
+    private var reviewObserver: NSObjectProtocol?
 
     private(set) var historyStore: HistoryStore?
     private var historyIngestTimer: Timer?
@@ -110,6 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NotificationCenter.default.removeObserver(token)
         }
         if let token = widgetMoveObserver {
+            NotificationCenter.default.removeObserver(token)
+        }
+        if let token = reviewObserver {
             NotificationCenter.default.removeObserver(token)
         }
         if let monitor = globalHotKeyMonitor {

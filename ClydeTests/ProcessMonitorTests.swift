@@ -1244,4 +1244,44 @@ final class ProcessMonitorTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: agentsDir.path))
     }
+    // MARK: - Long-running resource hygiene
+
+    /// Clyde is a menu bar app that runs for days. The state-directory
+    /// watcher opens a file descriptor and closes it from the source's
+    /// cancel handler — and the first version read that descriptor back
+    /// off the monitor at cancel time rather than capturing the one the
+    /// source was created with. Cancellation is asynchronous, so a
+    /// restart could close the descriptor its own replacement had just
+    /// opened, and a monitor deallocated without stopPolling() leaked one
+    /// outright, because the handler's `weak self` was already nil.
+    ///
+    /// Neither bites today: the watcher starts once per launch. This test
+    /// exists so that stays true for whoever adds a restart.
+    func testRestartingTheWatcherDoesNotLeakFileDescriptors() throws {
+        let dir = tempStateDir()
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1,
+                                     stateDir: dir, isLiveClaudeProcessCheck: { _ in true })
+
+        monitor.startPolling()
+        monitor.stopPolling()
+        // Cancel handlers run asynchronously on the main queue.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        let settled = Self.openFileDescriptorCount()
+
+        for _ in 0..<25 {
+            monitor.startPolling()
+            monitor.stopPolling()
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+
+        let after = Self.openFileDescriptorCount()
+        XCTAssertLessThanOrEqual(after, settled + 3,
+                                 "25 restarts leaked \(after - settled) descriptors")
+        monitor.stopPolling()
+    }
+
+    private static func openFileDescriptorCount() -> Int {
+        (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count) ?? 0
+    }
+
 }

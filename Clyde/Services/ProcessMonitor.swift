@@ -46,7 +46,6 @@ final class ProcessMonitor: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var stateWatchTask: Task<Void, Never>?
     private var stateDirSource: DispatchSourceFileSystemObject?
-    private var stateDirFD: Int32 = -1
 
     /// PIDs the hook state watcher currently considers busy.
     /// This is updated by a fast (~500ms) file-system poll on `~/.clyde/state/`,
@@ -109,7 +108,8 @@ final class ProcessMonitor: ObservableObject {
         // Release everything we hold so resources don't outlive the monitor
         // when nobody calls stopPolling() before deallocation.
         // Task.cancel() and DispatchSource.cancel() are both safe to invoke
-        // from a nonisolated context. The cancel handler closes stateDirFD.
+        // from a nonisolated context. The cancel handler closes the
+        // descriptor it captured.
         pollTask?.cancel()
         stateWatchTask?.cancel()
         stateDirSource?.cancel()
@@ -1203,8 +1203,6 @@ final class ProcessMonitor: ObservableObject {
             ClydeLog.process.error("Failed to open state dir for FSEvents watching")
             return
         }
-        stateDirFD = fd
-
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             eventMask: [.write, .delete, .rename, .extend, .attrib],
@@ -1213,11 +1211,15 @@ final class ProcessMonitor: ObservableObject {
         source.setEventHandler { [weak self] in
             self?.pollHookState()
         }
-        source.setCancelHandler { [weak self] in
-            if let fd = self?.stateDirFD, fd >= 0 {
-                close(fd)
-                self?.stateDirFD = -1
-            }
+        // Capture `fd` rather than reading it back off the monitor.
+        // Cancellation is asynchronous: by the time this runs, a restart
+        // may already have opened a replacement descriptor and stored it
+        // where the old value used to be, and this handler would close
+        // that one instead. Capturing also means the descriptor is
+        // released when the monitor is deallocated without stopPolling()
+        // — a `weak self` here is nil exactly then, so the fd leaked.
+        source.setCancelHandler {
+            close(fd)
         }
         source.resume()
         stateDirSource = source
