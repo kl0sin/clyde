@@ -60,7 +60,8 @@ struct ExpandedView: View {
 
             Spacer(minLength: 0)
 
-            ActivityTimelineView(log: appViewModel.activityLog)
+            ActivityTimelineView(log: appViewModel.activityLog,
+                                 showsReview: appViewModel.historyAvailable)
 
             SummaryBar(
                 sessionCount: sessionViewModel.sessionCount,

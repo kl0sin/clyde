@@ -1415,4 +1415,5 @@ struct AcknowledgementsSheet: View {
 extension Notification.Name {
     static let clydeOpenSettings = Notification.Name("clydeOpenSettings")
     static let clydeCopyDiagnostics = Notification.Name("clydeCopyDiagnostics")
+    static let clydeOpenReview = Notification.Name("clydeOpenReview")
 }

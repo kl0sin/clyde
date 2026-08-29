@@ -58,6 +58,12 @@ struct OnboardingView: View {
                     description: "Sound and banner when Claude asks for permission"
                 )
                 featureRow(
+                    icon: "calendar",
+                    color: .pink,
+                    title: "Where the day went",
+                    description: "Time, turns and projects — kept on this Mac"
+                )
+                featureRow(
                     icon: "keyboard",
                     color: .green,
                     title: "Press ⌃⌘C from anywhere",

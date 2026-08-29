@@ -59,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// widget anchor through `WidgetAnchor.expandedOrigin`.
     var expandedPanel: ExpandedPanel!
     var appViewModel: AppViewModel!
+    private var reviewObserver: NSObjectProtocol?
     var sessionViewModel: SessionListViewModel!
     var statusItem: NSStatusItem?
 
@@ -140,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             let store = try HistoryStore(directory: AppPaths.historyDir)
             historyStore = store
+            appViewModel.historyAvailable = true
             DispatchQueue.global(qos: .utility).async { store.ingestPending() }
             // 30s, not the 3s poll: the review needs no second-level
             // freshness, and writing to the database that often is work
@@ -250,6 +252,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .clydeOpenSettings, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.showSettingsWindow() }
+        }
+        reviewObserver = NotificationCenter.default.addObserver(
+            forName: .clydeOpenReview, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.openReview() }
         }
         diagnosticsObserver = NotificationCenter.default.addObserver(
             forName: .clydeCopyDiagnostics, object: nil, queue: .main

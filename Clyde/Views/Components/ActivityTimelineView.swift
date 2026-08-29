@@ -4,6 +4,9 @@ import SwiftUI
 
 struct ActivityTimelineView: View {
     @ObservedObject var log: ActivityLog
+    /// Hidden when the history store failed to open — see
+    /// `AppViewModel.historyAvailable`.
+    var showsReview: Bool = false
     @State private var expanded: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -21,44 +24,70 @@ struct ActivityTimelineView: View {
         )
     }
 
+    /// The panel's route into the review window, which the design spec
+    /// asks for and which was until now reachable only from the menu bar
+    /// menu — the least-visited surface in the app, holding its headline
+    /// feature. The row keeps one job per control: the wide area toggles
+    /// the timeline, the trailing button opens the history.
     private var header: some View {
-        Button(action: {
-            if reduceMotion {
-                expanded.toggle()
-            } else {
-                withAnimation(.easeInOut(duration: 0.22)) { expanded.toggle() }
-            }
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color(white: 0.5))
-                Text("Activity")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(white: 0.7))
-                if !log.events.isEmpty {
-                    Text("\(log.events.count)")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Color(white: 0.45))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color(white: 0.18))
-                        .clipShape(Capsule())
+        HStack(spacing: 0) {
+            Button(action: {
+                if reduceMotion {
+                    expanded.toggle()
+                } else {
+                    withAnimation(.easeInOut(duration: 0.22)) { expanded.toggle() }
                 }
-                Spacer()
-                Image(systemName: expanded ? "chevron.down" : "chevron.up")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color(white: 0.45))
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color(white: 0.5))
+                    Text("Activity")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color(white: 0.7))
+                    if !log.events.isEmpty {
+                        Text("\(log.events.count)")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color(white: 0.45))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color(white: 0.18))
+                            .clipShape(Capsule())
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: expanded ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color(white: 0.45))
+                }
+                .padding(.leading, 14)
+                .padding(.trailing, showsReview ? 8 : 14)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel("Activity timeline")
+            .accessibilityValue(timelineAccessibilityValue)
+            .accessibilityHint(expanded ? "Tap to collapse" : "Tap to expand")
+            .accessibilityAddTraits(.isButton)
+
+            if showsReview {
+                Button(action: {
+                    NotificationCenter.default.post(name: .clydeOpenReview, object: nil)
+                }) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color(white: 0.5))
+                        .padding(.trailing, 14)
+                        .padding(.leading, 4)
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Session review")
+                .accessibilityLabel("Open session review")
+                .accessibilityHint("Shows how long Claude worked, by day and project")
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Activity timeline")
-        .accessibilityValue(timelineAccessibilityValue)
-        .accessibilityHint(expanded ? "Tap to collapse" : "Tap to expand")
-        .accessibilityAddTraits(.isButton)
     }
 
     private var timelineAccessibilityValue: String {

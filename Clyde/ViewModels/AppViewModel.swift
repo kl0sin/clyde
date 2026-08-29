@@ -8,6 +8,10 @@ final class AppViewModel: ObservableObject {
     @Published var isCollapsed = true
     @Published var lastError: String?
     @Published var hookHealthIssue: HookInstaller.HealthIssue?
+    /// Whether the history store opened. The panel's route into the review
+    /// window is hidden when it did not, rather than offering a button that
+    /// silently does nothing.
+    @Published var historyAvailable = false
     /// Session IDs whose subagent list is currently expanded past the 3-visible cap.
     /// In-memory only — resets on relaunch. Auto-pruned in real time when a session's
     /// active count drops to 3 or fewer.

@@ -26,6 +26,7 @@ It connects to Claude Code's native hook events, so updates are **instant** — 
 - 🔔 **Attention alerts** — sound and macOS notification the moment Claude asks for permission. Never miss a prompt again.
 - 🗂 **Multi-session view** — every Claude session, every terminal, in one expandable panel. Drag to reorder, name them, click to focus the matching window.
 - 📜 **Activity timeline** — recent prompts, permissions and session lifecycle, in plain language.
+- 📅 **Session review** — where the day went: a calendar of how long Claude worked, split into thinking and tool time, with per-project totals and the longest wait on each side. History is kept on your Mac, indefinitely, and Settings shows what it costs and clears it in one click.
 - 🎯 **Menu bar capsule** — dominant state at a glance, with two ticks for the other states.
 - 💤 **Snooze** — 15 / 30 / 60 / 120 minute mute when you need quiet.
 - ⌨️ **Global hotkey** — `⌃⌘C` to expand from anywhere.
@@ -69,7 +70,7 @@ The same list lives in **Settings → General → Keyboard Shortcuts** inside th
 Clyde reads two things from your local file system:
 
 - `~/.claude/` — to install its hook script and discover Claude Code's settings.
-- `~/.clyde/` — where the hook script writes per-session state files that Clyde watches via FSEvents.
+- `~/.clyde/` — where the hook script writes per-session state files that Clyde watches via FSEvents, plus the history it keeps for the review window.
 
 When you submit a prompt, Claude Code fires a `UserPromptSubmit` hook → the hook script writes a `<sessionId>-busy` marker → Clyde sees it within milliseconds and updates the UI. When Claude finishes, the `Stop` hook removes the marker. Permission requests fire `PermissionRequest` → Clyde rings a sound and shows the attention pill.
 
