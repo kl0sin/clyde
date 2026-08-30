@@ -82,6 +82,15 @@ Clyde answers "what is Claude doing right now" well. It answers "what did Claude
 - [x] Rebuild-from-scratch affordance when the history database cannot be read — Settings → Advanced grows a "Rebuild database" button that moves the unreadable file aside (never deletes it) and reopens the store; the review menu item greys out while history is unavailable instead of swallowing the click !md #ux
 - [x] `spool.jsonl` can grow unbounded if the hook stays installed while Clyde is removed or never relaunched — hook v40 stops appending past 10 MB rather than truncating, so what was recorded still ingests when Clyde returns !lo #hooks
 
+## Phase: v0.8.x — Post-release fixes
+
+Three things v0.8.0 shipped or exposed, none of which any test caught.
+
+- [x] The expanded panel came up 400x1476 instead of 400x420 on the released build — the runner compiles against an older macOS SDK whose SwiftUI reports a fitting size for the session list, and AppKit took the window with it. Never reproduced on the development machine, so it was fixed by refusal rather than by measurement: the panel and the widget both decline any size but their own, their SwiftUI roots are pinned, and a resize observer restores the frame. Proven by measuring the released 0.8.0 (`400x1476`) against the runner-built fix (`400x420`) via `CGWindowListCopyWindowInfo`, which reads a hidden window and needs no permission !hi #ux
+- [x] Focusing a session's terminal resolved the app by scripting name while `isInstalled` beside it used the bundle identifier — `NSAppleScriptErrorAppName` and a click that did nothing. Both go by identifier now, host detection asks the process for its own rather than searching its path for substrings (`contains("stable")` claimed anything for Warp), and adapters can name every identifier they ship under, so Warp Preview counts as Warp. Reported in #2 !md #ux
+- [x] Development builds carried the shipped bundle identifier, so every locally built copy competed with the installed app for one TCC record: the Accessibility checkbox stayed ticked while `AXIsProcessTrusted()` returned false and "Global shortcut is off" could not be cleared. Dev bundles are now `io.github.kl0sin.clyde.dev`, named "Clyde (dev)"; `scripts/release/build.sh` stamps the real identifier only on CI or behind `CLYDE_RELEASE_BUNDLE=1` !hi #qa
+- [ ] Nothing measures the shipped bundle's window geometry before users do — `scripts/dev/scenarios.sh panel-size` still drives System Events and breaks when Automation permission is missing; move it to the `CGWindowListCopyWindowInfo` read that actually worked and wire it into `verify-build.yml` !md #qa
+
 ## Phase: v0.9.0 — Panel actions (two-way channel)
 
 The biggest draw for new users and the biggest architectural jump on this roadmap: approving a permission request or sending a prompt straight from Clyde, without switching to the terminal. Clyde's hook bus is deliberately one-way and advisory today — every design note in `clyde-hook.sh` depends on that. Reversing it touches the trust model, not just the plumbing, so this phase gets its own spec before any code.
