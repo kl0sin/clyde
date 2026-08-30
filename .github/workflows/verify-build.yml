@@ -30,6 +30,12 @@ jobs:
           otool -l build/release/Clyde.app/Contents/MacOS/Clyde \
             | grep -A4 LC_BUILD_VERSION | grep -E 'minos|sdk' | head -4
 
+      - name: Measure the panel on this SDK
+        run: |
+          swift test --filter ExpandedPanel 2>&1 | tee /tmp/panel-test.log | tail -40
+          echo "--- probe ---"
+          grep PANEL-PROBE /tmp/panel-test.log || echo "no probe output"
+
       - name: Package
         run: ditto -c -k --keepParent build/release/Clyde.app Clyde-app.zip
 
