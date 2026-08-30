@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.8.1</title>
+            <pubDate>Sun, 30 Aug 2026 13:27:29 +0000</pubDate>
+            <sparkle:version>25</sparkle:version>
+            <sparkle:shortVersionString>0.8.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>A fix for a regression in 0.8.0: on many Macs the expanded panel opened at more than three times its intended height, running off the bottom of the screen and taking the Activity bar with it. If that is what you have been looking at, this is the release that fixes it.</p>
+<ul><li><strong>The panel is the size it says it is again.</strong> In 0.8.0 it could open at 400×1476 instead of 400×420 — tall enough to hang off the bottom of the screen, with the Activity bar and the summary line out of reach below the edge. The session list is a scrollable area with no fixed height, and macOS was sizing the whole window to fit it. Both the panel and the widget now decline any size but their own.</li><li><strong>A history database that cannot be read can be rebuilt.</strong> Until now a corrupt file meant history was switched off for good: the review greyed out and Settings could only tell you it was unavailable. Settings → Advanced now offers "Rebuild database", which moves the unreadable file aside — it is never deleted — and starts a fresh one. Anything still waiting in the spool is picked up straight away.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.8.1/Clyde-0.8.1.dmg"
+                length="5991700"
+                type="application/octet-stream"
+                sparkle:edSignature="ek9t+Zu5fQfiQPCkQqd2+Os0NflaiQo2tQxGc/1RJwOc9kf06cng8cO2/Pan5ocUb44QspsoKWDLk/M9CYmXBg==" />
+        </item>
+        <item>
             <title>Version 0.8.0</title>
             <pubDate>Sat, 29 Aug 2026 11:07:55 +0000</pubDate>
             <sparkle:version>24</sparkle:version>
