@@ -1,6 +1,6 @@
 # Approving permission requests from the panel — design
 
-**Status:** design agreed, one mechanism question open (see *The question the spike answers*). Not yet planned or implemented.
+**Status:** design agreed, mechanism settled by spike on 2026-08-30. Ready to plan. Not yet implemented.
 
 **Phase:** v0.9.0
 
@@ -26,21 +26,32 @@ The change is small on screen and large underneath. Clyde's hook bus is one-way 
 
 **The panel never opens itself.** The widget signals the request the way it signals attention today. Auto-opening would make the feature work regardless of where the user is looking, at the price of a window appearing over their work on every permission request — usually while they are already in the terminal and about to answer there. The cost is real and accepted: with the panel collapsed, the terminal will answer nearly every time.
 
-## The question the spike answers
+## The mechanism, settled
 
-`PreToolUse` fires on **every** tool call, including the ones that never ask for permission. If Clyde waits on all of them, it adds the full window to every file read. That is not shippable, so the design depends on being able to block selectively.
+`PreToolUse` fires on **every** tool call, so waiting there would tax calls that never ask for permission. The spike asked whether `PermissionRequest` can carry the decision instead. It can.
 
-Three ways out, best first:
+`PermissionRequest` fires **only when permission is actually requested**, and a hook answers it on stdout:
 
-1. **`PermissionRequest` accepts a decision.** Then only real requests block and the problem disappears. Whether that event has a response contract is unknown — `PreToolUse` is the documented place for `permissionDecision`.
-2. **The hook reads Claude's permission configuration** and waits only for calls that do not match an allow rule. It duplicates someone else's matching logic, which will drift.
-3. **Clyde keeps its own list of tools that usually prompt.** Crude, and still slows the common ones.
+```json
+{"hookSpecificOutput": {"hookEventName": "PermissionRequest",
+                        "decision": {"behavior": "allow" | "deny" | "ask", "message": "..."}}}
+```
 
-**Spike, before any implementation:** a throwaway hook in a scratch project that answers `PermissionRequest` with a decision on stdout, run against a real session, to see whether Claude honours it. Half an hour, and it decides the architecture. If the answer is no, option 2 is the fallback and the design below is unchanged apart from where the wait lives.
+Not `PreToolUse`'s flat `permissionDecision` — a nested `decision` object with `behavior`. Exit code 2 is not honoured for this event; the decision object is the only channel. The first spike run used the `PreToolUse` shape, Claude ignored it, and the prompt appeared as usual.
+
+Verified end to end: in a session that asks for everything, a hook answering `allow` ran the tool with no prompt — 1.45s from `tool_use` to `tool_result`, against 13s when the answer was ignored and a human had to click. So there is no per-tool-call tax at all, and options 2 and 3 are dropped.
+
+The hook timeout for this event is 600 seconds, not the 60 assumed while writing this. The short decision window is therefore entirely our choice, made for the reasons above, and not a constraint we are pressed against.
+
+### Where this only ever applies
+
+Permission modes decide whether a request happens at all. In `auto`, `dontAsk`, `acceptEdits` and `bypassPermissions`, routine calls never reach the permission system — three of the spike's runs produced no `PermissionRequest` and no prompt for exactly this reason. The feature is meaningful only for users working in a mode that asks, and the panel must show nothing in the modes that do not.
+
+This narrows who benefits, and it belongs in the decision to build it rather than in a footnote discovered later.
 
 ## How it works
 
-**The request reaches the panel.** The hook's `PermissionRequest` payload carries only `session_id`, `pid`, `cwd`, `event` and `timestamp` today — enough to raise a badge, not enough to answer. It gains the tool name and the full tool input. The panel shows both untruncated: a shortened command invites approving something the user did not read, which is the one thing this feature must not encourage. Long commands scroll within the row.
+**The request reaches the panel.** The event already carries everything needed: `tool_name`, the full `tool_input`, `permission_mode`, and Claude's own `permission_suggestions`. It is `clyde-hook.sh` that throws them away, writing only `session_id`, `pid`, `cwd`, `event` and `timestamp` — enough to raise a badge, not enough to answer. The change is on Clyde's side and smaller than this spec first assumed. The panel shows the tool and its input untruncated: a shortened command invites approving something the user did not read, which is the one thing this feature must not encourage. Long commands scroll within the row.
 
 **The answer goes back.** Clyde writes a decision file under `~/.clyde/` keyed by the request's `tool_use_id`. The waiting hook polls for it within the window, reads it, deletes it, and prints the decision. Polling a file with a bounded wait is what the rest of this architecture already does; a socket would be cleaner and introduces a daemon.
 
@@ -63,3 +74,9 @@ Unit tests cover the decision file's lifetime and every fallback-to-`ask` path. 
 Neither proves the thing that matters. The real check is a live session: a permission request answered from the panel, one answered in the terminal while the panel is showing it, one left to time out, and one with Clyde killed mid-window. Those become a `scripts/dev/scenarios.sh` scenario, because every real bug in this project so far was found by putting the app in a state and looking at it.
 
 The measurement that must exist before release: the added latency on tool calls that are **not** permission-gated. If the spike lands on option 2 or 3, that number is the feature's real cost and it belongs in CI, not in someone's memory.
+
+## Recorded from the spike, for whoever implements this
+
+`permission_suggestions` arrives with each request — Claude's own proposals, such as adding the working directory or switching to `acceptEdits`, each scoped to the session. Out of scope here, but it is the obvious second act once one-click answering works.
+
+One detail left unexplained: a session launched with `--permission-mode manual` reported `permission_mode: "default"` in the payload. It did not affect the result — the request fired and the decision was honoured — but anything that keys behaviour on that field should confirm what it means first.
