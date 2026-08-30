@@ -25,8 +25,21 @@ mkdir -p "$MACOS" "$RESOURCES"
 # Copy the executable
 cp "$BUILD_DIR/$APP_NAME" "$MACOS/$APP_NAME"
 
-# Copy Info.plist
+# Copy Info.plist, then give the dev bundle its own identity.
+#
+# macOS keys Accessibility, Automation and notification grants to the
+# bundle identifier. A dev build carrying the shipped one competes with
+# the installed app for the same TCC record: System Settings keeps
+# showing the permission as granted while the release build is quietly
+# denied, and the only cure is resetting it by hand. Separate
+# identifiers means both can be trusted independently.
 cp Clyde/Info.plist "$CONTENTS/Info.plist"
+DEV_BUNDLE_ID="io.github.kl0sin.clyde.dev"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $DEV_BUNDLE_ID" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName Clyde (dev)" "$CONTENTS/Info.plist" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Add :CFBundleName string Clyde (dev)" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Clyde (dev)" "$CONTENTS/Info.plist" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Clyde (dev)" "$CONTENTS/Info.plist"
 
 # Copy SwiftPM's resource bundle. Without it `Bundle.module` finds nothing,
 # so the app cannot install its own hook and reports the bundled script as
@@ -64,7 +77,7 @@ else
     echo "⚠️  Sparkle.framework not found under .build — the bundle will not launch."
 fi
 
-echo "✓ Built $APP_DIR"
+echo "✓ Built $APP_DIR ($DEV_BUNDLE_ID)"
 echo ""
 echo "To run: open '$APP_DIR'"
 echo "To install: cp -r '$APP_DIR' /Applications/"

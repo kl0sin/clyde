@@ -38,6 +38,19 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 cp "$EXECUTABLE" "$APP_BUNDLE/Contents/MacOS/Clyde"
 cp "$PROJECT_ROOT/Clyde/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
+
+# Stamp the identifier this build should carry. On CI that is the
+# shipped one; on a development machine it is the dev identifier, so the
+# bundle left in build/release/ cannot take the installed app's
+# permissions with it. See scripts/lib/release-bundle-id.sh.
+BUNDLE_ID="$("$PROJECT_ROOT/scripts/lib/release-bundle-id.sh")"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
+if [ "$BUNDLE_ID" != "io.github.kl0sin.clyde" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName Clyde (dev)" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Clyde (dev)" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Clyde (dev)" "$APP_BUNDLE/Contents/Info.plist"
+    echo "==> Local build: stamping $BUNDLE_ID (set CLYDE_RELEASE_BUNDLE=1 for a real release bundle)"
+fi
 cp "$PROJECT_ROOT/Clyde/Assets/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 
 # SwiftPM puts bundled resources in a sibling .bundle directory; copy that
