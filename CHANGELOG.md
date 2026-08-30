@@ -6,6 +6,9 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+
+## [0.8.1] — 2026-08-30
+
 A fix for a regression in 0.8.0: on many Macs the expanded panel opened at more than three times its intended height, running off the bottom of the screen and taking the Activity bar with it. If that is what you have been looking at, this is the release that fixes it.
 
 - **The panel is the size it says it is again.** In 0.8.0 it could open at 400×1476 instead of 400×420 — tall enough to hang off the bottom of the screen, with the Activity bar and the summary line out of reach below the edge. The session list is a scrollable area with no fixed height, and macOS was sizing the whole window to fit it. Both the panel and the widget now decline any size but their own.
