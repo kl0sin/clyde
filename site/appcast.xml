@@ -8,6 +8,22 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.8.2</title>
+            <pubDate>Sun, 30 Aug 2026 16:20:06 +0000</pubDate>
+            <sparkle:version>26</sparkle:version>
+            <sparkle:shortVersionString>0.8.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>Two fixes for focusing a session's terminal — the click that brings its tab to the front.</p>
+<ul><li><strong>Clicking a session finds its terminal more reliably.</strong> Focusing a session's tab is driven by AppleScript, and the script asked for its terminal by name — which fails outright, and silently, when macOS cannot resolve that name to an app. Both the script and the detection that runs before it now go by bundle identifier, the same one the adapter already declared. Working out which terminal hosts a session no longer guesses from the executable's path either: a process whose path merely contained "stable" was handed to Warp.</li><li><strong>Warp Preview counts as Warp.</strong> Only the stable channel's identifier was known, so on a Preview install Clyde reported the terminal as not installed and refused to focus anything.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.8.2/Clyde-0.8.2.dmg"
+                length="5993584"
+                type="application/octet-stream"
+                sparkle:edSignature="hI39Bhp8MIqmgh5NOnv/iOXTy2/Iw8tXtqxv+5+myZk5/t7o5RXkaP/SsMCz/dmIpSlj2yNeR5CCIIeiPVqGDA==" />
+        </item>
+        <item>
             <title>Version 0.8.1</title>
             <pubDate>Sun, 30 Aug 2026 13:27:29 +0000</pubDate>
             <sparkle:version>25</sparkle:version>
