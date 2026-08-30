@@ -249,27 +249,34 @@ OSA
 # is what this scenario is for. Run it after every release, against the
 # DMG — not against a local build.
 panel-size)
-    EXPECTED_W=400
-    EXPECTED_H=420
+    EXPECTED_PANEL="400x420"
+    EXPECTED_WIDGET="130x46"
     say "Measuring the panel of whatever Clyde is currently running"
     note "version: $(defaults read /Applications/Clyde.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo unknown)"
-    open_panel
-    SIZE=$(osascript <<'OSA' 2>/dev/null
-tell application "System Events" to tell process "Clyde"
-  repeat with w in windows
-    set sz to size of w
-    if (item 1 of sz) is 400 then return ((item 1 of sz) as text) & "x" & ((item 2 of sz) as text)
-  end repeat
-  return "no-panel"
-end tell
-OSA
-)
-    note "panel: $SIZE (expected ${EXPECTED_W}x${EXPECTED_H})"
-    if [ "$SIZE" = "${EXPECTED_W}x${EXPECTED_H}" ]; then
-        say "PASS"
+    # Nothing is clicked open. The expanded panel is built at launch and
+    # kept at alpha 0 until the user asks for it, and CGWindowList sees
+    # it there — no Automation permission, no System Events, no window
+    # to bring to the front. Driving this through AppleScript is what
+    # made the v0.8.0 regression so expensive to prove.
+    GEOMETRY=$(swift "$REPO_ROOT/scripts/dev/window-geometry.swift" Clyde 2>/dev/null)
+    if [ -z "$GEOMETRY" ]; then
+        say "FAIL — no Clyde windows found"
+        note "is Clyde running? this scenario measures a running app, not a bundle"
+        exit 1
+    fi
+    note "windows:"
+    printf '%s\n' "$GEOMETRY" | sed 's/^/    /'
+    PANEL=$(printf '%s\n' "$GEOMETRY" | awk '{print $1}' | grep '^400x' | head -1)
+    WIDGET=$(printf '%s\n' "$GEOMETRY" | awk '{print $1}' | grep '^130x' | head -1)
+    FAILED=0
+    [ "$PANEL" = "$EXPECTED_PANEL" ] || { note "panel:  ${PANEL:-missing} (expected $EXPECTED_PANEL)"; FAILED=1; }
+    [ "$WIDGET" = "$EXPECTED_WIDGET" ] || { note "widget: ${WIDGET:-missing} (expected $EXPECTED_WIDGET)"; FAILED=1; }
+    if [ "$FAILED" = "0" ]; then
+        say "PASS — panel $PANEL, widget $WIDGET"
     else
-        say "FAIL — the panel is not the size it declares"
+        say "FAIL — a window is not the size it declares"
         note "a panel taller than the screen loses its Activity bar off the bottom edge"
+        exit 1
     fi
     ;;
 
