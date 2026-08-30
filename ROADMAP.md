@@ -97,7 +97,8 @@ The biggest draw for new users and the biggest architectural jump on this roadma
 
 Scoped deliberately to permission decisions. Sending prompts from the panel was part of this phase and is now in the backlog: hooks offer no way to put text into a running session, so it needs a different mechanism entirely and a decision about whether it is the right direction at all.
 
-- [ ] Write the design spec first — brainstorming → `docs/superpowers/specs/` → writing-plans. Do not start with the transport !hi
+- [x] Design spec written — `docs/superpowers/specs/2026-08-30-permission-approval-design.md`. Scope, decision window, granularity, surfacing and the failure contract are settled; one mechanism question is left to a spike !hi
+- [ ] Spike: does `PermissionRequest` accept a decision on stdout? `PreToolUse` fires on every tool call, so blocking there taxes calls that never ask for permission. The answer decides the architecture — throwaway hook, scratch project, real session !hi
 - [ ] Map the landmines up front: `PreToolUse` fires on every tool call, so a blocking hook puts Clyde in the critical path of every session — it must degrade to the terminal's own prompt on timeout, never hang and never fail noisily. Claude's hook timeout bounds how long the user has to answer, and any inbound channel is a new local attack surface: today anything that can write to `~/.clyde/` can only lie about what the panel shows, afterwards it can approve tool calls !hi
 - [ ] Decide the mechanism — `PreToolUse` `permissionDecision` returned from the hook vs. an out-of-band channel — before committing to a UI !hi
 - [ ] Ship it off by default behind a setting until it has run on more than one machine !md
