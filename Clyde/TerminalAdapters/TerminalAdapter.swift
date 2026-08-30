@@ -4,13 +4,21 @@ import AppKit
 protocol TerminalAdapter {
     var name: String { get }
     var bundleIdentifier: String { get }
+    /// Every identifier this terminal ships under, primary first. Warp
+    /// has a separate one for its Preview channel, and an app the user
+    /// runs is no less installed for being the beta.
+    var bundleIdentifiers: [String] { get }
     var isInstalled: Bool { get }
     func focusSession(parentPID: pid_t) async throws
 }
 
 extension TerminalAdapter {
+    var bundleIdentifiers: [String] { [bundleIdentifier] }
+
     var isInstalled: Bool {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
+        bundleIdentifiers.contains {
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil
+        }
     }
 
     func runAppleScript(_ source: String) throws {
@@ -25,9 +33,12 @@ extension TerminalAdapter {
     }
 
     func activateApp() {
-        let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
-        if let app = runningApps.first {
-            app.activate(options: [.activateAllWindows])
+        for identifier in bundleIdentifiers {
+            let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
+            if let app = runningApps.first {
+                app.activate(options: [.activateAllWindows])
+                return
+            }
         }
     }
 }

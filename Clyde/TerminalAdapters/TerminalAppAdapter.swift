@@ -21,13 +21,19 @@ struct TerminalAppAdapter: TerminalAdapter {
         guard !tty.isEmpty else { throw TerminalError.hostingTerminalNotFound }
         let fullTTY = tty.hasPrefix("/dev/") ? tty : "/dev/\(tty)"
 
-        try runAppleScript("""
-            tell application "Terminal"
+        try runAppleScript(focusScript(tty: fullTTY))
+    }
+
+    /// See `ITermAdapter.focusScript` — the target is resolved by
+    /// identifier so the script cannot disagree with `isInstalled`.
+    func focusScript(tty: String) -> String {
+        """
+            tell application id "\(bundleIdentifier)"
                 activate
                 repeat with w in windows
                     repeat with t in tabs of w
                         try
-                            if tty of t is "\(fullTTY)" then
+                            if tty of t is "\(tty)" then
                                 set selected tab of w to t
                                 set index of w to 1
                                 return
@@ -36,6 +42,6 @@ struct TerminalAppAdapter: TerminalAdapter {
                     end repeat
                 end repeat
             end tell
-        """)
+        """
     }
 }

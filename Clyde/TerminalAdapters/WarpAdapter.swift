@@ -6,6 +6,7 @@ import AppKit
 struct WarpAdapter: TerminalAdapter {
     let name = "Warp"
     let bundleIdentifier = "dev.warp.Warp-Stable"
+    let bundleIdentifiers = ["dev.warp.Warp-Stable", "dev.warp.Warp-Preview"]
 
     func focusSession(parentPID: pid_t) async throws {
         guard isInstalled else { throw TerminalError.terminalNotInstalled }

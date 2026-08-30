@@ -6,8 +6,16 @@ struct ITermAdapter: TerminalAdapter {
 
     func focusSession(parentPID: pid_t) async throws {
         guard isInstalled else { throw TerminalError.terminalNotInstalled }
-        try runAppleScript("""
-            tell application "iTerm2"
+        try runAppleScript(focusScript(parentPID: parentPID))
+    }
+
+    /// `tell application id` resolves the target through LaunchServices
+    /// rather than the app's scripting name, which is what `isInstalled`
+    /// two lines up has always done. The name form fails with
+    /// NSAppleScriptErrorAppName whenever that lookup comes back empty.
+    func focusScript(parentPID: pid_t) -> String {
+        """
+            tell application id "\(bundleIdentifier)"
                 activate
                 repeat with w in windows
                     repeat with t in tabs of w
@@ -25,6 +33,6 @@ struct ITermAdapter: TerminalAdapter {
                     end repeat
                 end repeat
             end tell
-        """)
+        """
     }
 }

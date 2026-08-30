@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// Launches and focuses Claude sessions in the hosting terminal.
 /// Auto-detects which terminal hosts a given session by walking its process tree.
@@ -43,10 +44,20 @@ final class TerminalLauncher: ObservableObject {
                 return nil
             }
 
-            let commOutput = (try? await shell.run("ps -p \(parentPID) -o comm=")) ?? ""
-            let comm = commOutput.trimmingCharacters(in: .whitespaces).lowercased()
+            // The bundle identifier is what every adapter already
+            // declares and what AppleScript resolves against, so ask the
+            // process itself rather than reading its path for clues.
+            if let identifier = NSRunningApplication(processIdentifier: parentPID)?.bundleIdentifier,
+               let adapter = adapter(forBundleIdentifier: identifier) {
+                return (adapter, shellPID)
+            }
 
-            if let adapter = matchAdapter(forProcessName: comm) {
+            // Fallback for a pid with no bundle — a terminal launched
+            // straight from its binary, or one macOS has not registered.
+            let commOutput = (try? await shell.run("ps -p \(parentPID) -o comm=")) ?? ""
+            let comm = commOutput.trimmingCharacters(in: .whitespaces)
+
+            if let adapter = adapter(forProcessPath: comm) {
                 return (adapter, shellPID)
             }
 
@@ -55,17 +66,33 @@ final class TerminalLauncher: ObservableObject {
         return nil
     }
 
-    private func matchAdapter(forProcessName name: String) -> TerminalAdapter? {
-        if name.contains("iterm") {
+    /// The reliable match: an identifier the adapter declares, compared
+    /// whole rather than searched for inside a string.
+    func adapter(forBundleIdentifier identifier: String) -> TerminalAdapter? {
+        guard !identifier.isEmpty else { return nil }
+        return allAdapters.first {
+            $0.bundleIdentifiers.contains { $0.caseInsensitiveCompare(identifier) == .orderedSame }
+        }
+    }
+
+    /// Last resort, matched on the app bundle in the path rather than on
+    /// the executable's name: Warp's binary is called `stable`, and
+    /// `contains("stable")` used to hand it every unrelated process that
+    /// happened to have those six letters somewhere in its path.
+    func adapter(forProcessPath path: String) -> TerminalAdapter? {
+        let lowered = path.lowercased()
+        func hasBundle(_ name: String) -> Bool { lowered.contains("/\(name).app/") }
+
+        if hasBundle("iterm") || hasBundle("iterm2") {
             return allAdapters.first { $0 is ITermAdapter }
         }
-        if name.contains("terminal") && !name.contains("iterm") {
+        if hasBundle("terminal") {
             return allAdapters.first { $0 is TerminalAppAdapter }
         }
-        if name.contains("warp") || name.contains("stable") {
+        if hasBundle("warp") || hasBundle("warp preview") {
             return allAdapters.first { $0 is WarpAdapter }
         }
-        if name.contains("ghostty") {
+        if hasBundle("ghostty") {
             return allAdapters.first { $0 is GhosttyAdapter }
         }
         return nil
