@@ -6,6 +6,11 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+
+## [0.8.2] — 2026-08-30
+
+Two fixes for focusing a session's terminal — the click that brings its tab to the front.
+
 - **Clicking a session finds its terminal more reliably.** Focusing a session's tab is driven by AppleScript, and the script asked for its terminal by name — which fails outright, and silently, when macOS cannot resolve that name to an app. Both the script and the detection that runs before it now go by bundle identifier, the same one the adapter already declared. Working out which terminal hosts a session no longer guesses from the executable's path either: a process whose path merely contained "stable" was handed to Warp.
 - **Warp Preview counts as Warp.** Only the stable channel's identifier was known, so on a Preview install Clyde reported the terminal as not installed and refused to focus anything.
 
