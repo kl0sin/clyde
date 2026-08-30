@@ -91,13 +91,16 @@ Three things v0.8.0 shipped or exposed, none of which any test caught.
 - [x] Development builds carried the shipped bundle identifier, so every locally built copy competed with the installed app for one TCC record: the Accessibility checkbox stayed ticked while `AXIsProcessTrusted()` returned false and "Global shortcut is off" could not be cleared. Dev bundles are now `io.github.kl0sin.clyde.dev`, named "Clyde (dev)"; `scripts/release/build.sh` stamps the real identifier only on CI or behind `CLYDE_RELEASE_BUNDLE=1` !hi #qa
 - [x] The shipped bundle's window geometry is measured before users see it — `scripts/dev/window-geometry.swift` reads `CGWindowListCopyWindowInfo`, which needs no permission and sees the expanded panel while it is still hidden at alpha 0, so nothing has to be opened. `scenarios.sh panel-size` uses it instead of System Events, and `verify-build.yml` now asserts 400x420 and 130x46 on the bundle it builds, reporting a runner with no window server as skipped rather than failing !md #qa
 
-## Phase: v0.9.0 — Panel actions (two-way channel)
+## Phase: v0.9.0 — Approving permission requests from the panel
 
-The biggest draw for new users and the biggest architectural jump on this roadmap: approving a permission request or sending a prompt straight from Clyde, without switching to the terminal. Clyde's hook bus is deliberately one-way and advisory today — every design note in `clyde-hook.sh` depends on that. Reversing it touches the trust model, not just the plumbing, so this phase gets its own spec before any code.
+The biggest draw for new users and the biggest architectural jump on this roadmap: approving or denying a permission request straight from Clyde, without switching to the terminal. Clyde's hook bus is deliberately one-way and advisory today — every design note in `clyde-hook.sh` depends on that, and the `WorktreeCreate` note records what happened the one time Clyde subscribed to a hook that expected an answer back. Reversing the direction touches the trust model, not just the plumbing, so this phase gets its own spec before any code.
+
+Scoped deliberately to permission decisions. Sending prompts from the panel was part of this phase and is now in the backlog: hooks offer no way to put text into a running session, so it needs a different mechanism entirely and a decision about whether it is the right direction at all.
 
 - [ ] Write the design spec first — brainstorming → `docs/superpowers/specs/` → writing-plans. Do not start with the transport !hi
-- [ ] Map the landmines up front: hooks must never block or fail noisily, `PreToolUse` decisions are time-boxed by Claude's hook timeout, and any inbound channel is a new local attack surface !hi
+- [ ] Map the landmines up front: `PreToolUse` fires on every tool call, so a blocking hook puts Clyde in the critical path of every session — it must degrade to the terminal's own prompt on timeout, never hang and never fail noisily. Claude's hook timeout bounds how long the user has to answer, and any inbound channel is a new local attack surface: today anything that can write to `~/.clyde/` can only lie about what the panel shows, afterwards it can approve tool calls !hi
 - [ ] Decide the mechanism — `PreToolUse` `permissionDecision` returned from the hook vs. an out-of-band channel — before committing to a UI !hi
+- [ ] Ship it off by default behind a setting until it has run on more than one machine !md
 
 ## Phase: v0.3.0+ — UX polish, content & reach
 
@@ -115,6 +118,7 @@ Backlog. Pick when there's time or when community interest bumps priority.
 - [x] Refresh the landing page around agent teams and session stats — a dedicated Session review section with a screenshot, and the feature grid grown from six cards to nine !md #ux
 - [ ] Opt-in crash reporting (Sentry / KSCrash / MetricKit), off by default !lo
 - [ ] Opt-in anonymous usage analytics, off by default !lo
+- [ ] Sending prompts to a session from the panel — parked, and not yet agreed to be the right direction for Clyde. Hooks cannot do it: no event puts text into a running session, so it needs another mechanism entirely (`tmux send-keys`, typing into the terminal via AppleScript, or Claude Code's headless mode), each with its own reliability ceiling. Decide whether Clyde should do this at all before costing it !lo
 - [ ] App Store yes/no decision (likely no — sandbox + StoreKit cost) !lo
 - [ ] Trademark check on the name "Clyde" in US/EU databases !lo
 
