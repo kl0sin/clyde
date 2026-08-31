@@ -78,4 +78,79 @@ final class ExpandedPanelTests: XCTestCase {
         XCTAssertEqual(widget.frame.origin, NSPoint(x: 40, y: 60), "dragging the widget still works")
     }
 
+
+    // MARK: - Compact mode changes the size; nothing else may
+
+    /// The invariant from v0.8.1 survives the panel becoming two
+    /// shapes: content still cannot size the window, in either mode.
+    func testContentCannotResizeThePanelInCompact() {
+        let panel = makePanel()
+        panel.applyHeight(160)
+
+        panel.setFrame(NSRect(x: 100, y: 100, width: 400, height: 1476), display: false)
+
+        XCTAssertEqual(panel.frame.height, 160, "the shipped bug, in the new mode")
+    }
+
+    func testTheWidthNeverChanges() {
+        let panel = makePanel()
+
+        panel.applyHeight(160)
+
+        XCTAssertEqual(panel.frame.width, 400)
+    }
+
+    /// Compact grows and shrinks downward. If the top edge moved, every
+    /// height change would look like the window jumping — and the
+    /// height changes whenever a session starts or ends.
+    func testHeightChangesKeepTheTopEdgeStill() {
+        let panel = makePanel()
+        let topBefore = panel.frame.maxY
+
+        panel.applyHeight(160)
+        XCTAssertEqual(panel.frame.maxY, topBefore, accuracy: 0.5)
+
+        panel.applyHeight(320)
+        XCTAssertEqual(panel.frame.maxY, topBefore, accuracy: 0.5)
+    }
+
+    /// Moving is still the panel's job — it follows the widget around.
+    func testItStillMovesAfterAHeightChange() {
+        let panel = makePanel()
+        panel.applyHeight(160)
+
+        panel.setFrame(NSRect(x: 640, y: 480, width: 400, height: 160), display: false)
+
+        XCTAssertEqual(panel.frame.origin, NSPoint(x: 640, y: 480))
+        XCTAssertEqual(panel.frame.height, 160)
+    }
+
+    /// Going back to the full panel restores its one true size.
+    func testReturningToFullRestoresTheOriginalHeight() {
+        let panel = makePanel()
+        panel.applyHeight(160)
+
+        panel.applyHeight(420)
+
+        XCTAssertEqual(panel.frame.size, fixed)
+    }
+
+    // MARK: - Two always-on-top surfaces is one too many
+
+    func testCompactSuppressesTheWidget() {
+        XCTAssertFalse(AppDelegate.widgetShouldShow(setting: true, mode: .compact, isCollapsed: false))
+    }
+
+    func testClosingCompactBringsTheWidgetBack() {
+        XCTAssertTrue(AppDelegate.widgetShouldShow(setting: true, mode: .compact, isCollapsed: true))
+        XCTAssertTrue(AppDelegate.widgetShouldShow(setting: true, mode: .full, isCollapsed: false))
+    }
+
+    /// A user who turned the widget off does not get it back because
+    /// they opened compact.
+    func testTheWidgetSettingStillWins() {
+        XCTAssertFalse(AppDelegate.widgetShouldShow(setting: false, mode: .compact, isCollapsed: true))
+        XCTAssertFalse(AppDelegate.widgetShouldShow(setting: false, mode: .full, isCollapsed: false))
+    }
+
 }

@@ -29,10 +29,18 @@ final class ExpandedPanel: NSPanel {
     /// computed what: the panel is a fixed surface, so it declines to be
     /// anything else. Position still moves freely — that is the panel's
     /// whole job.
-    private let fixedSize: NSSize
+    /// The one size this panel is allowed to be right now.
+    ///
+    /// It stopped being a constant when compact mode arrived: that mode
+    /// is as tall as the sessions it shows, so the size changes when a
+    /// session starts or ends. What did not change is who may change
+    /// it. `applyHeight` is the only door; everything else — AppKit
+    /// fitting a window to its content, an animation, a stale frame —
+    /// still goes through `setFrame` and is still refused.
+    private var allowedSize: NSSize
 
     init(contentRect: NSRect) {
-        fixedSize = contentRect.size
+        allowedSize = contentRect.size
         super.init(
             contentRect: contentRect,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -56,15 +64,30 @@ final class ExpandedPanel: NSPanel {
     }
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
-        super.setFrame(NSRect(origin: frameRect.origin, size: fixedSize), display: flag)
+        super.setFrame(NSRect(origin: frameRect.origin, size: allowedSize), display: flag)
     }
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool, animate: Bool) {
-        super.setFrame(NSRect(origin: frameRect.origin, size: fixedSize),
+        super.setFrame(NSRect(origin: frameRect.origin, size: allowedSize),
                        display: flag, animate: animate)
     }
 
+    /// Change the height deliberately. Grows and shrinks downward: the
+    /// top edge staying put is what stops a session starting from
+    /// looking like the window jumped.
+    func applyHeight(_ height: CGFloat) {
+        let top = frame.maxY
+        allowedSize = NSSize(width: allowedSize.width, height: height)
+        super.setFrame(
+            NSRect(x: frame.origin.x, y: top - height,
+                   width: allowedSize.width, height: height),
+            display: true
+        )
+    }
+
+    var currentAllowedSize: NSSize { allowedSize }
+
     override func setContentSize(_ size: NSSize) {
-        super.setContentSize(fixedSize)
+        super.setContentSize(allowedSize)
     }
 }

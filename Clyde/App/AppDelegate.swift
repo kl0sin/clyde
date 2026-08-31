@@ -90,7 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// different intrinsic content size and the panel ends up taller
     /// than `widgetSize`, breaking the WidgetAnchor gap math.
     private let widgetSize = NSSize(width: 130, height: 46)
-    private let expandedSize = NSSize(width: 400, height: 420)
+    static let fullPanelHeight: CGFloat = 420
+    /// The full panel's size, and what the window is built at. Compact
+    /// changes the height afterwards through `applyHeight`.
+    private let expandedSize = NSSize(width: 400, height: AppDelegate.fullPanelHeight)
     /// Single source of truth for the widget's preferred position. See
     /// `WidgetAnchor.swift` for the rationale.
     private var widgetAnchor: WidgetAnchor!
@@ -234,7 +237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         expandedPanel.minSize = expandedSize
         expandedPanel.maxSize = expandedSize
 
-        let expandedRoot = ExpandedRootView(
+        let expandedRoot = PanelRootView(
             appViewModel: appViewModel,
             sessionViewModel: sessionViewModel
         )
@@ -244,9 +247,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // release is built against, that fitting size came out at 1476 and
         // took the window with it. A pinned root has nothing to grow to,
         // whichever SwiftUI is doing the measuring.
+        // Width is pinned; height is not, because compact is as tall as
+        // the sessions it shows. The protection that replaced pinning is
+        // stronger: `ExpandedPanel` refuses every size except the one it
+        // was deliberately given, so the content cannot push the window
+        // around whatever it computes.
         let expandedHostingView = NSHostingView(
-            rootView: expandedRoot.frame(width: expandedSize.width,
-                                         height: expandedSize.height)
+            rootView: expandedRoot.frame(width: expandedSize.width)
         )
         expandedHostingView.translatesAutoresizingMaskIntoConstraints = true
         expandedHostingView.autoresizingMask = [.width, .height]
@@ -306,10 +313,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelResizeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification, object: expandedPanel, queue: .main
         ) { [weak self] _ in
-            guard let self, self.expandedPanel.frame.size != self.expandedSize else { return }
+            // The size to defend is the one the panel was last given,
+            // not a constant: compact changes its height deliberately
+            // whenever a session starts or ends. Comparing against 420
+            // meant this net caught every legitimate compact resize and
+            // undid it — the guard working exactly as written, against
+            // a door that did not exist when it was written.
+            guard let self,
+                  self.expandedPanel.frame.size != self.expandedPanel.currentAllowedSize
+            else { return }
             ClydeLog.general.error("Panel was resized to \(NSStringFromSize(self.expandedPanel.frame.size), privacy: .public) — restoring")
             self.expandedPanel.setFrame(
-                NSRect(origin: self.expandedPanel.frame.origin, size: self.expandedSize),
+                NSRect(origin: self.expandedPanel.frame.origin,
+                       size: self.expandedPanel.currentAllowedSize),
                 display: true
             )
         }
@@ -328,6 +344,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor in self?.appViewModel.copyDiagnosticInfoToPasteboard() }
         }
+
+        // Compact is as tall as what it shows, so the window's height
+        // follows the mode and the session list. Both go through
+        // `applyHeight`, which is the panel's only door for a size
+        // change.
+        appViewModel.$panelMode
+            .receive(on: RunLoop.main)
+            .sink { [weak self] mode in
+                self?.applyPanelHeight(for: mode)
+                self?.applyWidgetVisibility(self?.appViewModel.widgetVisible ?? true)
+            }
+            .store(in: &cancellables)
+
+        sessionViewModel.$sessions
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, self.appViewModel.panelMode == .compact else { return }
+                self.applyPanelHeight(for: .compact)
+            }
+            .store(in: &cancellables)
+
+        appViewModel.$compactRowCap
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, self.appViewModel.panelMode == .compact else { return }
+                self.applyPanelHeight(for: .compact)
+            }
+            .store(in: &cancellables)
 
         appViewModel.$isCollapsed
             .dropFirst()
@@ -377,7 +421,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The expanded panel is unaffected — even when the widget is
     /// hidden, the user can still open the expanded view from the menu
     /// bar item.
-    @MainActor private func applyWidgetVisibility(_ visible: Bool) {
+    /// Compact mode is itself an always-on-top surface listing the same
+    /// sessions, so the widget stands down while it is open — two of
+    /// them saying the same thing is one too many. A user who turned
+    /// the widget off still does not get it back.
+    static func widgetShouldShow(setting: Bool,
+                                 mode: AppViewModel.PanelMode,
+                                 isCollapsed: Bool) -> Bool {
+        guard setting else { return false }
+        if mode == .compact && !isCollapsed { return false }
+        return true
+    }
+
+    @MainActor private func applyWidgetVisibility(_ setting: Bool) {
+        let visible = Self.widgetShouldShow(setting: setting,
+                                            mode: appViewModel.panelMode,
+                                            isCollapsed: appViewModel.isCollapsed)
         if visible {
             panel.orderFront(nil)
         } else {
@@ -388,6 +447,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Expanded panel show / hide
 
     /// Position + animate-in the expanded panel next to the widget.
+    @MainActor private func applyPanelHeight(for mode: AppViewModel.PanelMode) {
+        let height: CGFloat
+        switch mode {
+        case .full:
+            height = Self.fullPanelHeight
+        case .compact:
+            let rows = CompactRootView.visible(sessions: sessionViewModel.sessions,
+                                               cap: appViewModel.compactRowCap).count
+            height = CompactRootView.height(rows: max(rows, 1))
+        }
+        guard expandedPanel.currentAllowedSize.height != height else { return }
+        expandedPanel.applyHeight(height)
+    }
+
     @MainActor private func showExpandedPanel() {
         // Belt-and-braces: pre-sync the anchor to the live panel
         // origin so any pending snap-debounce or in-flight animation
