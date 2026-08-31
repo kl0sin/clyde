@@ -104,6 +104,10 @@ Scoped deliberately to permission decisions. Sending prompts from the panel was 
 - [ ] Decide the mechanism — `PreToolUse` `permissionDecision` returned from the hook vs. an out-of-band channel — before committing to a UI !hi
 - [ ] Ship it off by default behind a setting until it has run on more than one machine !md
 
+## Phase: v0.9.x — Panel space
+
+- [ ] The panel is 400x420 and the content keeps growing — permission requests joined a session list, an Activity trail and a summary bar. A first attempt made the panel user-resizable and was reverted the same hour: `.resizable` in the style mask changed more than the size, detaching the panel from the widget anchor, breaking the slide animation and making the bottom edge grab itself during an ordinary window drag (three unintended resizes were logged, ending at the 320 floor). The tests written for it only covered the one risk that was already understood — that content still could not resize the window — so none of that showed. Whatever comes next needs the anchor maths, the show/hide animation and the drag regions in scope from the start, not the size alone !md #ux
+
 ## Phase: v0.3.0+ — UX polish, content & reach
 
 Backlog. Pick when there's time or when community interest bumps priority.
