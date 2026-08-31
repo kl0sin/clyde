@@ -213,6 +213,22 @@ struct GeneralSettingsTab: View {
             .toggleStyle(.switch)
         }
 
+        SettingsSection(title: "Permission requests") {
+            Toggle(isOn: $appViewModel.answerPermissionsInPanel) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Answer from the panel")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white)
+                    Text("When Claude asks permission to run something, the question appears on its session for a few seconds and you can answer it here. Miss it and the terminal asks as usual — Clyde never decides on its own.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(white: 0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+            .accessibilityHint("Lets you allow or deny a permission request without switching to the terminal")
+        }
+
         SettingsSection(title: "Startup") {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(isOn: Binding(

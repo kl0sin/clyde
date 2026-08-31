@@ -42,7 +42,7 @@ final class PermissionRequestStoreTests: XCTestCase {
 
     func testAWrittenRequestBecomesPending() throws {
         let dir = tempDir()
-        let store = PermissionRequestStore(directory: dir)
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
         try writeRequest(in: dir, id: "r1")
 
         store.scan()
@@ -58,7 +58,7 @@ final class PermissionRequestStoreTests: XCTestCase {
     /// something nobody is listening for.
     func testAnExpiredRequestIsNotPending() throws {
         let dir = tempDir()
-        let store = PermissionRequestStore(directory: dir)
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
         try writeRequest(in: dir, id: "old", expiresIn: -1)
 
         store.scan()
@@ -68,7 +68,7 @@ final class PermissionRequestStoreTests: XCTestCase {
 
     func testAnsweringWritesTheDecisionBesideTheRequest() throws {
         let dir = tempDir()
-        let store = PermissionRequestStore(directory: dir)
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
         try writeRequest(in: dir, id: "r1")
         store.scan()
 
@@ -81,7 +81,7 @@ final class PermissionRequestStoreTests: XCTestCase {
 
     func testDenialIsWrittenTheSameWay() throws {
         let dir = tempDir()
-        let store = PermissionRequestStore(directory: dir)
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
         try writeRequest(in: dir, id: "r1")
         store.scan()
 
@@ -97,7 +97,7 @@ final class PermissionRequestStoreTests: XCTestCase {
     /// hook has already stopped waiting for.
     func testAnAnsweredRequestLeavesThePanelImmediately() throws {
         let dir = tempDir()
-        let store = PermissionRequestStore(directory: dir)
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
         try writeRequest(in: dir, id: "r1")
         store.scan()
 
@@ -110,7 +110,7 @@ final class PermissionRequestStoreTests: XCTestCase {
         let dir = tempDir()
         try "{ not json".write(to: dir.appendingPathComponent("bad.request"),
                                atomically: true, encoding: .utf8)
-        let store = PermissionRequestStore(directory: dir)
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
 
         store.scan()
 
@@ -125,7 +125,7 @@ final class PermissionRequestStoreTests: XCTestCase {
         try #"{"behavior":"allow"}"#.write(to: dir.appendingPathComponent("r0.decision"),
                                           atomically: true, encoding: .utf8)
         try writeRequest(in: dir, id: "r1")
-        let store = PermissionRequestStore(directory: dir)
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
 
         store.scan()
 
@@ -136,7 +136,7 @@ final class PermissionRequestStoreTests: XCTestCase {
     /// the one the user is looking at.
     func testRequestsAreOrderedNewestFirst() throws {
         let dir = tempDir()
-        let store = PermissionRequestStore(directory: dir)
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
         try writeRequest(in: dir, id: "older", expiresIn: 20)
         try writeRequest(in: dir, id: "newer", expiresIn: 40)
 
@@ -176,4 +176,106 @@ final class PermissionRequestStoreTests: XCTestCase {
     func testAToolWithNoInputSaysSoRatherThanShowingNothing() {
         XCTAssertEqual(PermissionRequest.summary(tool: "Read", input: [:]), "no arguments")
     }
+
+    // MARK: - The setting, and the readiness the hook waits on
+
+    /// Off by default. The hook waits only while Clyde says it is
+    /// willing to answer, so with the feature off nobody pays the
+    /// decision window on any permission request.
+    func testDisabledMeansNoReadinessMarkerAndNoRequests() throws {
+        let dir = tempDir()
+        let store = PermissionRequestStore(directory: dir, isEnabled: { false })
+        try writeRequest(in: dir, id: "r1")
+
+        store.scan()
+
+        XCTAssertTrue(store.pending.isEmpty, "nothing to click means the terminal asks")
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("ready").path))
+    }
+
+    func testEnabledPublishesReadiness() throws {
+        let dir = tempDir()
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
+
+        store.scan()
+
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("ready").path))
+    }
+
+    /// The hook treats a stale marker as "Clyde is gone", so it has to
+    /// keep being touched while Clyde is alive.
+    func testReadinessIsRefreshedOnEveryScan() throws {
+        let dir = tempDir()
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
+        store.scan()
+        let ready = dir.appendingPathComponent("ready")
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: -600)], ofItemAtPath: ready.path)
+
+        store.scan()
+
+        let touched = try XCTUnwrap((try FileManager.default
+            .attributesOfItem(atPath: ready.path))[.modificationDate] as? Date)
+        XCTAssertLessThan(Date().timeIntervalSince(touched), 5)
+    }
+
+    /// Turning the setting off mid-session has to stop the waiting too,
+    /// not just hide the rows.
+    func testSwitchingOffRemovesTheReadinessMarker() throws {
+        let dir = tempDir()
+        var enabled = true
+        let store = PermissionRequestStore(directory: dir, isEnabled: { enabled })
+        store.scan()
+
+        enabled = false
+        store.scan()
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("ready").path))
+    }
+
+    /// Quitting is the same promise: nobody should wait on a Clyde that
+    /// is not there.
+    func testStoppingRemovesTheReadinessMarker() throws {
+        let dir = tempDir()
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
+        store.scan()
+
+        store.stop()
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("ready").path))
+    }
+
+
+    /// An answer nobody collected — the hook died, or the window had
+    /// already closed — would otherwise sit in the directory forever.
+    func testOrphanedAnswersAreCleanedUp() throws {
+        let dir = tempDir()
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
+        let orphan = dir.appendingPathComponent("gone.decision")
+        try #"{"behavior":"allow"}"#.write(to: orphan, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: -300)], ofItemAtPath: orphan.path)
+
+        store.scan()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+    }
+
+    /// An answer written a moment ago belongs to a hook that is still
+    /// reading it.
+    func testAFreshAnswerIsLeftAlone() throws {
+        let dir = tempDir()
+        let store = PermissionRequestStore(directory: dir, isEnabled: { true })
+        let fresh = dir.appendingPathComponent("live.decision")
+        try #"{"behavior":"allow"}"#.write(to: fresh, atomically: true, encoding: .utf8)
+
+        store.scan()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fresh.path))
+    }
+
 }

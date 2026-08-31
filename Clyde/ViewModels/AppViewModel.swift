@@ -215,6 +215,20 @@ final class AppViewModel: ObservableObject {
     /// otherwise.
     @Published private(set) var permissionRequests: [PermissionRequest] = []
 
+    /// Off by default. While off, Clyde publishes no readiness marker,
+    /// so the hook never waits and permission prompts behave exactly as
+    /// they do without Clyde installed.
+    @Published var answerPermissionsInPanel: Bool = UserDefaults.standard
+        .bool(forKey: PermissionRequestStore.settingKey) {
+        didSet {
+            UserDefaults.standard.set(answerPermissionsInPanel,
+                                      forKey: PermissionRequestStore.settingKey)
+            // Take effect now rather than on the next tick: switching
+            // off should stop sessions waiting immediately.
+            permissionStore.scan()
+        }
+    }
+
     func answerPermissionRequest(_ request: PermissionRequest, with decision: PermissionDecision) {
         permissionStore.answer(request, with: decision)
     }

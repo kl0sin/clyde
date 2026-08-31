@@ -15,11 +15,23 @@ final class PermissionRequestStore: ObservableObject {
     @Published private(set) var pending: [PermissionRequest] = []
 
     private let directory: URL
+    /// Whether the user has turned panel answering on. Read on every
+    /// scan rather than captured, so flipping the switch takes effect
+    /// without a restart.
+    private let isEnabled: () -> Bool
     private var expiryTimer: Timer?
     private var dirSource: DispatchSourceFileSystemObject?
 
-    init(directory: URL = AppPaths.permissionsDir) {
+    /// The default: Clyde does not answer permission requests until the
+    /// user says so. Off means the hook never waits for anything.
+    static let settingKey = "answerPermissionsInPanel"
+
+    init(directory: URL = AppPaths.permissionsDir,
+         isEnabled: @escaping () -> Bool = {
+             UserDefaults.standard.bool(forKey: PermissionRequestStore.settingKey)
+         }) {
         self.directory = directory
+        self.isEnabled = isEnabled
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -47,13 +59,37 @@ final class PermissionRequestStore: ObservableObject {
         expiryTimer = nil
         dirSource?.cancel()
         dirSource = nil
+        // Nobody should wait on a Clyde that is not there.
+        withdrawReadiness()
     }
 
     /// Re-read the directory. Cheap: a handful of small files at most,
     /// and usually none at all.
     func scan() {
+        guard isEnabled() else {
+            withdrawReadiness()
+            if !pending.isEmpty { pending = [] }
+            return
+        }
+        // The hook reads this file's age to decide whether waiting is
+        // worth it, so it has to keep being touched while Clyde is
+        // alive — a stale one means "gone".
+        publishReadiness()
+
         let files = (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil)) ?? []
+            at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        // An answer nobody collected — the hook died mid-window, or the
+        // window had already closed — is litter in a directory the user
+        // never sees. The hook deletes its own; this covers the rest.
+        let now = Date()
+        for file in files where file.pathExtension == "decision" {
+            let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? now
+            if now.timeIntervalSince(modified) > 60 {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+
         let requests = files
             .filter { $0.pathExtension == "request" }
             .compactMap { PermissionRequest(fileURL: $0) }
@@ -84,6 +120,20 @@ final class PermissionRequestStore: ObservableObject {
         // a question that lingers after it is answered invites a second
         // click on something nobody is listening for any more.
         pending.removeAll { $0.id == request.id }
+    }
+
+    private func publishReadiness() {
+        let marker = directory.appendingPathComponent("ready")
+        if FileManager.default.fileExists(atPath: marker.path) {
+            try? FileManager.default.setAttributes([.modificationDate: Date()],
+                                                   ofItemAtPath: marker.path)
+        } else {
+            FileManager.default.createFile(atPath: marker.path, contents: Data())
+        }
+    }
+
+    private func withdrawReadiness() {
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent("ready"))
     }
 
     private func startDirectoryWatcher() {
