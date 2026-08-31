@@ -40,6 +40,10 @@ struct SessionRow: View {
         HStack(alignment: .top, spacing: 12) {
             SessionStatusIndicator(session: session, idleIndex: idleIndex)
 
+            // Bounded, or the second line pushes the elapsed time off
+            // the panel's edge: an unconstrained column asks for the
+            // width its longest text wants, and a tool summary can be
+            // any length at all.
             VStack(alignment: .leading, spacing: 3) {
                 if isEditing {
                     HStack(spacing: 6) {
@@ -148,23 +152,52 @@ struct SessionRow: View {
                                 let text = session.activeToolCount >= 2
                                     ? "\(session.activeToolCount) tools"
                                     : label
-                                Text("\(text) · \(formatDuration(from: tool.startedAt, now: context.date))")
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(Color(white: 0.65))
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
+                                // Opens with the same micro-label the
+                                // compact row uses, so a session states
+                                // what it is doing in one voice
+                                // whichever mode is open. What follows
+                                // is the detail compact has no room for.
+                                HStack(spacing: 5) {
+                                    MicroLabel(text: tool.toolName,
+                                               color: SessionTheme.processingColor)
+                                    Text(detail(after: tool.toolName, in: text) +
+                                         " · \(formatDuration(from: tool.startedAt, now: context.date))")
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(Color(white: 0.65))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        // The detail is what gives way
+                                        // when the row runs out of
+                                        // width — not the elapsed time,
+                                        // which is a fixed, small and
+                                        // frequently read figure.
+                                        .layoutPriority(-1)
+                                }
                             }
                             .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                        } else if session.needsAttention {
+                            HStack(spacing: 5) {
+                                MicroLabel(text: "needs you",
+                                           color: SessionTheme.attentionColor)
+                                Text(abbreviatePath(session.workingDirectory))
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(TextColor.tertiary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
                         } else if session.status == .idle, let reply = session.lastMessage {
                             // An idle session has nothing live to report, so
                             // the last thing Claude said is more use than the
                             // path — which is already on the row above.
-                            Text("› \(reply)")
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(TextColor.tertiary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                            HStack(spacing: 5) {
+                                MicroLabel(text: "waiting", color: TextColor.tertiary)
+                                Text("› \(reply)")
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(TextColor.tertiary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                         } else {
                             Text(session.workingDirectory.isEmpty
                                  ? "Unknown path"
@@ -188,18 +221,24 @@ struct SessionRow: View {
                 }
             }
 
-            Spacer()
+            // Greedy on its own — a Spacer beside it asked for the
+            // width twice over, and the elapsed figure was what got
+            // pushed off the edge.
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if !isEditing {
+                // A fixed lane rather than a negotiated one: the
+                // elapsed figure is small, frequently read and never
+                // longer than "10h 20m", and letting it compete with a
+                // tool summary of arbitrary length pushed it off the
+                // panel's edge.
                 VStack(alignment: .trailing, spacing: 3) {
-                    if showsStatusPill {
-                        statusPill(for: session)
-                    }
-
                     Text(timeAgo(session.endedAt ?? session.statusChangedAt))
                         .font(.system(size: 9))
                         .foregroundStyle(timeColor)
+                        .fixedSize()
                 }
+                .frame(width: 46, alignment: .trailing)
             }
         }
 
@@ -517,6 +556,14 @@ struct SessionRow: View {
     /// Human-readable elapsed time for the active-tool indicator.
     /// Mirrors `timeAgo`'s style but trims to "Ns" / "Nm" / "Nm Ns" so
     /// the second line stays compact even on a 90s Bash command.
+    /// The tool label without its leading tool name — the micro-label
+    /// now carries that, and printing it twice was the redundancy this
+    /// change removes.
+    private func detail(after toolName: String, in label: String) -> String {
+        let prefix = "\(toolName) · "
+        return label.hasPrefix(prefix) ? String(label.dropFirst(prefix.count)) : label
+    }
+
     private func formatDuration(from start: Date, now: Date) -> String {
         let s = max(0, Int(now.timeIntervalSince(start)))
         if s < 60 { return "\(s)s" }

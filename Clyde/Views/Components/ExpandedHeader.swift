@@ -128,17 +128,26 @@ struct ExpandedHeader: View {
                     .foregroundStyle(TextColor.tertiary)
             }
         } else {
-            HStack(spacing: 10) {
+            // Three states and four buttons do not fit across 400
+            // points, and these counts refuse to shrink — so with
+            // everything happening at once the header asked for more
+            // width than the panel has and pushed the rows' elapsed
+            // figures off the right edge. Past two states the words go
+            // and the colours and numbers stay, exactly as the compact
+            // footer does it.
+            let crowded = entries.count > 2
+            HStack(spacing: crowded ? 7 : 10) {
                 ForEach(entries, id: \.label) { entry in
                     HStack(spacing: 5) {
                         Circle()
                             .fill(entry.color)
                             .frame(width: 5, height: 5)
-                        Text("\(entry.count) \(entry.label)")
+                        Text(crowded ? "\(entry.count)" : "\(entry.count) \(entry.label)")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(TextColor.secondary)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
+                            .help("\(entry.count) \(entry.label)")
                     }
                 }
             }

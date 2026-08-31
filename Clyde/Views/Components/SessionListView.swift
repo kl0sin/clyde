@@ -31,6 +31,12 @@ struct SessionListView: View {
                 }
             }
             .padding(.vertical, 4)
+            // A vertical ScrollView will happily let its content be
+            // wider than itself, and a row whose second line is a tool
+            // summary of arbitrary length took the invitation — pushing
+            // the elapsed figure past the panel's right edge, where it
+            // was clipped mid-character.
+            .frame(maxWidth: .infinity)
         }
     }
 
