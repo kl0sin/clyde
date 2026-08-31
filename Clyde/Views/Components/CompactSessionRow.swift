@@ -1,12 +1,17 @@
 import SwiftUI
 
-/// One session, one line, thirty points tall.
+/// One session, as a card.
 ///
-/// The full panel's row is 44 and spends its second line on a reply
-/// preview. Compact keeps only what answers "should I look at this
-/// session": which project, which worktree, how many agents, how long.
-/// Everything else is a reason to open the full panel, which is one
-/// click away.
+/// The card language is the full panel's own, which is what keeps
+/// compact recognisably this app rather than a list that could belong
+/// to any of them. What it adds is what a window kept open all day can
+/// afford: the state written into the surface, so a glance from across
+/// the desk lands before a word is read.
+///
+/// Quiet cards carry every device the active ones do, switched off —
+/// same shape, same slot, same corners, no wash, no texture, no sweep.
+/// That is what makes a session starting work visible out of the corner
+/// of the eye.
 struct CompactSessionRow: View {
 
     /// What the row draws. Split out from the view so the decisions can
@@ -15,24 +20,20 @@ struct CompactSessionRow: View {
         let name: String
         let worktree: String?
         let agentCount: Int?
-        /// What the session is doing, in a word or two. Nil for a
-        /// quiet session, whose whole story fits in `trailing`.
+        /// What the session is doing, in a word or two. Nil for a quiet
+        /// session, whose whole story fits in `trailing`.
         let meta: String?
         let trailing: String
         let state: PixelStatusIndicator.State
     }
 
-    /// What the row's left-hand square holds. The full panel gives an
-    /// idle session a numbered squircle and an active one the sprite;
-    /// compact keeps that language. A row of bare dots reads as a list
-    /// from any application — the numbered slot is what makes it this
-    /// one.
+    /// What the row's slot holds. The full panel gives an idle session a
+    /// numbered squircle and an active one the sprite; compact keeps
+    /// that language.
     enum Slot: Equatable {
         case number(Int)
         case indicator
     }
-
-    static let height: CGFloat = 30
 
     let session: Session
     /// Position in the list, for the slot number.
@@ -40,6 +41,24 @@ struct CompactSessionRow: View {
     let onOpen: () -> Void
 
     @SwiftUI.State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// One height for every card. A quiet card carries the same devices
+    /// as an active one with all of them switched off — same shape,
+    /// same slot, same two lines — and that sameness is what makes a
+    /// session starting work visible from the corner of the eye.
+    ///
+    /// Shortening the quiet ones was tried and took their structure
+    /// away: a name and a long string of text with nothing holding them
+    /// apart.
+    static let cardHeight: CGFloat = 44
+    /// Space between cards, so they read as separate surfaces.
+    static let gap: CGFloat = 6
+
+    static func height(for session: Session) -> CGFloat { cardHeight }
+
+    /// Kept for the empty-state placeholder's height.
+    static var quietHeight: CGFloat { cardHeight }
 
     static func slot(for session: Session, index: Int) -> Slot {
         PixelStatusIndicator.state(for: session) == .idle ? .number(index + 1) : .indicator
@@ -59,43 +78,32 @@ struct CompactSessionRow: View {
     }
 
     /// The row's middle: what this session is doing.
-    ///
-    /// Nothing for a quiet one. "Waiting for you" repeated down every
-    /// idle row differentiates nothing, and the time already says it
-    /// once it is given a verb.
     static func meta(for session: Session, state: PixelStatusIndicator.State) -> String? {
         switch state {
         case .needsAttention:
             return "needs you"
         case .working:
-            // The tool it is running says more than the word "working"
-            // ever could, and it is already on screen in the full panel.
             return session.activeTool?.toolName ?? "working"
         case .idle:
-            return nil
+            // The label carries the state; the figure beside it carries
+            // the duration. Putting both in one string left the card
+            // with a name and a sentence and no structure.
+            return "waiting"
         }
     }
 
     /// The trailing figure, with the verb the bare number was missing:
     /// "42s" is forty-two seconds of what.
     static func trailing(for session: Session, state: PixelStatusIndicator.State) -> String {
-        let elapsed = duration(Int(Date().timeIntervalSince(session.statusChangedAt)))
-        return state == .idle ? "waiting \(elapsed)" : elapsed
+        duration(Int(Date().timeIntervalSince(session.statusChangedAt)))
     }
 
     /// Clicking a row brings its terminal forward — an affordance the
     /// row never advertised.
     static let hoverLabel = "Open"
 
-    /// Quiet rows recede. A session that starts working then stands out
-    /// on contrast alone, with nothing needing to flash.
-    static func namesAreProminent(in state: PixelStatusIndicator.State) -> Bool {
-        state != .idle
-    }
-
     /// Coarser the longer it runs: seconds stop mattering after an hour,
-    /// minutes after a day. The row has no space to spend on precision
-    /// nobody reads.
+    /// minutes after a day.
     static func duration(_ seconds: Int) -> String {
         let seconds = max(0, seconds)
         if seconds < 60 { return "\(seconds)s" }
@@ -111,77 +119,59 @@ struct CompactSessionRow: View {
         return h == 0 ? "\(d)d" : "\(d)d \(h)h"
     }
 
+    static func namesAreProminent(in state: PixelStatusIndicator.State) -> Bool {
+        state != .idle
+    }
+
     var body: some View {
         let content = Self.content(for: session)
         let accent = PixelStatusIndicator.color(for: content.state)
         let isActive = content.state != .idle
 
-        HStack(spacing: Spacing.xs) {
-            // A hairline of the state's colour down the leading edge —
-            // the same device the subagent list uses, so an active row
-            // is legible from the corner of the eye without a second
-            // badge competing with the slot.
-            RoundedRectangle(cornerRadius: 1)
-                .fill(isActive ? accent.opacity(0.75) : .clear)
-                .frame(width: 2, height: 16)
-
+        HStack(spacing: 10) {
             slotView(state: content.state)
 
-            Text(content.name)
-                .font(.system(size: 12.5,
-                              weight: Self.namesAreProminent(in: content.state) ? .semibold : .medium))
-                .foregroundStyle(Self.namesAreProminent(in: content.state)
-                                 ? TextColor.primary : TextColor.secondary)
-                .lineLimit(1)
-
-            if let worktree = content.worktree {
-                WorktreeBadge(name: worktree)
-            }
-
-            if let agents = content.agentCount {
-                AgentCount(count: agents)
-            }
-
-            if let meta = content.meta {
-                Text(meta)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(TextColor.tertiary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(content.name)
+                    .font(.system(size: 12.5,
+                                  weight: Self.namesAreProminent(in: content.state) ? .semibold : .medium))
+                    .foregroundStyle(Self.namesAreProminent(in: content.state)
+                                     ? TextColor.primary : TextColor.secondary)
                     .lineLimit(1)
-                    .layoutPriority(-1)
-            }
 
-            Spacer(minLength: Spacing.xxs)
-
-            if isHovered {
-                HStack(spacing: 3) {
-                    Text(Self.hoverLabel)
-                    Image(systemName: "arrow.up.forward")
-                        .font(.system(size: 8, weight: .semibold))
+                if let meta = content.meta {
+                    HStack(spacing: 5) {
+                        MicroLabel(text: meta, color: accent)
+                        if let worktree = content.worktree { Chip(text: worktree, tinted: true) }
+                        if let agents = content.agentCount { Chip(text: "◉ \(agents)", tinted: false) }
+                    }
                 }
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(TextColor.secondary)
-            } else {
-                Text(content.trailing)
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(TextColor.tertiary)
-                    .monospacedDigit()
             }
+
+            Spacer(minLength: 6)
+
+            trailingView(content: content, isActive: isActive)
         }
-        .padding(.leading, Spacing.xs)
-        .padding(.trailing, Spacing.sm)
-        .frame(height: Self.height)
-        .background(
-            // Rounded highlights instead of divider lines: rules between
-            // rows read as a table, and a table is the most generic
-            // shape a list can take.
-            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                .fill(isActive ? accent.opacity(0.07) : Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                        .fill(Color.white.opacity(isHovered ? 0.05 : 0))
-                )
-                .padding(.horizontal, 4)
+        .padding(.horizontal, 11)
+        .frame(height: Self.cardHeight)
+        .background(cardBackground(state: content.state, accent: accent))
+        .overlay(alignment: .top) {
+            // One hairline gradient is the whole difference between a
+            // rectangle and something raised.
+            LinearGradient(colors: [.clear, .white.opacity(0.14), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(height: 1)
+        }
+        .overlay(alignment: .bottom) {
+            if isActive { SweepLine(color: accent, animates: content.state == .working && !reduceMotion) }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(borderColour(state: content.state, accent: accent), lineWidth: 1)
         )
+        .offset(y: isHovered ? -1 : 0)
+        .animation(.easeOut(duration: 0.14), value: isHovered)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture(perform: onOpen)
@@ -190,19 +180,81 @@ struct CompactSessionRow: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    /// A squircle in miniature — the same shape the full panel's slot
-    /// uses, at 20 points instead of 34, tinted by the state it is in.
+    // MARK: - Surface
+
+    /// The state is the surface: a wash falling off from the leading
+    /// edge rather than a coloured outline, so a busy session reads as
+    /// warm instead of ringed. A rail down the left edge said the same
+    /// thing a third time, in the way every generated card on the web
+    /// currently says it, and was dropped.
+    @ViewBuilder
+    private func cardBackground(state: PixelStatusIndicator.State, accent: Color) -> some View {
+        ZStack {
+            Color.white.opacity(0.028)
+
+            if state != .idle {
+                RadialGradient(
+                    colors: [accent.opacity(state == .needsAttention ? 0.22 : 0.20), .clear],
+                    center: .leading,
+                    startRadius: 0,
+                    endRadius: 260
+                )
+                // The mascot is pixel art; this is that world at the
+                // scale of a surface. Fades out across the card so it
+                // stays at the threshold of visible.
+                DitherField()
+                    .mask(
+                        LinearGradient(colors: [.black.opacity(0.85), .clear],
+                                       startPoint: .leading, endPoint: .trailing)
+                    )
+            }
+        }
+    }
+
+    private func borderColour(state: PixelStatusIndicator.State, accent: Color) -> Color {
+        switch state {
+        case .idle: return .white.opacity(isHovered ? 0.12 : 0.05)
+        case .working, .needsAttention: return accent.opacity(0.30)
+        }
+    }
+
+    @ViewBuilder
+    private func trailingView(content: Content, isActive: Bool) -> some View {
+        if isHovered {
+            HStack(spacing: 3) {
+                Text(Self.hoverLabel)
+                Image(systemName: "arrow.up.forward")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(TextColor.secondary)
+        } else {
+            HStack(spacing: 4) {
+                if isActive {
+                    // A counter ticks in hard steps; it is the one place
+                    // a hard step is right.
+                    TickPixel(color: PixelStatusIndicator.color(for: content.state),
+                              animates: content.state == .working && !reduceMotion)
+                }
+                Text(content.trailing)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(isActive ? TextColor.secondary : TextColor.tertiary)
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    /// The corner of a drawn sprite rather than of a web card.
     @ViewBuilder
     private func slotView(state: PixelStatusIndicator.State) -> some View {
         let accent = PixelStatusIndicator.color(for: state)
         let isActive = state != .idle
 
         ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isActive ? accent.opacity(0.16) : Color(white: 0.11))
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(isActive ? accent.opacity(0.5) : Color(white: 0.18),
-                              lineWidth: isActive ? 1 : 0.5)
+            SteppedSquare()
+                .fill(isActive ? accent.opacity(0.16) : Color.white.opacity(0.05))
+            SteppedSquare()
+                .stroke(isActive ? accent.opacity(0.40) : Color.white.opacity(0.07), lineWidth: 1)
 
             switch Self.slot(for: session, index: index) {
             case .number(let n):
@@ -210,15 +262,15 @@ struct CompactSessionRow: View {
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(TextColor.tertiary)
             case .indicator:
-                PixelStatusIndicator(state: state, size: 3.5, spacing: 1.5)
+                // Half the slot, near enough: smaller and the grid sat
+                // in the middle of an empty square, reading as
+                // decoration rather than as light crossing a grid.
+                PixelStatusIndicator(state: state, size: 5, spacing: 2)
             }
         }
-        .frame(width: 20, height: 20)
+        .frame(width: 24, height: 24)
     }
 
-    /// Spoken rather than shown: the indicator is decorative, so the
-    /// state has to be in words here or a screen reader hears a name
-    /// and a number.
     static func accessibilityLabel(for content: Content) -> String {
         var parts = [content.name]
         if let meta = content.meta { parts.append(meta) }
@@ -231,63 +283,141 @@ struct CompactSessionRow: View {
     }
 }
 
-/// The worktree a session moved into. Its own mark rather than more
-/// text, because the name beside it is already the project.
-private struct WorktreeBadge: View {
-    let name: String
+// MARK: - Pieces
+
+/// Uppercase, letter-spaced, in the state's colour. A label rather than
+/// a sentence: the row has room for rhythm, not prose.
+private struct MicroLabel: View {
+    let text: String
+    let color: Color
 
     var body: some View {
-        HStack(spacing: 2) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: 8))
-            Text(name)
-                .font(.system(size: 9, design: .monospaced))
-                .lineLimit(1)
-        }
-        .foregroundStyle(SessionTheme.readyColor.opacity(0.85))
-        .padding(.horizontal, 4)
-        .padding(.vertical, 1)
-        .background(
-            RoundedRectangle(cornerRadius: 3)
-                .fill(SessionTheme.readyColor.opacity(0.14))
-        )
+        Text(text.uppercased())
+            .font(.system(size: 8.5, weight: .medium, design: .monospaced))
+            .tracking(1.1)
+            .foregroundStyle(color.opacity(0.9))
     }
 }
 
-/// How many agents are working, with a mark from the mascot's family so
-/// the number is unmistakably agents and not four of anything else.
-private struct AgentCount: View {
-    let count: Int
+private struct Chip: View {
+    let text: String
+    let tinted: Bool
 
     var body: some View {
-        HStack(spacing: 3) {
-            AgentMark()
-            Text("\(count)")
-                .font(.system(size: 10, design: .monospaced))
-                .monospacedDigit()
-        }
-        .foregroundStyle(TextColor.tertiary)
+        Text(text)
+            .font(.system(size: 8.5, design: .monospaced))
+            .foregroundStyle(tinted ? SessionTheme.readyColor.opacity(0.95) : TextColor.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(tinted ? SessionTheme.readyColor.opacity(0.22) : Color.white.opacity(0.11))
+            )
     }
 }
 
-/// A head with two eyes at eight points across — the smallest the
-/// mascot can be and still be recognisable as one.
-private struct AgentMark: View {
+/// One-pixel diagonal hatching. Drawn rather than tiled from an asset so
+/// it stays exactly one pixel at any scale factor.
+private struct DitherField: View {
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(SessionTheme.processingColor.opacity(0.75))
-                .frame(width: 8, height: 7)
-            HStack(spacing: 2) {
-                eye
-                eye
+        Canvas { context, size in
+            let spacing: CGFloat = 3
+            var offset = -size.height
+            let colour = GraphicsContext.Shading.color(.white.opacity(0.045))
+            while offset < size.width {
+                var line = Path()
+                line.move(to: CGPoint(x: offset, y: size.height))
+                line.addLine(to: CGPoint(x: offset + size.height, y: 0))
+                context.stroke(line, with: colour, lineWidth: 1)
+                offset += spacing
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// A lit segment crossing the bottom edge of an active card — the
+/// wave's cousin at the scale of the card. Clock-driven for the same
+/// reason the wave is: `.repeatForever` started in `onAppear` is
+/// unreliable for rows that have just appeared.
+private struct SweepLine: View {
+    let color: Color
+    let animates: Bool
+
+    private let period: Double = 2.4
+
+    var body: some View {
+        GeometryReader { proxy in
+            if animates {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                    let t = context.date.timeIntervalSinceReferenceDate
+                    let phase = (t.truncatingRemainder(dividingBy: period)) / period
+                    segment(width: proxy.size.width, phase: phase)
+                }
+            } else {
+                Rectangle()
+                    .fill(color.opacity(0.35))
+                    .frame(height: 1)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+            }
+        }
+        .frame(height: 1)
+        .allowsHitTesting(false)
+    }
+
+    private func segment(width: CGFloat, phase: Double) -> some View {
+        let segmentWidth = width * 0.38
+        let travel = width + segmentWidth
+        return LinearGradient(colors: [.clear, color, .clear],
+                              startPoint: .leading, endPoint: .trailing)
+            .frame(width: segmentWidth, height: 1)
+            .offset(x: -segmentWidth + travel * phase)
+            .frame(width: width, alignment: .leading)
+            .clipped()
+    }
+}
+
+/// One pixel beside a running duration, blinking once a second.
+private struct TickPixel: View {
+    let color: Color
+    let animates: Bool
+
+    var body: some View {
+        Group {
+            if animates {
+                TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                    let on = Int(context.date.timeIntervalSinceReferenceDate * 2) % 2 == 0
+                    pixel.opacity(on ? 1 : 0.25)
+                }
+            } else {
+                pixel.opacity(0.8)
             }
         }
     }
 
-    private var eye: some View {
+    private var pixel: some View {
         RoundedRectangle(cornerRadius: 0.5)
-            .fill(Color(white: 0.1))
-            .frame(width: 1.5, height: 1.5)
+            .fill(color)
+            .frame(width: 3, height: 3)
+    }
+}
+
+/// A square with two-pixel steps at each corner: drawn on a grid, the
+/// way the mascot is.
+struct SteppedSquare: Shape {
+    var step: CGFloat = 3
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + step, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - step, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + step))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - step))
+        path.addLine(to: CGPoint(x: rect.maxX - step, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + step, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - step))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + step))
+        path.closeSubpath()
+        return path
     }
 }

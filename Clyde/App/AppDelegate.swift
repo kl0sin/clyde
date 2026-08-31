@@ -473,7 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let request = CompactRootView.expandedRequest(
                 from: appViewModel.permissionRequests,
                 visiblePIDs: Set(visible.map(\.pid)))
-            height = CompactRootView.height(rows: max(visible.count, 1), expanded: request)
+            height = CompactRootView.height(for: visible, expanded: request)
         }
         guard expandedPanel.currentAllowedSize.height != height else { return }
         expandedPanel.applyHeight(height)

@@ -23,21 +23,36 @@ final class CompactModeTests: XCTestCase {
 
     // MARK: - Height
 
-    func testHeightFollowsTheRowCount() {
-        let two = CompactRootView.height(rows: 2)
-        let four = CompactRootView.height(rows: 4)
+    func testHeightFollowsWhatIsShown() {
+        let two = CompactRootView.height(for: [session("a"), session("b")])
+        let four = CompactRootView.height(for: (0..<4).map { session("s\($0)") })
 
-        XCTAssertEqual(four - two, 2 * CompactSessionRow.height)
+        XCTAssertGreaterThan(four, two)
+    }
+
+    /// State does not change the height, only the count does.
+    ///
+    /// An earlier version made quiet cards shorter, and this test
+    /// enforced that. Looking at it settled the question the other way:
+    /// a quiet card carries the same devices switched off, and giving
+    /// it fewer lines took its structure away. Uniform cards also mean
+    /// the window does not resize every time a session starts talking.
+    func testStateDoesNotChangeTheHeight() {
+        let quiet = CompactRootView.height(for: [session("a"), session("b")])
+        let busy = CompactRootView.height(for: [session("a", status: .busy), session("b")])
+
+        XCTAssertEqual(busy, quiet)
     }
 
     func testAnEmptyPanelStillHasItsChrome() {
-        XCTAssertGreaterThan(CompactRootView.height(rows: 0), 0)
+        XCTAssertGreaterThan(CompactRootView.height(for: []), 0)
     }
 
-    /// Four sessions were the number this was designed around: a third
-    /// of the full panel rather than all of it.
+    /// Four quiet sessions were the number this was designed around: a
+    /// fraction of the full panel rather than all of it.
     func testFourSessionsAreWellUnderTheFullPanel() {
-        XCTAssertLessThan(CompactRootView.height(rows: 4), 420 * 0.5)
+        let four = (0..<4).map { session("s\($0)") }
+        XCTAssertLessThan(CompactRootView.height(for: four), 420 * 0.6)
     }
 
     // MARK: - Which sessions, and in what order
@@ -125,8 +140,9 @@ final class CompactModeTests: XCTestCase {
     }
 
     func testARequestMakesTheWindowTaller() throws {
-        let plain = CompactRootView.height(rows: 3)
-        let withRequest = CompactRootView.height(rows: 3, expanded: try request())
+        let rows = (0..<3).map { session("s\($0)") }
+        let plain = CompactRootView.height(for: rows)
+        let withRequest = CompactRootView.height(for: rows, expanded: try request())
 
         XCTAssertGreaterThan(withRequest, plain)
     }
@@ -134,9 +150,10 @@ final class CompactModeTests: XCTestCase {
     /// A longer command needs more room, and compact has to know how
     /// much before it draws anything.
     func testALongerCommandAsksForMoreRoom() throws {
-        let short = CompactRootView.height(rows: 2, expanded: try request(command: "ls"))
+        let rows = [session("a"), session("b")]
+        let short = CompactRootView.height(for: rows, expanded: try request(command: "ls"))
         let long = CompactRootView.height(
-            rows: 2, expanded: try request(command: String(repeating: "x", count: 300)))
+            for: rows, expanded: try request(command: String(repeating: "x", count: 300)))
 
         XCTAssertGreaterThan(long, short)
     }
@@ -144,10 +161,11 @@ final class CompactModeTests: XCTestCase {
     /// Folded at five lines, like the full panel — otherwise a forty
     /// line script takes the screen.
     func testAnEnormousCommandIsBounded() throws {
+        let rows = [session("a"), session("b")]
         let five = CompactRootView.height(
-            rows: 2, expanded: try request(command: (1...5).map(String.init).joined(separator: "\n")))
+            for: rows, expanded: try request(command: (1...5).map(String.init).joined(separator: "\n")))
         let forty = CompactRootView.height(
-            rows: 2, expanded: try request(command: (1...40).map(String.init).joined(separator: "\n")))
+            for: rows, expanded: try request(command: (1...40).map(String.init).joined(separator: "\n")))
 
         XCTAssertEqual(forty, five)
     }

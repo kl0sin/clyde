@@ -68,8 +68,11 @@ struct PixelStatusIndicator: View {
     static func restingOpacity(_ state: State) -> Double {
         switch state {
         case .needsAttention: return 1.0
-        case .idle: return 0.5
-        case .working: return 0.28
+        case .idle: return 0.7
+        // A waiting pixel at 0.28 vanished inside a 24-point slot: the
+        // wave read as one cell lighting in an empty square rather than
+        // as light travelling a grid that is always there.
+        case .working: return 0.45
         }
     }
 

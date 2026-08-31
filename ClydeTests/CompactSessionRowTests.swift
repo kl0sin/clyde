@@ -25,8 +25,22 @@ final class CompactSessionRowTests: XCTestCase {
         return s
     }
 
-    func testTheRowIsThirtyPoints() {
-        XCTAssertEqual(CompactSessionRow.height, 30)
+    /// Every card is the same height, because a quiet card carries the
+    /// same devices as an active one with all of them switched off —
+    /// same shape, same slot, same two lines. Shortening the quiet ones
+    /// was tried and it took their structure away: a name and a long
+    /// string of text, with nothing holding them apart.
+    func testEveryCardIsTheSameHeight() {
+        XCTAssertEqual(CompactSessionRow.height(for: session()),
+                       CompactSessionRow.height(for: session(status: .busy)))
+        XCTAssertEqual(CompactSessionRow.height(for: session(attention: true)),
+                       CompactSessionRow.height(for: session(status: .busy)))
+    }
+
+    /// Four sessions still have to be worth calling compact.
+    func testFourSessionsStayWellUnderTheFullPanel() {
+        let four = (0..<4).map { _ in CompactSessionRow.height(for: session()) }.reduce(0, +)
+        XCTAssertLessThan(four, 220)
     }
 
     /// The worst case the row has to survive on one line: a worktree
@@ -94,7 +108,7 @@ final class CompactSessionRowTests: XCTestCase {
         var s = session()
         s.statusChangedAt = Date().addingTimeInterval(-3720)
 
-        XCTAssertEqual(CompactSessionRow.content(for: s).trailing, "waiting 1h 2m")
+        XCTAssertEqual(CompactSessionRow.content(for: s).trailing, "1h 2m")
     }
 
     /// Seconds are noise past an hour, and minutes are noise past a day.
@@ -139,14 +153,17 @@ final class CompactSessionRowTests: XCTestCase {
     /// One phrase, not two columns saying half a thing each. "42s" on
     /// its own is forty-two seconds of what, and "waiting for you"
     /// repeated down every quiet row differentiates nothing.
-    func testAQuietRowSaysWhatItHasBeenWaitingFor() {
+    /// The label says what the state is; the figure says how long. Both
+    /// on one line — "waiting 42s" with nothing above it — left the
+    /// card without structure.
+    func testAQuietCardLabelsItselfAndKeepsTheFigureClean() {
         var s = session()
         s.statusChangedAt = Date().addingTimeInterval(-42)
 
         let content = CompactSessionRow.content(for: s)
 
-        XCTAssertNil(content.meta, "the time carries it")
-        XCTAssertEqual(content.trailing, "waiting 42s")
+        XCTAssertEqual(content.meta, "waiting")
+        XCTAssertEqual(content.trailing, "42s")
     }
 
     /// A working row spends the same space on what is actually running.
@@ -155,8 +172,6 @@ final class CompactSessionRowTests: XCTestCase {
         s.activeTool = ActiveTool(toolName: "Bash", summary: "npm test", startedAt: Date())
 
         XCTAssertEqual(CompactSessionRow.content(for: s).meta, "Bash")
-        XCTAssertFalse(CompactSessionRow.content(for: s).trailing.contains("waiting"),
-                       "a working row's time is how long it has been working")
     }
 
     func testAWorkingRowWithNoToolYetSaysSo() {

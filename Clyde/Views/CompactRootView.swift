@@ -17,12 +17,25 @@ struct CompactRootView: View {
     /// The height this view wants, which is the only thing in the app
     /// allowed to change the panel's size — and it does so by being
     /// told to, never by pushing from inside. See `ExpandedPanel`.
-    static func height(rows: Int, expanded request: PermissionRequest? = nil) -> CGFloat {
-        gripHeight
-            + CGFloat(max(0, rows)) * CompactSessionRow.height
+    ///
+    /// Sessions are measured rather than counted: a quiet card is one
+    /// line and an active one is two, so four quiet sessions and four
+    /// busy ones are different windows.
+    static func height(for sessions: [Session],
+                       expanded request: PermissionRequest? = nil) -> CGFloat {
+        let cards = sessions.reduce(CGFloat(0)) { $0 + CompactSessionRow.height(for: $1) }
+        let gaps = CGFloat(max(0, sessions.count - 1)) * CompactSessionRow.gap
+        let empty: CGFloat = sessions.isEmpty ? CompactSessionRow.quietHeight : 0
+        return gripHeight
+            + cardPadding * 2
+            + cards + gaps + empty
             + (request.map(requestHeight) ?? 0)
             + footerHeight
     }
+
+    /// Cards sit inset from the panel's edge so they read as surfaces
+    /// on it rather than as bands across it.
+    static let cardPadding: CGFloat = 7
 
     /// How much room an open question needs, worked out before it is
     /// drawn. The window's height is computed and applied deliberately
@@ -84,29 +97,35 @@ struct CompactRootView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // The header used to be the drag handle; without it the
-            // window needs somewhere to be picked up.
             DragStrip()
                 .frame(height: Self.gripHeight)
 
-            VStack(spacing: 1) {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, session in
-                    CompactSessionRow(session: session, index: index) {
-                        appViewModel.focusSession(session)
-                    }
+            cards
 
-                    // The question opens under the session that asked
-                    // it. Deferring to the terminal instead would mean
-                    // the feature the user switched on does not work in
-                    // the mode they keep open.
-                    if let request = expanded, request.pid == session.pid {
-                        PermissionRequestRow(request: request) { decision in
-                            appViewModel.answerPermissionRequest(request, with: decision)
-                        }
-                        .padding(.horizontal, Spacing.xs)
-                        .padding(.bottom, Spacing.xxs)
-                    }
+            footer
+        }
+        .background(panelSurface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
+        )
+    }
 
+    private var cards: some View {
+        VStack(spacing: CompactSessionRow.gap) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, session in
+                CompactSessionRow(session: session, index: index) {
+                    appViewModel.focusSession(session)
+                }
+
+                // The question opens under the session that asked it.
+                // Deferring to the terminal instead would mean the
+                // feature the user switched on does not work in the
+                // mode they keep open.
+                if let request = expanded, request.pid == session.pid {
+                    PermissionRequestRow(request: request) { decision in
+                        appViewModel.answerPermissionRequest(request, with: decision)
+                    }
                 }
             }
 
@@ -115,27 +134,23 @@ struct CompactRootView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(TextColor.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, Spacing.sm)
-                    .frame(height: CompactSessionRow.height)
+                    .frame(height: CompactSessionRow.quietHeight)
             }
-
-            footer
         }
-        // The same surface the full panel uses, so switching modes
-        // changes the contents and not the material.
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
-                    .environment(\.colorScheme, .dark)
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(nsColor: NSColor(red: 0.08, green: 0.08, blue: 0.1, alpha: 0.85)))
-            }
-        )
-        .overlay(
+        .padding(.horizontal, Self.cardPadding)
+        .padding(.vertical, Self.cardPadding)
+    }
+
+    /// The same material and border the full panel is made of: moving
+    /// between modes should change the contents, not the window.
+    private var panelSurface: some View {
+        ZStack {
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
-        )
+                .fill(.ultraThinMaterial)
+                .environment(\.colorScheme, .dark)
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: NSColor(red: 0.08, green: 0.08, blue: 0.1, alpha: 0.85)))
+        }
     }
 
     private var footer: some View {
