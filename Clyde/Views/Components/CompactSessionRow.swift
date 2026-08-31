@@ -178,7 +178,13 @@ struct CompactSessionRow: View {
                 .frame(height: 1)
         }
         .overlay(alignment: .bottom) {
-            if isActive { SweepLine(color: accent, animates: content.state == .working && !reduceMotion) }
+            // The sweep belongs to work, not to waiting. Held still for
+            // an attention card it stopped being light crossing the
+            // surface and became a coloured bottom border — and the
+            // whole point of that state is that it does not move.
+            if content.state == .working {
+                SweepLine(color: accent, animates: !reduceMotion)
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
@@ -266,9 +272,12 @@ struct CompactSessionRow: View {
         let isActive = state != .idle
 
         ZStack {
-            SteppedSquare(step: 4)
+            // The step is a proportion, not a constant: 4 points on a
+            // 24-point slot is a deeper bite than 4 on a 34-point one,
+            // and the two modes stopped looking like the same mark.
+            SteppedSquare(step: 24 * SteppedSquare.stepRatio)
                 .fill(isActive ? accent.opacity(0.16) : Color.white.opacity(0.05))
-            SteppedSquare(step: 4)
+            SteppedSquare(step: 24 * SteppedSquare.stepRatio)
                 .stroke(isActive ? accent.opacity(0.40) : Color.white.opacity(0.07), lineWidth: 1)
 
             switch Self.slot(for: session, index: index) {
@@ -426,6 +435,11 @@ private struct TickPixel: View {
 /// A square with two-pixel steps at each corner: drawn on a grid, the
 /// way the mascot is.
 struct SteppedSquare: Shape {
+    /// How deep the corner steps are, as a fraction of the square. Held
+    /// here so every slot in the app bites the same amount whatever
+    /// size it is drawn at.
+    static let stepRatio: CGFloat = 0.12
+
     var step: CGFloat = 3
 
     func path(in rect: CGRect) -> Path {

@@ -182,8 +182,19 @@ struct CompactRootView: View {
                 .frame(width: 12, height: 12)
 
             ForEach(counts, id: \.label) { count in
-                StatusPill(count: count.value, label: count.label,
-                           color: count.color, pulse: count.pulse)
+                if isCrowded {
+                    // Words do not fit beside an advisory and the way
+                    // back: three labelled pills, a warning and a
+                    // button come to more than 400 points, and the
+                    // labels were truncating mid-word. The colours and
+                    // the numbers survive; the words are a hover and a
+                    // mode away.
+                    CountDot(count: count.value, color: count.color)
+                        .help("\(count.value) \(count.label)")
+                } else {
+                    StatusPill(count: count.value, label: count.label,
+                               color: count.color, pulse: count.pulse)
+                }
             }
 
             if counts.isEmpty {
@@ -238,6 +249,12 @@ struct CompactRootView: View {
     /// The same pills the full panel's summary bar uses, counted over
     /// every live session rather than the rows on screen — so the
     /// number never contradicts what the cap left out.
+    /// Whether the footer has to give up its words.
+    private var isCrowded: Bool {
+        let advisory = appViewModel.hookHealthIssue?.presentation == .chip
+        return counts.count > 2 || (advisory && counts.count > 1)
+    }
+
     private var counts: [Count] {
         let live = sessionViewModel.sessions.filter { !$0.isGhost }
         let attention = live.filter(\.needsAttention).count
@@ -274,4 +291,30 @@ private struct DragStrip: View {
         .contentShape(Rectangle())
         .accessibilityHidden(true)
     }
+}
+
+/// A count with no room for its label: the dot keeps the colour, the
+/// number keeps the fact, and the words are one hover away.
+private struct CountDot: View {
+    let count: Int
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(color)
+                .frame(width: 5, height: 5)
+            Text("\(count)")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(color.opacity(0.9))
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(
+            RoundedRectangle(cornerRadius: 999)
+                .fill(color.opacity(0.14))
+        )
+    }
+
 }

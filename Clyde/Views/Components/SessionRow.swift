@@ -833,10 +833,10 @@ struct SessionStatusIndicator: View {
             // drawn sprite, which is what this holds. The compact
             // panel's slot uses the same shape, so the mark is one
             // thing in both modes rather than two dialects of it.
-            SteppedSquare(step: 4)
+            SteppedSquare(step: 34 * SteppedSquare.stepRatio)
                 .fill(isActive ? accent.opacity(0.18) : Color(white: 0.11))
                 .frame(width: 34, height: 34)
-            SteppedSquare(step: 4)
+            SteppedSquare(step: 34 * SteppedSquare.stepRatio)
                 .stroke(
                     isActive
                         ? accent.opacity(session.needsAttention && attentionPulse ? 0.65 : 0.55)
@@ -878,7 +878,9 @@ struct SessionStatusIndicator: View {
             } else {
                 // Idle: numbered slot. Two-digit format keeps width stable.
                 Text(String(format: "%02d", idleIndex ?? 0))
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    // Monospaced, like the compact slot's: the same
+                    // number should not change typeface with the mode.
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(TextColor.tertiary)
             }
         }
