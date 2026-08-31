@@ -1,17 +1,18 @@
 import SwiftUI
 
-/// Four pixels standing in for a session's state, in the mascot's own
-/// visual world.
+/// Three bars, rising and falling while a session works.
 ///
-/// It replaces the coloured dot, which said which state a session was
-/// in and nothing about whether anything was happening. Across a
-/// column of rows — which is all compact mode is — motion is what
-/// separates working from waiting.
+/// The shape a column of rows is scanned by. Four drafts came before
+/// it: a 2x2 grid (the Windows 8 logo), a ring of dots (every loader on
+/// the web, and round where this app is square), and the mascot's own
+/// antenna lifted out of the sprite — which had the strongest claim to
+/// the app's character and still did not look right on a row.
 ///
-/// One object in three states rather than three drawings: the same
-/// square travelling, at rest, or filled. That is what keeps a column
-/// scannable, and it means the state survives the colour being taken
-/// away.
+/// Bars are square-edged, so they belong to the same world as the
+/// sprite without quoting it, and they carry the state in their shape:
+/// uneven and moving while working, flat at rest, all raised and still
+/// when a session needs you. That last part matters — the state
+/// survives the colour being taken away.
 struct PixelStatusIndicator: View {
 
     enum State: Equatable {
@@ -21,14 +22,15 @@ struct PixelStatusIndicator: View {
     }
 
     let state: State
+    /// One pixel of the sprite.
     var size: CGFloat = 4
-    var spacing: CGFloat = 1.5
+    var spacing: CGFloat = 1
 
     /// The wave's full period. Exactly four delay steps, so the fourth
     /// pixel hands off to the first: any longer and the wave rests
     /// between laps, which reads as a stutter rather than a cycle.
-    static let cycle: Double = 1.6
-    static let delayStep: Double = cycle / 4
+    static let cycle: Double = 1.2
+    static let delayStep: Double = cycle / 3
 
     /// Attention pulses this many times when it arrives, then holds.
     static let arrivalPulses = 3
@@ -76,14 +78,20 @@ struct PixelStatusIndicator: View {
         }
     }
 
-    /// Clockwise: top-left, top-right, bottom-right, bottom-left.
+    /// Each bar starts a step after the last, so the group reads as one
+    /// movement rather than three independent blinks.
     static func delay(forPixel index: Int) -> Double {
         Double(index) * delayStep
     }
 
-    /// Grid order for the clockwise sequence above — the third pixel
-    /// drawn is the bottom-right one, which is the fourth to light.
-    private static let clockwise = [0, 1, 3, 2]
+    /// How tall a bar stands, 0…1, at a given moment.
+    static func height(bar index: Int, at time: Double, state: State) -> Double {
+        switch state {
+        case .needsAttention: return 1
+        case .idle: return 0.28
+        case .working: return 0.3 + 0.7 * brightness(pixel: index, at: time)
+        }
+    }
 
     /// How lit a pixel is at a given moment, 0…1.
     ///
@@ -97,8 +105,7 @@ struct PixelStatusIndicator: View {
     /// A raised cosine gives one smooth peak per cycle with no corners,
     /// so neighbouring pixels overlap rather than hand over abruptly.
     static func brightness(pixel index: Int, at time: Double) -> Double {
-        let step = clockwise.firstIndex(of: index) ?? index
-        let phase = ((time - delay(forPixel: step)) / cycle).truncatingRemainder(dividingBy: 1)
+        let phase = ((time - delay(forPixel: index)) / cycle).truncatingRemainder(dividingBy: 1)
         let wrapped = phase < 0 ? phase + 1 : phase
         return (cos(wrapped * 2 * .pi) + 1) / 2
     }
@@ -136,21 +143,21 @@ struct PixelStatusIndicator: View {
     }
 
     private func grid(colour: Color, time: Double?) -> some View {
-        VStack(spacing: spacing) {
-            ForEach(0..<2, id: \.self) { row in
-                HStack(spacing: spacing) {
-                    ForEach(0..<2, id: \.self) { column in
-                        let index = row * 2 + column
-                        RoundedRectangle(cornerRadius: 1, style: .continuous)
-                            .fill(colour)
-                            .frame(width: size, height: size)
-                            .opacity(time.map { Self.opacity(pixel: index, at: $0, state: state) }
-                                     ?? Self.restingOpacity(state))
-                            .scaleEffect(time.map { Self.scale(pixel: index, at: $0, state: state) }
-                                         ?? (state == .needsAttention ? 1 : 0.9))
-                    }
-                }
+        HStack(alignment: .bottom, spacing: spacing) {
+            ForEach(0..<3, id: \.self) { index in
+                let fraction = time.map { Self.height(bar: index, at: $0, state: state) }
+                    ?? Self.height(bar: index, at: 0, state: state == .working ? .idle : state)
+                Rectangle()
+                    .fill(colour)
+                    .frame(width: size, height: max(size, barSpan * fraction))
+                    .opacity(state == .idle ? 0.75 : 1)
             }
         }
+        .frame(height: barSpan, alignment: .bottom)
     }
+
+    /// The tallest a bar stands. Three of them plus their gaps make a
+    /// square-ish block, which is what sits well inside a slot.
+    private var barSpan: CGFloat { size * 3 + spacing * 2 }
+
 }

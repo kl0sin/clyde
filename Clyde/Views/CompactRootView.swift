@@ -11,6 +11,7 @@ struct CompactRootView: View {
     @ObservedObject var sessionViewModel: SessionListViewModel
 
     @SwiftUI.State private var showsAdvisory = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let gripHeight: CGFloat = 14
     /// Taller than it looks: the counts need air under them or they
@@ -159,6 +160,14 @@ struct CompactRootView: View {
         }
         .padding(.horizontal, Self.cardPadding)
         .padding(.vertical, Self.cardPadding)
+        // A session that starts working, or starts waiting on you,
+        // climbs the list. Springing there rather than teleporting is
+        // what makes the movement legible: you see which row moved and
+        // where it came from.
+        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.82),
+                   value: rows.map(\.id))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.28),
+                   value: rows.map { PixelStatusIndicator.state(for: $0) })
     }
 
     /// The same material and border the full panel is made of: moving

@@ -61,7 +61,7 @@ final class PixelStatusIndicatorTests: XCTestCase {
     /// cycle is exactly four delay steps long.
     func testTheWaveLoopsWithoutAPause() {
         XCTAssertEqual(PixelStatusIndicator.cycle,
-                       PixelStatusIndicator.delayStep * 4,
+                       PixelStatusIndicator.delayStep * 3,
                        accuracy: 0.0001)
     }
 
@@ -70,13 +70,13 @@ final class PixelStatusIndicatorTests: XCTestCase {
         XCTAssertGreaterThan(PixelStatusIndicator.cycle, 1.0)
     }
 
-    func testEachPixelStartsOneStepAfterTheLast() {
-        for index in 0..<4 {
+    func testEachCellStartsOneStepAfterTheLast() {
+        for index in 0..<3 {
             XCTAssertEqual(PixelStatusIndicator.delay(forPixel: index),
                            Double(index) * PixelStatusIndicator.delayStep,
                            accuracy: 0.0001)
         }
-        XCTAssertEqual(PixelStatusIndicator.delay(forPixel: 3) + PixelStatusIndicator.delayStep,
+        XCTAssertEqual(PixelStatusIndicator.delay(forPixel: 2) + PixelStatusIndicator.delayStep,
                        PixelStatusIndicator.cycle,
                        accuracy: 0.0001,
                        "the last pixel's step ends where the cycle restarts")
@@ -108,29 +108,37 @@ final class PixelStatusIndicatorTests: XCTestCase {
     /// unreliable for rows that have just appeared, which is every row
     /// in a panel that was closed a second ago.
 
-    /// The light travels clockwise — top-left, top-right, bottom-right,
-    /// bottom-left — so in grid order the fourth cell lights third.
-    func testTheLightTravelsClockwise() {
+    /// Each bar peaks a step after the last, so the three read as one
+    /// movement rather than three blinks.
+    func testTheBarsPeakInTurn() {
         let step = PixelStatusIndicator.delayStep
-        let expected: [Int: Double] = [0: 0, 1: step, 3: 2 * step, 2: 3 * step]
 
-        for (gridIndex, peakTime) in expected {
-            XCTAssertEqual(PixelStatusIndicator.brightness(pixel: gridIndex, at: peakTime),
-                           1.0, accuracy: 0.01,
-                           "cell \(gridIndex) should peak at \(peakTime)")
+        for index in 0..<3 {
+            XCTAssertEqual(PixelStatusIndicator.brightness(pixel: index,
+                                                           at: Double(index) * step),
+                           1.0, accuracy: 0.01)
         }
+    }
+
+    /// Shape carries the state: moving and uneven, flat, or all raised.
+    func testTheBarsSayTheStateWithoutColour() {
+        XCTAssertEqual(PixelStatusIndicator.height(bar: 0, at: 0, state: .needsAttention), 1)
+        XCTAssertLessThan(PixelStatusIndicator.height(bar: 0, at: 0, state: .idle), 0.5)
+        // 0.2s happens to fall where two bars cross; 0.1 does not.
+        XCTAssertNotEqual(PixelStatusIndicator.height(bar: 0, at: 0.1, state: .working),
+                          PixelStatusIndicator.height(bar: 1, at: 0.1, state: .working))
     }
 
     /// Four cells, four distinct moments, one cycle — no two lighting
     /// together and none left out.
     func testEveryCellGetsItsOwnMoment() {
-        let peaks = (0..<4).map { index -> Double in
+        let peaks = (0..<3).map { index -> Double in
             stride(from: 0.0, to: PixelStatusIndicator.cycle, by: 0.01)
                 .max(by: { PixelStatusIndicator.brightness(pixel: index, at: $0)
                          < PixelStatusIndicator.brightness(pixel: index, at: $1) })!
         }
         let rounded = Set(peaks.map { (($0 / PixelStatusIndicator.delayStep).rounded()) })
-        XCTAssertEqual(rounded.count, 4, "each cell peaks on a different step")
+        XCTAssertEqual(rounded.count, 3, "each bar peaks on a different step")
     }
 
     func testAPixelIsDimmestHalfACycleFromItsPeak() {
@@ -149,7 +157,7 @@ final class PixelStatusIndicatorTests: XCTestCase {
     /// between laps, which is the pause that got rejected in the mockup.
     func testSomethingIsAlwaysLit() {
         for tick in stride(from: 0.0, to: PixelStatusIndicator.cycle, by: 0.05) {
-            let brightest = (0..<4).map { PixelStatusIndicator.brightness(pixel: $0, at: tick) }.max()!
+            let brightest = (0..<3).map { PixelStatusIndicator.brightness(pixel: $0, at: tick) }.max()!
             XCTAssertGreaterThan(brightest, 0.3, "the wave went dark at t=\(tick)")
         }
     }

@@ -170,6 +170,10 @@ struct CompactSessionRow: View {
         .padding(.horizontal, 11)
         .frame(height: Self.cardHeight)
         .background(cardBackground(state: content.state, accent: accent))
+        // The wash fades in when a session starts working instead of
+        // being there the next frame — the difference between a light
+        // coming on and a light having been on.
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: content.state)
         .overlay(alignment: .top) {
             // One hairline gradient is the whole difference between a
             // rectangle and something raised.
@@ -286,10 +290,15 @@ struct CompactSessionRow: View {
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(TextColor.tertiary)
             case .indicator:
-                // Half the slot, near enough: smaller and the grid sat
-                // in the middle of an empty square, reading as
-                // decoration rather than as light crossing a grid.
-                PixelStatusIndicator(state: state, size: 5, spacing: 2)
+                // The mascot itself. It already recolours its antenna
+                // per state and breathes while it works, and five
+                // abstract glyphs drawn to avoid putting a face in a
+                // row all read as either someone else's logo or as
+                // nothing at all.
+                ClydeAnimationView(state: state == .needsAttention ? .attention : .busy,
+                                   pixelSize: 1.1,
+                                   ambientIdleEnabled: false)
+                    .frame(width: 18, height: 18)
             }
         }
         .frame(width: 24, height: 24)
