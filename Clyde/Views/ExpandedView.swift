@@ -54,7 +54,11 @@ struct ExpandedView: View {
                     },
                     notificationService: appViewModel.notificationService,
                     expandedSubagentSessions: appViewModel.expandedSubagentSessions,
-                    onToggleSubagentExpansion: { id in appViewModel.toggleSubagentExpansion(id) }
+                    onToggleSubagentExpansion: { id in appViewModel.toggleSubagentExpansion(id) },
+                    permissionRequests: appViewModel.permissionRequests,
+                    onPermissionDecision: { request, decision in
+                        appViewModel.answerPermissionRequest(request, with: decision)
+                    }
                 )
             }
 

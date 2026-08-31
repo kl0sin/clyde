@@ -24,6 +24,8 @@ final class AppViewModel: ObservableObject {
     let terminalLauncher: TerminalLauncher
     let notificationService: NotificationService
     let attentionMonitor: AttentionMonitor
+    /// Reads the questions the hook is waiting on and writes the answers.
+    let permissionStore = PermissionRequestStore()
     let activityLog: ActivityLog
     let pushService: PushService
 
@@ -208,6 +210,23 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    /// Permission requests the hook is waiting on. Empty unless the
+    /// user turned panel answering on — nothing writes a request
+    /// otherwise.
+    @Published private(set) var permissionRequests: [PermissionRequest] = []
+
+    func answerPermissionRequest(_ request: PermissionRequest, with decision: PermissionDecision) {
+        permissionStore.answer(request, with: decision)
+    }
+
+    private func startPermissionStore() {
+        permissionStore.start()
+        permissionStore.$pending
+            .receive(on: RunLoop.main)
+            .sink { [weak self] requests in self?.permissionRequests = requests }
+            .store(in: &cancellables)
+    }
+
     func toggleExpanded() {
         isCollapsed.toggle()
     }
@@ -258,6 +277,7 @@ final class AppViewModel: ObservableObject {
 
         processMonitor.startPolling()
         attentionMonitor.start()
+        startPermissionStore()
         // One-shot legacy migration must run BEFORE the first health check,
         // otherwise the check sees the old `clyde-notify.sh` file in place
         // and reports "everything fine" while settings.json points nowhere.

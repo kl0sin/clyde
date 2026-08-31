@@ -15,6 +15,10 @@ struct SessionRow: View {
     let notificationService: NotificationService?
     let expandedSubagentSessions: Set<UUID>
     let onToggleSubagentExpansion: (UUID) -> Void
+    /// Permission requests this session is waiting on. Empty unless the
+    /// user turned panel answering on.
+    var permissionRequests: [PermissionRequest] = []
+    var onPermissionDecision: ((PermissionRequest, PermissionDecision) -> Void)?
 
     static let availableSounds = [
         "Glass", "Blow", "Bottle", "Frog", "Funk", "Hero",
@@ -197,6 +201,21 @@ struct SessionRow: View {
                         .foregroundStyle(timeColor)
                 }
             }
+        }
+
+        // The question goes under the session that asked it: answering
+        // the wrong row would run the wrong command.
+        ForEach(permissionRequests.filter {
+            PermissionRequestRow.shows(request: $0, inRowFor: session.pid)
+        }) { request in
+            PermissionRequestRow(request: request) { decision in
+                onPermissionDecision?(request, decision)
+            }
+            // Align under the title: mascot (34) + HStack spacing (12).
+            .padding(.leading, 46)
+            .padding(.top, 4)
+            .transition(reduceMotion ? .opacity
+                                     : .opacity.combined(with: .move(edge: .top)))
         }
 
         if !session.activeSubagents.isEmpty {

@@ -12,6 +12,8 @@ struct SessionListView: View {
     let notificationService: NotificationService?
     let expandedSubagentSessions: Set<UUID>
     let onToggleSubagentExpansion: (UUID) -> Void
+    var permissionRequests: [PermissionRequest] = []
+    var onPermissionDecision: ((PermissionRequest, PermissionDecision) -> Void)?
 
     @State private var draggedSession: Session?
     /// The row the cursor is currently hovering over during a drag.
@@ -51,7 +53,9 @@ struct SessionListView: View {
                 onReset: { onReset(item.session) },
                 notificationService: notificationService,
                 expandedSubagentSessions: expandedSubagentSessions,
-                onToggleSubagentExpansion: onToggleSubagentExpansion
+                onToggleSubagentExpansion: onToggleSubagentExpansion,
+                permissionRequests: permissionRequests,
+                onPermissionDecision: onPermissionDecision
             )
             .scaleEffect(isDragging ? 0.98 : 1.0)
             .opacity(isDragging ? 0.4 : 1.0)

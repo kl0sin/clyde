@@ -27,13 +27,18 @@ let option: CGWindowListOption = onscreenOnly
 let windows = CGWindowListCopyWindowInfo(option, kCGNullWindowID) as? [[String: Any]] ?? []
 var found = 0
 for window in windows {
-    guard let name = window[kCGWindowOwnerName as String] as? String, name == owner,
+    // Prefix match: development builds are named "Clyde (dev)" since
+    // they were given their own bundle identity, and an exact match
+    // silently found nothing — which reads exactly like a window that
+    // does not exist.
+    guard let name = window[kCGWindowOwnerName as String] as? String,
+          name == owner || name.hasPrefix("\(owner) ("),
           let bounds = window[kCGWindowBounds as String] as? [String: Any],
           let width = bounds["Width"] as? Double, let height = bounds["Height"] as? Double
     else { continue }
     let layer = window[kCGWindowLayer as String] as? Int ?? 0
     let alpha = window[kCGWindowAlpha as String] as? Double ?? 1
-    print("\(Int(width))x\(Int(height)) layer=\(layer) alpha=\(alpha)")
+    print("\(Int(width))x\(Int(height)) layer=\(layer) alpha=\(alpha) owner=\(name)")
     found += 1
 }
 // No windows at all is not the same answer as a window of the wrong
