@@ -135,22 +135,22 @@ final class ExpandedPanelTests: XCTestCase {
         XCTAssertEqual(panel.frame.size, fixed)
     }
 
-    // MARK: - Two always-on-top surfaces is one too many
+    // MARK: - The widget stays
 
-    func testCompactSuppressesTheWidget() {
-        XCTAssertFalse(AppDelegate.widgetShouldShow(setting: true, mode: .compact, isCollapsed: false))
-    }
-
-    func testClosingCompactBringsTheWidgetBack() {
+    /// Compact was going to replace the widget. That read it as a
+    /// second status display; it is the anchor the panel hangs off and
+    /// the handle it is dragged by, and without it compact floated with
+    /// nothing to attach to.
+    func testTheWidgetSurvivesCompact() {
+        XCTAssertTrue(AppDelegate.widgetShouldShow(setting: true, mode: .compact, isCollapsed: false))
         XCTAssertTrue(AppDelegate.widgetShouldShow(setting: true, mode: .compact, isCollapsed: true))
-        XCTAssertTrue(AppDelegate.widgetShouldShow(setting: true, mode: .full, isCollapsed: false))
     }
 
-    /// A user who turned the widget off does not get it back because
-    /// they opened compact.
-    func testTheWidgetSettingStillWins() {
-        XCTAssertFalse(AppDelegate.widgetShouldShow(setting: false, mode: .compact, isCollapsed: true))
+    /// Only the user's own setting decides.
+    func testTheWidgetSettingIsTheOnlyRule() {
+        XCTAssertFalse(AppDelegate.widgetShouldShow(setting: false, mode: .compact, isCollapsed: false))
         XCTAssertFalse(AppDelegate.widgetShouldShow(setting: false, mode: .full, isCollapsed: false))
+        XCTAssertTrue(AppDelegate.widgetShouldShow(setting: true, mode: .full, isCollapsed: false))
     }
 
 }

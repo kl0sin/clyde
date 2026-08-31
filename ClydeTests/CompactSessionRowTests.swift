@@ -94,7 +94,7 @@ final class CompactSessionRowTests: XCTestCase {
         var s = session()
         s.statusChangedAt = Date().addingTimeInterval(-3720)
 
-        XCTAssertEqual(CompactSessionRow.content(for: s).trailing, "1h 2m")
+        XCTAssertEqual(CompactSessionRow.content(for: s).trailing, "waiting 1h 2m")
     }
 
     /// Seconds are noise past an hour, and minutes are noise past a day.
@@ -104,4 +104,81 @@ final class CompactSessionRowTests: XCTestCase {
         XCTAssertEqual(CompactSessionRow.duration(3600), "1h")
         XCTAssertEqual(CompactSessionRow.duration(90000), "1d 1h")
     }
+
+    // MARK: - The slot, which is what makes a row look like Clyde's
+
+    /// The full panel gives an idle session a numbered squircle and an
+    /// active one the sprite. Compact keeps that language rather than
+    /// inventing a list of dots — the numbered slot is the app's
+    /// signature row element, and a row without it could belong to any
+    /// application.
+    func testAnIdleSessionKeepsItsNumber() {
+        XCTAssertEqual(CompactSessionRow.slot(for: session(), index: 0), .number(1))
+        XCTAssertEqual(CompactSessionRow.slot(for: session(), index: 4), .number(5))
+    }
+
+    func testAWorkingSessionShowsTheWave() {
+        XCTAssertEqual(CompactSessionRow.slot(for: session(status: .busy), index: 0), .indicator)
+    }
+
+    func testASessionThatNeedsYouShowsTheIndicatorToo() {
+        XCTAssertEqual(CompactSessionRow.slot(for: session(attention: true), index: 2), .indicator)
+    }
+
+    /// Numbers run from one, the way they read in the full panel.
+    func testNumbersStartAtOne() {
+        XCTAssertEqual(CompactSessionRow.slot(for: session(), index: 0), .number(1))
+    }
+
+
+    // MARK: - What a quiet row says
+
+    /// Idle is not "nothing happening" — it means Claude finished and
+    /// the ball is with the user. A row that shows only a name and a
+    /// number withholds the one thing that state means.
+    /// One phrase, not two columns saying half a thing each. "42s" on
+    /// its own is forty-two seconds of what, and "waiting for you"
+    /// repeated down every quiet row differentiates nothing.
+    func testAQuietRowSaysWhatItHasBeenWaitingFor() {
+        var s = session()
+        s.statusChangedAt = Date().addingTimeInterval(-42)
+
+        let content = CompactSessionRow.content(for: s)
+
+        XCTAssertNil(content.meta, "the time carries it")
+        XCTAssertEqual(content.trailing, "waiting 42s")
+    }
+
+    /// A working row spends the same space on what is actually running.
+    func testAWorkingRowNamesWhatIsRunning() {
+        var s = session(status: .busy)
+        s.activeTool = ActiveTool(toolName: "Bash", summary: "npm test", startedAt: Date())
+
+        XCTAssertEqual(CompactSessionRow.content(for: s).meta, "Bash")
+        XCTAssertFalse(CompactSessionRow.content(for: s).trailing.contains("waiting"),
+                       "a working row's time is how long it has been working")
+    }
+
+    func testAWorkingRowWithNoToolYetSaysSo() {
+        XCTAssertEqual(CompactSessionRow.content(for: session(status: .busy)).meta, "working")
+    }
+
+    /// Clicking a row opens its terminal, which nothing on the row said.
+    func testHoveringOffersToOpenTheTerminal() {
+        XCTAssertEqual(CompactSessionRow.hoverLabel, "Open")
+    }
+
+    func testARowThatNeedsYouSaysThat() {
+        XCTAssertEqual(CompactSessionRow.content(for: session(attention: true)).meta,
+                       "needs you")
+    }
+
+    /// Quiet rows are quieter: the name recedes so a session that
+    /// starts working stands out without anything having to flash.
+    func testIdleNamesAreDimmerThanActiveOnes() {
+        XCTAssertFalse(CompactSessionRow.namesAreProminent(in: .idle))
+        XCTAssertTrue(CompactSessionRow.namesAreProminent(in: .working))
+        XCTAssertTrue(CompactSessionRow.namesAreProminent(in: .needsAttention))
+    }
+
 }

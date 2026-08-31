@@ -96,6 +96,7 @@ list)
     note "fresh-install      a brand-new ~/.clyde must rebuild and still find sessions"
     note "history-review     seed history and open the review window"
     note "upgrade            install the last release, then upgrade to this build over it"
+    note "compact-mode      the compact panel, and the five things only looking at it answers"
     note "panel-size         measure the running app's panel — run it against a RELEASED build"
     note "settings-history   history size, and whether the numbers go stale"
     note "accessibility      the banner shown when the global shortcut has no permission"
@@ -248,6 +249,25 @@ OSA
 # window geometry has to be measured on the artifact users install, which
 # is what this scenario is for. Run it after every release, against the
 # DMG — not against a local build.
+compact-mode)
+    install_hook
+    say "Launching the dev build in compact mode"
+    defaults write io.github.kl0sin.clyde.dev panelMode compact
+    build_and_run
+    open_panel
+    sleep 2
+    note "geometry:"
+    "$REPO_ROOT/scripts/dev/window-geometry.swift" >/dev/null 2>&1 || true
+    swift "$REPO_ROOT/scripts/dev/window-geometry.swift" Clyde | sed 's/^/    /'
+    say "What to look at — none of this is covered by a test"
+    note "1. Is the wave ignorable? Watch a working row for a minute without staring at it."
+    note "2. Did the widget stand down? Two always-on-top surfaces is one too many."
+    note "3. Start a session: the window grows downward, the top edge stays put."
+    note "4. Ask for permission: the row opens, the window grows, then both go back."
+    note "5. Are the worktree badge and the agent count legible at 30 points?"
+    note "back to the full panel: defaults write io.github.kl0sin.clyde.dev panelMode full"
+    ;;
+
 panel-size)
     say "Measuring the panel of whatever Clyde is currently running"
     note "version: $(defaults read /Applications/Clyde.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo unknown)"

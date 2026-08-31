@@ -17,6 +17,10 @@ struct ExpandedHeader: View {
     let onSnooze: () -> Void
     let onSettings: () -> Void
     let onCollapse: () -> Void
+    /// Switch to the compact panel: the rows, without the chrome built
+    /// for reading. Nil hides the button, so the header stays usable in
+    /// contexts that have no mode to switch to.
+    var onCompact: (() -> Void)?
 
     var body: some View {
         HStack(spacing: Spacing.sm) {
@@ -56,6 +60,15 @@ struct ExpandedHeader: View {
                 )
                 .coachmarkAnchor(.snooze)
                 .accessibilityValue(snoozeAccessibilityValue)
+
+                if let onCompact {
+                    headerButton(
+                        icon: "rectangle.compress.vertical",
+                        action: onCompact,
+                        accessibilityLabel: "Switch to the compact panel"
+                    )
+                    .accessibilityHint("Shows the session rows only, small enough to leave open")
+                }
 
                 headerButton(
                     icon: "gearshape",

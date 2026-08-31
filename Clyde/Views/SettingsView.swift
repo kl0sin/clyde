@@ -213,6 +213,23 @@ struct GeneralSettingsTab: View {
             .toggleStyle(.switch)
         }
 
+        SettingsSection(title: "Compact panel") {
+            VStack(alignment: .leading, spacing: 6) {
+                Stepper(value: $appViewModel.compactRowCap, in: 2...10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Show up to \(appViewModel.compactRowCap) sessions")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white)
+                        Text("The compact panel is as tall as what it shows. Past this many, the quiet sessions drop off — never one that is working or waiting on you.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.45))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .accessibilityLabel("Sessions shown in the compact panel")
+            }
+        }
+
         SettingsSection(title: "Permission requests") {
             Toggle(isOn: $appViewModel.answerPermissionsInPanel) {
                 VStack(alignment: .leading, spacing: 2) {

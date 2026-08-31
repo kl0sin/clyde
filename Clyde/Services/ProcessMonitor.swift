@@ -51,6 +51,19 @@ final class ProcessMonitor: ObservableObject {
     /// This is updated by a fast (~500ms) file-system poll on `~/.clyde/state/`,
     /// decoupled from the heavier child-process poll.
     private var hookBusyPIDs: Set<pid_t> = []
+    /// When each -busy marker was last touched. The hook touches it on
+    /// every PreToolUse, so a running turn keeps it fresh.
+    private var hookBusySince: [pid_t: Date] = [:]
+
+    /// How long a busy marker may sit untouched, with nothing else
+    /// showing life, before Clyde stops believing it.
+    ///
+    /// Far beyond any turn: a pure-text answer is seconds, a slow one
+    /// minutes. This is not a timeout for slowness, it is a floor under
+    /// "the session was interrupted and nobody told us" — the state
+    /// that otherwise persists until the user's next prompt, or
+    /// forever.
+    static let abandonedBusyInterval: TimeInterval = 15 * 60
 
     /// Error reason per PID, populated from `-error` marker files
     /// written by the StopFailure hook. Keyed by PID, value is the
@@ -287,9 +300,26 @@ final class ProcessMonitor: ObservableObject {
     /// A teammate flagged idle by `TeammateIdle` does not count: it is
     /// waiting, not working.
     private func statusIncludingAgents(pid: pid_t) -> SessionStatus {
-        if hookBusyPIDs.contains(pid) { return .busy }
+        if hookBusyPIDs.contains(pid) {
+            return hasBeenAbandoned(pid: pid) ? .idle : .busy
+        }
         let agents = hookAgentsByPID[pid] ?? []
         return agents.contains { !$0.isIdle } ? .busy : .idle
+    }
+
+    /// True when a busy marker looks left behind rather than live.
+    ///
+    /// Every other signal of life is checked first: a tool marker means
+    /// something is running, an agent record means something is working,
+    /// and any hook event in the last quarter of an hour means the turn
+    /// is alive. Only when all three are absent does the marker stop
+    /// being believed — and the session goes quiet without a
+    /// notification, because Clyde does not know it finished.
+    private func hasBeenAbandoned(pid: pid_t) -> Bool {
+        guard hookToolByPID[pid] == nil else { return false }
+        guard (hookAgentsByPID[pid] ?? []).isEmpty else { return false }
+        guard let touched = hookBusySince[pid] else { return false }
+        return Date().timeIntervalSince(touched) > Self.abandonedBusyInterval
     }
 
     /// Detect project dir for a pgrep-discovered claude PID. The current
@@ -638,18 +668,28 @@ final class ProcessMonitor: ObservableObject {
     private func refreshHookBusyPIDs() -> Bool {
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: stateDir,
-            includingPropertiesForKeys: nil
+            includingPropertiesForKeys: [.contentModificationDateKey]
         ) else {
             let changed = !hookBusyPIDs.isEmpty
             if changed { hookBusyPIDs = [] }
+            hookBusySince = [:]
             return changed
         }
 
         // Sticky semantics: a -busy marker is valid for as long as its
         // owning process is alive. The hook script removes it on Stop /
         // StopFailure / SessionEnd / interrupt; we remove it here only
-        // when the PID is gone. No mtime expiry — long pure-text turns
-        // and long permission prompts must not silently flip to idle.
+        // when the PID is gone.
+        //
+        // Mtime is recorded but deliberately does NOT expire a marker
+        // here — long pure-text turns and long permission prompts must
+        // not silently flip to idle. It is used for one narrow case in
+        // `statusIncludingAgents`: a marker nothing has touched for
+        // `abandonedBusyInterval`, with no tool running and no agents,
+        // which is what a Ctrl+C during the model's own output leaves
+        // behind. That interrupt emits no hook event at all — the docs
+        // say interruption is not distinguishable from completion — so
+        // time is the only signal there is.
         var present: Set<pid_t> = []
         for file in files where file.lastPathComponent.hasSuffix("-busy") {
             guard let pid = readMarkerPID(file: file) else {
@@ -661,7 +701,11 @@ final class ProcessMonitor: ObservableObject {
                 continue
             }
             present.insert(pid)
+            let touched = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate
+            hookBusySince[pid] = touched ?? Date()
         }
+        hookBusySince = hookBusySince.filter { present.contains($0.key) }
 
         let changed = present != hookBusyPIDs
         if changed { hookBusyPIDs = present }
@@ -1098,7 +1142,10 @@ final class ProcessMonitor: ObservableObject {
                 updated[index].status = newStatus
                 updated[index].statusChangedAt = Date()
                 changed = true
-                if newStatus == .idle {
+                // An abandoned marker means nothing has happened for a
+                // very long time, not that the turn finished — saying
+                // "session finished" there would be inventing an event.
+                if newStatus == .idle && !hasBeenAbandoned(pid: pid) {
                     onSessionBecameIdle?(updated[index])
                 }
             }

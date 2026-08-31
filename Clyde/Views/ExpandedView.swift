@@ -91,7 +91,8 @@ struct ExpandedView: View {
                     }
                 },
                 onSettings: { NotificationCenter.default.post(name: .clydeOpenSettings, object: nil) },
-                onCollapse: { appViewModel.toggleExpanded() }
+                onCollapse: { appViewModel.toggleExpanded() },
+                onCompact: { appViewModel.panelMode = .compact }
             )
 
             if let issue = appViewModel.hookHealthIssue, issue.presentation == .banner {

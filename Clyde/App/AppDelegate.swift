@@ -234,8 +234,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         expandedPanel = ExpandedPanel(
             contentRect: NSRect(origin: expandedOrigin, size: expandedSize)
         )
-        expandedPanel.minSize = expandedSize
-        expandedPanel.maxSize = expandedSize
+        // Compact is deliberately shorter than the full panel, so these
+        // bound the width alone; the height is governed by
+        // `applyHeight`, which is the panel's only door for it.
+        expandedPanel.minSize = NSSize(width: expandedSize.width, height: 0)
+        expandedPanel.maxSize = NSSize(width: expandedSize.width, height: .greatestFiniteMagnitude)
 
         let expandedRoot = PanelRootView(
             appViewModel: appViewModel,
@@ -429,16 +432,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The expanded panel is unaffected — even when the widget is
     /// hidden, the user can still open the expanded view from the menu
     /// bar item.
-    /// Compact mode is itself an always-on-top surface listing the same
-    /// sessions, so the widget stands down while it is open — two of
-    /// them saying the same thing is one too many. A user who turned
-    /// the widget off still does not get it back.
+    /// The widget stays, in every mode.
+    ///
+    /// Compact was going to replace it — two always-on-top surfaces
+    /// listing the same sessions seemed like one too many. That read
+    /// the widget as a second status display, which it is not: it is
+    /// the anchor the panel positions itself against and the handle the
+    /// whole thing is dragged by. Taking it away left compact floating
+    /// with nothing to attach to, which is exactly how it looked.
+    ///
+    /// Only the user's own setting decides.
     static func widgetShouldShow(setting: Bool,
                                  mode: AppViewModel.PanelMode,
                                  isCollapsed: Bool) -> Bool {
-        guard setting else { return false }
-        if mode == .compact && !isCollapsed { return false }
-        return true
+        setting
     }
 
     @MainActor private func applyWidgetVisibility(_ setting: Bool) {
@@ -470,6 +477,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard expandedPanel.currentAllowedSize.height != height else { return }
         expandedPanel.applyHeight(height)
+        // A different shape wants a different place: the panel hangs off
+        // the widget, and a height change moves the edge that hangs.
+        // Without this, switching modes left the panel where the other
+        // mode had put it — visibly detached from the widget it belongs
+        // to.
+        if !appViewModel.isCollapsed {
+            repositionExpandedPanelAgainstWidget()
+        }
+    }
+
+    /// Put the panel back where its size says it belongs, relative to
+    /// the widget. Same maths as opening it, without the animation.
+    @MainActor private func repositionExpandedPanelAgainstWidget() {
+        widgetAnchor = WidgetAnchor(origin: panel.frame.origin)
+        let screen = NSScreen.main?.visibleFrame ?? .zero
+        let size = expandedPanel.currentAllowedSize
+        let origin = widgetAnchor.expandedOrigin(
+            for: size,
+            in: screen,
+            collapsedSize: widgetSize
+        )
+        expandedPanel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
 
     @MainActor private func showExpandedPanel() {
@@ -481,14 +510,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         snapDebounceWork = nil
 
         let screen = NSScreen.main?.visibleFrame ?? .zero
+        // The size the panel *is*, not the size the full panel would be:
+        // compact is a hundred points tall, and positioning it as if it
+        // were 420 put it most of a panel away from its widget.
+        let currentSize = expandedPanel.currentAllowedSize
         let targetOrigin = widgetAnchor.expandedOrigin(
-            for: expandedSize,
+            for: currentSize,
             in: screen,
             collapsedSize: widgetSize
         )
 
         let widgetBottomY = widgetAnchor.origin.y
-        let expandedTopY = targetOrigin.y + expandedSize.height
+        let expandedTopY = targetOrigin.y + currentSize.height
 
         // Direction-aware slide. The panel always starts FURTHER from
         // the widget than its final position and slides toward it,
@@ -498,8 +531,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let startOrigin: NSPoint = isDropDown
             ? NSPoint(x: targetOrigin.x, y: targetOrigin.y - slideDistance)
             : NSPoint(x: targetOrigin.x, y: targetOrigin.y + slideDistance)
-        let targetFrame = NSRect(origin: targetOrigin, size: expandedSize)
-        let startFrame = NSRect(origin: startOrigin, size: expandedSize)
+        let targetFrame = NSRect(origin: targetOrigin, size: currentSize)
+        let startFrame = NSRect(origin: startOrigin, size: currentSize)
 
         // Place the panel at the start frame BEFORE making it visible
         // and force a display tick so the window server actually has a
@@ -531,12 +564,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// of the opening animation.
     @MainActor private func hideExpandedPanel() {
         let currentOrigin = expandedPanel.frame.origin
-        let isDropDown = currentOrigin.y + expandedSize.height < widgetAnchor.origin.y + widgetSize.height
+        let panelSize = expandedPanel.currentAllowedSize
+        let isDropDown = currentOrigin.y + panelSize.height < widgetAnchor.origin.y + widgetSize.height
         let slideDistance: CGFloat = 28
         let endOrigin: NSPoint = isDropDown
             ? NSPoint(x: currentOrigin.x, y: currentOrigin.y - slideDistance)
             : NSPoint(x: currentOrigin.x, y: currentOrigin.y + slideDistance)
-        let endFrame = NSRect(origin: endOrigin, size: expandedSize)
+        let endFrame = NSRect(origin: endOrigin, size: panelSize)
 
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.24

@@ -89,9 +89,9 @@ struct CompactRootView: View {
             DragStrip()
                 .frame(height: Self.gripHeight)
 
-            VStack(spacing: 0) {
-                ForEach(rows) { session in
-                    CompactSessionRow(session: session) {
+            VStack(spacing: 1) {
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, session in
+                    CompactSessionRow(session: session, index: index) {
                         appViewModel.focusSession(session)
                     }
 
@@ -107,7 +107,6 @@ struct CompactRootView: View {
                         .padding(.bottom, Spacing.xxs)
                     }
 
-                    Divider().opacity(0.35)
                 }
             }
 
@@ -141,9 +140,22 @@ struct CompactRootView: View {
 
     private var footer: some View {
         HStack(spacing: Spacing.xs) {
-            Text(summary)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(TextColor.tertiary)
+            // The same sprite the full panel's summary bar carries, at
+            // the same size: the footer should say "Clyde" without
+            // spelling it.
+            ClydeAnimationView(state: appViewModel.clydeState, pixelSize: 0.75)
+                .frame(width: 12, height: 12)
+
+            ForEach(counts, id: \.label) { count in
+                StatusPill(count: count.value, label: count.label,
+                           color: count.color, pulse: count.pulse)
+            }
+
+            if counts.isEmpty {
+                Text("No sessions")
+                    .font(.system(size: 10))
+                    .foregroundStyle(TextColor.tertiary)
+            }
 
             Spacer(minLength: Spacing.xs)
 
@@ -171,19 +183,36 @@ struct CompactRootView: View {
         .frame(height: Self.footerHeight)
     }
 
-    /// The counts the summary bar carries in the full panel, in one
-    /// line — including the sessions the cap left out, so the number
-    /// never contradicts what is on screen.
-    private var summary: String {
+    private struct Count {
+        let value: Int
+        let label: String
+        let color: Color
+        let pulse: Bool
+    }
+
+    /// The same pills the full panel's summary bar uses, counted over
+    /// every live session rather than the rows on screen — so the
+    /// number never contradicts what the cap left out.
+    private var counts: [Count] {
         let live = sessionViewModel.sessions.filter { !$0.isGhost }
-        var parts: [String] = []
         let attention = live.filter(\.needsAttention).count
         let working = live.filter { $0.isWorking && !$0.needsAttention }.count
         let idle = live.count - attention - working
-        if attention > 0 { parts.append("\(attention) needs you") }
-        if working > 0 { parts.append("\(working) working") }
-        if idle > 0 { parts.append("\(idle) ready") }
-        return parts.isEmpty ? "No sessions" : parts.joined(separator: " · ")
+
+        var result: [Count] = []
+        if attention > 0 {
+            result.append(Count(value: attention, label: "needs you",
+                                color: SessionTheme.attentionColor, pulse: true))
+        }
+        if working > 0 {
+            result.append(Count(value: working, label: "working",
+                                color: SessionTheme.processingColor, pulse: true))
+        }
+        if idle > 0 {
+            result.append(Count(value: idle, label: "ready",
+                                color: SessionTheme.readyColor, pulse: false))
+        }
+        return result
     }
 }
 
@@ -194,8 +223,8 @@ private struct DragStrip: View {
         ZStack {
             Color.clear
             Capsule()
-                .fill(Color.white.opacity(0.14))
-                .frame(width: 26, height: 3)
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 22, height: 2.5)
         }
         .contentShape(Rectangle())
         .accessibilityHidden(true)

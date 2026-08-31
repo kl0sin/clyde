@@ -22,7 +22,9 @@ Clyde has three ways to sit on a screen: a menu-bar icon, a 130×46 widget, and 
 
 **Agents are a count, not a list**, with their own mark — a small head with two eyes, from the mascot's family — so `4` is unmistakably four agents. Names remain in the full panel.
 
-**Compact replaces the widget while it is open.** Two always-on-top surfaces saying the same thing is one too many. Closing compact brings the widget back if it was on.
+**The widget stays, in every mode.** This spec first said compact would replace it, reasoning that two always-on-top surfaces listing the same sessions is one too many. Tried, and wrong: the widget is not a second status display, it is the anchor the panel positions itself against and the handle the whole thing is dragged by. With it gone, compact floated with nothing to attach to — visibly detached the moment the mode changed. Only the user's own widget setting decides whether it is shown.
+
+**A mode change re-anchors the panel.** The panel hangs off the widget, so changing its height moves the edge that hangs. Switching modes recomputes the position the same way opening it does, or the panel stays where the other mode had put it.
 
 **Mode and position persist.** Clyde reopens as it was left. ⌃⌘C toggles whichever mode was last used, so the shortcut keeps meaning "show me Clyde".
 

@@ -6,6 +6,7 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **An interrupted session stops showing as working.** Pressing Ctrl+C while Claude is writing emits no hook event at all — it is indistinguishable from finishing — so the session stayed "working" until the next prompt, or indefinitely if you walked away. Clyde now stops believing a busy marker that nothing has touched for fifteen minutes while no tool is running and no agent is working. It goes quiet without claiming the session finished, because it did not.
 - **A session in a worktree keeps its project's name.** When Claude creates a worktree it moves the session into `<repo>/.claude/worktrees/<name>`, and Clyde named sessions after their folder — so a session working in `work-hub` renamed itself to the branch, showed that same word again in the worktree badge, and the project it belonged to was nowhere on the row.
 - **A session is not "ready" while its agents are still working.** The busy marker is cleared when Claude's own turn ends, but subagents routinely outlive it, so a row could read ready beside a spinning agent — and the "session finished" notification fired while four of them were still running. An agent that has gone idle does not hold the session open.
 

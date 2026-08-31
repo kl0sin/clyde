@@ -1321,4 +1321,88 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertFalse(wentIdle, "the finished notification must not fire yet")
     }
 
+
+    // MARK: - An interrupted turn leaves nothing behind
+
+    /// Ctrl+C during a tool call is covered: the hook sees
+    /// PostToolUseFailure with is_interrupt and clears the marker.
+    /// Ctrl+C while the model is writing emits no hook event at all —
+    /// confirmed against the docs, which say interruption is not
+    /// distinguishable from completion — so the busy marker survives
+    /// and the session shows as working until the next prompt, or
+    /// forever if the user walks away. That is the report.
+    ///
+    /// The only signal left is time, which this file previously ruled
+    /// out for good reason: a long pure-text turn must not flip to
+    /// idle. The threshold is therefore far beyond any turn, and the
+    /// session goes quiet without a notification — Clyde does not know
+    /// it finished, only that nothing has happened for a very long
+    /// while.
+    func testALongSilentBusySessionEventuallyGoesQuiet() async throws {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        writeBusyFile(in: dir, sessionId: sid, pid: pid)
+
+        // Backdate the marker past the threshold.
+        let marker = dir.appendingPathComponent("\(sid)-busy")
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: -(ProcessMonitor.abandonedBusyInterval + 60))],
+            ofItemAtPath: marker.path)
+
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir,
+                                     isLiveClaudeProcessCheck: { _ in true })
+        var notified = false
+        monitor.onSessionBecameIdle = { _ in notified = true }
+
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.first?.status, .idle)
+        XCTAssertFalse(notified, "we do not know it finished, so we do not say it did")
+    }
+
+    /// The case the old comment protected: a turn that has been running
+    /// a while but is plainly alive.
+    func testARecentlyActiveBusySessionStaysBusy() async throws {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        writeBusyFile(in: dir, sessionId: sid, pid: pid)
+
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir,
+                                     isLiveClaudeProcessCheck: { _ in true })
+
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.first?.status, .busy)
+    }
+
+    /// A tool running is proof of life whatever the marker's age says.
+    func testAnOldMarkerWithARunningToolStaysBusy() async throws {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        writeBusyFile(in: dir, sessionId: sid, pid: pid)
+        let marker = dir.appendingPathComponent("\(sid)-busy")
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: -(ProcessMonitor.abandonedBusyInterval + 60))],
+            ofItemAtPath: marker.path)
+        let tool = #"{"session_id":"\#(sid)","pid":\#(pid),"tool_name":"Bash","summary":"npm test","started_at":0}"#
+        try tool.write(to: dir.appendingPathComponent("\(sid)-tool"),
+                       atomically: true, encoding: .utf8)
+
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir,
+                                     isLiveClaudeProcessCheck: { _ in true })
+
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.first?.status, .busy)
+    }
+
 }
