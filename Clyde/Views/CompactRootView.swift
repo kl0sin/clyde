@@ -17,8 +17,39 @@ struct CompactRootView: View {
     /// The height this view wants, which is the only thing in the app
     /// allowed to change the panel's size — and it does so by being
     /// told to, never by pushing from inside. See `ExpandedPanel`.
-    static func height(rows: Int) -> CGFloat {
-        gripHeight + CGFloat(max(0, rows)) * CompactSessionRow.height + footerHeight
+    static func height(rows: Int, expanded request: PermissionRequest? = nil) -> CGFloat {
+        gripHeight
+            + CGFloat(max(0, rows)) * CompactSessionRow.height
+            + (request.map(requestHeight) ?? 0)
+            + footerHeight
+    }
+
+    /// How much room an open question needs, worked out before it is
+    /// drawn. The window's height is computed and applied deliberately
+    /// — content is never allowed to push it — so this has to be an
+    /// answer rather than a measurement after the fact.
+    static func requestHeight(for request: PermissionRequest) -> CGFloat {
+        let lines = min(PermissionRequestRow.wrappedLineCount(of: request.summary),
+                        PermissionRequestRow.collapsedLineLimit)
+        // tool name + buttons + padding, plus the command itself
+        return 62 + CGFloat(lines) * 14
+    }
+
+    /// The one question that is open, if any: the newest, and only when
+    /// its session is on screen to carry it.
+    ///
+    /// One at a time is deliberate. Two expanded questions in a panel
+    /// this size is most of the panel, and the second is answerable a
+    /// few seconds later anyway.
+    static func expandedRequest(from requests: [PermissionRequest],
+                                visiblePIDs: Set<pid_t>? = nil) -> PermissionRequest? {
+        requests
+            .filter { request in
+                guard request.isLive else { return false }
+                guard let visiblePIDs else { return true }
+                return visiblePIDs.contains(request.pid)
+            }
+            .max { $0.expiresAt < $1.expiresAt }
     }
 
     /// Which sessions make the cut, in the order they appear.
@@ -46,6 +77,11 @@ struct CompactRootView: View {
         Self.visible(sessions: sessionViewModel.sessions, cap: appViewModel.compactRowCap)
     }
 
+    private var expanded: PermissionRequest? {
+        Self.expandedRequest(from: appViewModel.permissionRequests,
+                             visiblePIDs: Set(rows.map(\.pid)))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // The header used to be the drag handle; without it the
@@ -58,6 +94,19 @@ struct CompactRootView: View {
                     CompactSessionRow(session: session) {
                         appViewModel.focusSession(session)
                     }
+
+                    // The question opens under the session that asked
+                    // it. Deferring to the terminal instead would mean
+                    // the feature the user switched on does not work in
+                    // the mode they keep open.
+                    if let request = expanded, request.pid == session.pid {
+                        PermissionRequestRow(request: request) { decision in
+                            appViewModel.answerPermissionRequest(request, with: decision)
+                        }
+                        .padding(.horizontal, Spacing.xs)
+                        .padding(.bottom, Spacing.xxs)
+                    }
+
                     Divider().opacity(0.35)
                 }
             }

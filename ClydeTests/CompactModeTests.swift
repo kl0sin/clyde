@@ -103,4 +103,74 @@ final class CompactModeTests: XCTestCase {
     func testTheCapHasADefault() {
         XCTAssertEqual(CompactRootView.defaultRowCap, 4)
     }
+
+    // MARK: - A request, inside compact
+
+    private func request(id: String = "r1",
+                         pid: pid_t = 1,
+                         command: String = "npm test",
+                         expiresIn: TimeInterval = 30) throws -> PermissionRequest {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-compact-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let body: [String: Any] = [
+            "request_id": id, "session_id": "s", "pid": Int(pid), "cwd": "/repo",
+            "tool_name": "Bash", "tool_input": ["command": command],
+            "created_at": Int(Date().timeIntervalSince1970),
+            "expires_at": Int(Date().addingTimeInterval(expiresIn).timeIntervalSince1970)
+        ]
+        let url = dir.appendingPathComponent("\(id).request")
+        try JSONSerialization.data(withJSONObject: body).write(to: url)
+        return try XCTUnwrap(PermissionRequest(fileURL: url))
+    }
+
+    func testARequestMakesTheWindowTaller() throws {
+        let plain = CompactRootView.height(rows: 3)
+        let withRequest = CompactRootView.height(rows: 3, expanded: try request())
+
+        XCTAssertGreaterThan(withRequest, plain)
+    }
+
+    /// A longer command needs more room, and compact has to know how
+    /// much before it draws anything.
+    func testALongerCommandAsksForMoreRoom() throws {
+        let short = CompactRootView.height(rows: 2, expanded: try request(command: "ls"))
+        let long = CompactRootView.height(
+            rows: 2, expanded: try request(command: String(repeating: "x", count: 300)))
+
+        XCTAssertGreaterThan(long, short)
+    }
+
+    /// Folded at five lines, like the full panel — otherwise a forty
+    /// line script takes the screen.
+    func testAnEnormousCommandIsBounded() throws {
+        let five = CompactRootView.height(
+            rows: 2, expanded: try request(command: (1...5).map(String.init).joined(separator: "\n")))
+        let forty = CompactRootView.height(
+            rows: 2, expanded: try request(command: (1...40).map(String.init).joined(separator: "\n")))
+
+        XCTAssertEqual(forty, five)
+    }
+
+    /// One at a time, newest first: two questions open at once is most
+    /// of the panel.
+    func testOnlyTheNewestRequestIsExpanded() throws {
+        let older = try request(id: "older", expiresIn: 10)
+        let newer = try request(id: "newer", expiresIn: 30)
+
+        XCTAssertEqual(CompactRootView.expandedRequest(from: [older, newer])?.id, "newer")
+    }
+
+    func testNothingIsExpandedWithoutARequest() {
+        XCTAssertNil(CompactRootView.expandedRequest(from: []))
+    }
+
+    /// The question belongs to a session; if that session is not on
+    /// screen the row cannot carry it.
+    func testARequestForAHiddenSessionIsNotExpanded() throws {
+        let hidden = try request(pid: 999)
+
+        XCTAssertNil(CompactRootView.expandedRequest(from: [hidden], visiblePIDs: [1, 2]))
+    }
+
 }

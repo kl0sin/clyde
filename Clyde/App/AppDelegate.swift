@@ -365,6 +365,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        appViewModel.$permissionRequests
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, self.appViewModel.panelMode == .compact else { return }
+                self.applyPanelHeight(for: .compact)
+            }
+            .store(in: &cancellables)
+
         appViewModel.$compactRowCap
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -453,9 +461,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .full:
             height = Self.fullPanelHeight
         case .compact:
-            let rows = CompactRootView.visible(sessions: sessionViewModel.sessions,
-                                               cap: appViewModel.compactRowCap).count
-            height = CompactRootView.height(rows: max(rows, 1))
+            let visible = CompactRootView.visible(sessions: sessionViewModel.sessions,
+                                                  cap: appViewModel.compactRowCap)
+            let request = CompactRootView.expandedRequest(
+                from: appViewModel.permissionRequests,
+                visiblePIDs: Set(visible.map(\.pid)))
+            height = CompactRootView.height(rows: max(visible.count, 1), expanded: request)
         }
         guard expandedPanel.currentAllowedSize.height != height else { return }
         expandedPanel.applyHeight(height)

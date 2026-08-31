@@ -47,7 +47,11 @@ struct PermissionRequestRow: View {
         "Show all \(wrappedLineCount(of: summary)) lines"
     }
 
-    private static func wrappedLineCount(of summary: String) -> Int {
+    /// Internal rather than private: compact mode has to know how tall
+    /// a request will be *before* it draws it, because the window's
+    /// height is computed and applied deliberately — the content is
+    /// never allowed to push it.
+    static func wrappedLineCount(of summary: String) -> Int {
         summary.components(separatedBy: "\n").reduce(0) { total, line in
             total + max(1, Int(ceil(Double(line.count) / Double(charactersPerLine))))
         }
