@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 40
+# clyde-hook-version: 41
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -44,6 +44,11 @@
 
 EVENTS_DIR="$HOME/.clyde/events"
 STATE_DIR="$HOME/.clyde/state"
+# Permission requests waiting for an answer, and the answers themselves.
+PERMISSIONS_DIR="$HOME/.clyde/permissions"
+# How long a request stays answerable. Written into each request so a
+# reader can tell a live one from one whose moment has passed.
+DECISION_WINDOW_SECONDS=4
 LOG_DIR="$HOME/.clyde/logs"
 HISTORY_DIR="$HOME/.clyde/history"
 HOOK_LOG="$LOG_DIR/hook.log"
@@ -596,6 +601,27 @@ if [ -n "$CLEAT_RUNTIME" ]; then
 fi
 
 # Atomic write helper: stage to a temp file in the same dir, then mv.
+# `tool_input` is a JSON object, not a scalar, so extract_field cannot
+# carry it — it would stringify to nothing useful. Returns compact JSON,
+# and an empty object when absent or unreadable, so what we write is
+# always parseable.
+extract_json_object() {
+    local key=$1
+    if command -v python3 >/dev/null 2>&1; then
+        printf '%s' "$INPUT" | python3 -c "
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    v = d.get('$key')
+except Exception:
+    v = None
+print(json.dumps(v if isinstance(v, (dict, list)) else {}))
+" 2>/dev/null || printf '{}'
+    else
+        printf '{}'
+    fi
+}
+
 atomic_write() {
     local target=$1
     local body=$2
@@ -884,6 +910,23 @@ case "$HOOK_EVENT" in
     PermissionRequest)
         atomic_write "$EVENTS_DIR/$KEY.json" \
             "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"event\": \"$HOOK_EVENT\", \"timestamp\": $TIMESTAMP}"
+        # Record what is actually being asked. The attention event above
+        # says a session wants something; answering from the panel needs
+        # the question itself, and this event carries it — `tool_name`
+        # and the whole `tool_input` — which the hook used to discard.
+        #
+        # The payload has no `tool_use_id`, checked against a real one,
+        # so the id that will tie this request to its answer is minted
+        # here. `expires_at` is written now so a reader can tell a live
+        # request from one whose moment has passed without knowing how
+        # long the window is.
+        PERM_TOOL_NAME=$(extract_field tool_name)
+        ESC_PERM_TOOL=$(printf '%s' "$PERM_TOOL_NAME" | tr -d '\n\r' | sed 's/\\/\\\\/g; s/"/\\"/g')
+        PERM_TOOL_INPUT=$(extract_json_object tool_input)
+        REQUEST_ID="$KEY-$TIMESTAMP-$$"
+        mkdir -p "$PERMISSIONS_DIR" 2>/dev/null
+        atomic_write "$PERMISSIONS_DIR/$REQUEST_ID.request" \
+            "{\"request_id\": \"$REQUEST_ID\", \"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"tool_name\": \"$ESC_PERM_TOOL\", \"tool_input\": $PERM_TOOL_INPUT, \"created_at\": $TIMESTAMP, \"expires_at\": $((TIMESTAMP + DECISION_WINDOW_SECONDS))}"
         ;;
     PermissionDenied)
         # User denied the permission prompt — the attention flag is no

@@ -111,6 +111,22 @@ final class HookScriptTests: XCTestCase {
         return task
     }
 
+    private func permissionsDir(in home: URL) -> URL {
+        home.appendingPathComponent(".clyde/permissions")
+    }
+
+    private func requestFiles(in home: URL) -> [String] {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            atPath: permissionsDir(in: home).path)) ?? []
+        return files.filter { $0.hasSuffix(".request") }.sorted()
+    }
+
+    private func permissionRequest(sid: String,
+                                   name: String = "Bash",
+                                   command: String = "rm -rf build") -> String {
+        #"{"hook_event_name":"PermissionRequest","session_id":"\#(sid)","cwd":"/repo","tool_name":"\#(name)","tool_input":{"command":"\#(command)","description":"Clean"}}"#
+    }
+
     private func eventsDir(in home: URL) -> URL {
         home.appendingPathComponent(".clyde/events")
     }
@@ -1369,4 +1385,67 @@ final class HookScriptTests: XCTestCase {
         let mode = try XCTUnwrap(attrs[.posixPermissions] as? NSNumber).uint16Value
         XCTAssertEqual(mode, 0o600, "spool.jsonl must be 0600, was \(String(mode, radix: 8))")
     }
+
+    // MARK: - PermissionRequest: what is being asked
+
+    /// Answering a permission request from the panel needs the panel to
+    /// know what the question is. The event carries `tool_name` and the
+    /// full `tool_input`; the hook used to throw both away and record
+    /// only that *something* wanted attention.
+    func testPermissionRequestRecordsTheToolAndItsInput() throws {
+        let home = tempHome()
+
+        try runHook(payload: permissionRequest(sid: "sess-1"), home: home)
+
+        let files = requestFiles(in: home)
+        XCTAssertEqual(files.count, 1, "one request file per request")
+        let name = try XCTUnwrap(files.first)
+        let body = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: permissionsDir(in: home).appendingPathComponent(name))
+        ) as? [String: Any]
+        XCTAssertEqual(body?["tool_name"] as? String, "Bash")
+        XCTAssertEqual((body?["tool_input"] as? [String: Any])?["command"] as? String, "rm -rf build")
+        XCTAssertEqual(body?["session_id"] as? String, "sess-1")
+        XCTAssertEqual(body?["cwd"] as? String, "/repo")
+        XCTAssertNotNil(body?["request_id"], "the payload carries no tool_use_id, so the hook mints one")
+        XCTAssertNotNil(body?["expires_at"])
+    }
+
+    /// The attention badge is what the panel shows today and must keep
+    /// working exactly as before.
+    func testPermissionRequestStillRaisesTheAttentionEvent() throws {
+        let home = tempHome()
+
+        try runHook(payload: permissionRequest(sid: "sess-2"), home: home)
+
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: eventsDir(in: home).appendingPathComponent("sess-2.json").path))
+    }
+
+    /// Two requests in flight are two questions, not one overwriting
+    /// the other — parallel sessions ask at the same time.
+    func testTwoRequestsGetTwoFiles() throws {
+        let home = tempHome()
+
+        try runHook(payload: permissionRequest(sid: "sess-a", command: "ls"), home: home)
+        try runHook(payload: permissionRequest(sid: "sess-b", command: "pwd"), home: home)
+
+        XCTAssertEqual(requestFiles(in: home).count, 2)
+    }
+
+    /// A tool with no input at all must not produce a file the reader
+    /// cannot parse.
+    func testARequestWithoutToolInputIsStillValidJSON() throws {
+        let home = tempHome()
+        let payload = #"{"hook_event_name":"PermissionRequest","session_id":"s","cwd":"/repo","tool_name":"Read"}"#
+
+        try runHook(payload: payload, home: home)
+
+        let files = requestFiles(in: home)
+        XCTAssertEqual(files.count, 1)
+        let name = try XCTUnwrap(files.first)
+        XCTAssertNoThrow(try JSONSerialization.jsonObject(
+            with: Data(contentsOf: permissionsDir(in: home).appendingPathComponent(name))))
+    }
+
 }
