@@ -111,6 +111,43 @@ final class HookScriptTests: XCTestCase {
         return task
     }
 
+    /// Runs the hook and returns what it printed on stdout — the
+    /// channel a decision travels on.
+    private func runHookCapturingOutput(payload: String, home: URL) throws -> String {
+        let task = try startHook(payload: payload, home: home)
+        let pipe = task.standardOutput as! Pipe
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    /// Clyde says it is running and willing to answer by keeping this
+    /// file fresh. Without it the hook does not wait at all.
+    private func markClydeReady(in home: URL) throws {
+        let dir = permissionsDir(in: home)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "".write(to: dir.appendingPathComponent("ready"), atomically: true, encoding: .utf8)
+    }
+
+    /// Answers the first request that appears, the way Clyde will.
+    private func answerFirstRequest(in home: URL, with body: String) -> Thread {
+        let thread = Thread {
+            let dir = self.permissionsDir(in: home)
+            for _ in 0..<200 {
+                if let name = (try? FileManager.default.contentsOfDirectory(atPath: dir.path))?
+                    .first(where: { $0.hasSuffix(".request") }) {
+                    let id = String(name.dropLast(".request".count))
+                    try? body.write(to: dir.appendingPathComponent("\(id).decision"),
+                                    atomically: true, encoding: .utf8)
+                    return
+                }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        }
+        thread.start()
+        return thread
+    }
+
     private func permissionsDir(in home: URL) -> URL {
         home.appendingPathComponent(".clyde/permissions")
     }
@@ -1394,10 +1431,18 @@ final class HookScriptTests: XCTestCase {
     /// only that *something* wanted attention.
     func testPermissionRequestRecordsTheToolAndItsInput() throws {
         let home = tempHome()
+        try markClydeReady(in: home)
 
-        try runHook(payload: permissionRequest(sid: "sess-1"), home: home)
+        // Read it while the hook is still waiting: an answered request
+        // is cleaned up, which is what the cleanup test asserts.
+        let task = try startHook(payload: permissionRequest(sid: "sess-1"), home: home)
+        defer { task.waitUntilExit() }
+        var files: [String] = []
+        for _ in 0..<60 where files.isEmpty {
+            files = requestFiles(in: home)
+            if files.isEmpty { Thread.sleep(forTimeInterval: 0.05) }
+        }
 
-        let files = requestFiles(in: home)
         XCTAssertEqual(files.count, 1, "one request file per request")
         let name = try XCTUnwrap(files.first)
         let body = try JSONSerialization.jsonObject(
@@ -1426,26 +1471,151 @@ final class HookScriptTests: XCTestCase {
     /// the other — parallel sessions ask at the same time.
     func testTwoRequestsGetTwoFiles() throws {
         let home = tempHome()
+        try markClydeReady(in: home)
 
-        try runHook(payload: permissionRequest(sid: "sess-a", command: "ls"), home: home)
-        try runHook(payload: permissionRequest(sid: "sess-b", command: "pwd"), home: home)
+        let a = try startHook(payload: permissionRequest(sid: "sess-a", command: "ls"), home: home)
+        let b = try startHook(payload: permissionRequest(sid: "sess-b", command: "pwd"), home: home)
+        defer { a.waitUntilExit(); b.waitUntilExit() }
+        var files: [String] = []
+        for _ in 0..<80 where files.count < 2 {
+            files = requestFiles(in: home)
+            if files.count < 2 { Thread.sleep(forTimeInterval: 0.05) }
+        }
 
-        XCTAssertEqual(requestFiles(in: home).count, 2)
+        XCTAssertEqual(files.count, 2)
     }
 
     /// A tool with no input at all must not produce a file the reader
     /// cannot parse.
     func testARequestWithoutToolInputIsStillValidJSON() throws {
         let home = tempHome()
+        try markClydeReady(in: home)
         let payload = #"{"hook_event_name":"PermissionRequest","session_id":"s","cwd":"/repo","tool_name":"Read"}"#
 
-        try runHook(payload: payload, home: home)
+        let task = try startHook(payload: payload, home: home)
+        defer { task.waitUntilExit() }
+        var files: [String] = []
+        for _ in 0..<60 where files.isEmpty {
+            files = requestFiles(in: home)
+            if files.isEmpty { Thread.sleep(forTimeInterval: 0.05) }
+        }
 
-        let files = requestFiles(in: home)
         XCTAssertEqual(files.count, 1)
         let name = try XCTUnwrap(files.first)
         XCTAssertNoThrow(try JSONSerialization.jsonObject(
             with: Data(contentsOf: permissionsDir(in: home).appendingPathComponent(name))))
+    }
+
+
+    // MARK: - PermissionRequest: waiting for an answer
+
+    func testTheHookPrintsTheDecisionItWasGiven() throws {
+        let home = tempHome()
+        try markClydeReady(in: home)
+        _ = answerFirstRequest(in: home, with: #"{"behavior":"allow"}"#)
+
+        let output = try runHookCapturingOutput(payload: permissionRequest(sid: "s"), home: home)
+
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any])
+        let specific = json["hookSpecificOutput"] as? [String: Any]
+        XCTAssertEqual(specific?["hookEventName"] as? String, "PermissionRequest")
+        XCTAssertEqual((specific?["decision"] as? [String: Any])?["behavior"] as? String, "allow")
+    }
+
+    func testADenialTravelsTheSameWay() throws {
+        let home = tempHome()
+        try markClydeReady(in: home)
+        _ = answerFirstRequest(in: home, with: #"{"behavior":"deny"}"#)
+
+        let output = try runHookCapturingOutput(payload: permissionRequest(sid: "s"), home: home)
+
+        XCTAssertTrue(output.contains("\"deny\""), output)
+    }
+
+    /// Silence is the terminal's question to ask, and the wait is bounded.
+    func testNoAnswerFallsThroughToAsk() throws {
+        let home = tempHome()
+        try markClydeReady(in: home)
+
+        let started = Date()
+        let output = try runHookCapturingOutput(payload: permissionRequest(sid: "s"), home: home)
+
+        XCTAssertTrue(output.contains("\"ask\""), output)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10, "the window must bound the wait")
+    }
+
+    /// The whole point of the readiness file: a user who never turned
+    /// this on must not pay the window on every permission request.
+    func testWithoutClydeReadyTheHookDoesNotWaitAtAll() throws {
+        let home = tempHome()
+
+        let started = Date()
+        let output = try runHookCapturingOutput(payload: permissionRequest(sid: "s"), home: home)
+
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2,
+                          "no one waits for an answer that is not coming")
+        XCTAssertTrue(output.isEmpty || output.contains("\"ask\""), output)
+    }
+
+    /// A stale readiness file means Clyde died; nobody is going to
+    /// answer, so nobody should wait.
+    func testAStaleReadinessFileIsIgnored() throws {
+        let home = tempHome()
+        try markClydeReady(in: home)
+        let ready = permissionsDir(in: home).appendingPathComponent("ready")
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: ready.path)
+
+        let started = Date()
+        _ = try runHookCapturingOutput(payload: permissionRequest(sid: "s"), home: home)
+
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+    }
+
+    func testAMalformedAnswerIsAsk() throws {
+        let home = tempHome()
+        try markClydeReady(in: home)
+        _ = answerFirstRequest(in: home, with: "not json at all")
+
+        XCTAssertTrue(try runHookCapturingOutput(payload: permissionRequest(sid: "s"), home: home)
+            .contains("\"ask\""))
+    }
+
+    /// An answer addressed to another request must not be consumed by
+    /// this one — two sessions can be asking at the same time.
+    func testAnAnswerForAnotherRequestIsIgnored() throws {
+        let home = tempHome()
+        try markClydeReady(in: home)
+        try #"{"behavior":"allow"}"#.write(
+            to: permissionsDir(in: home).appendingPathComponent("someone-else.decision"),
+            atomically: true, encoding: .utf8)
+
+        XCTAssertTrue(try runHookCapturingOutput(payload: permissionRequest(sid: "s"), home: home)
+            .contains("\"ask\""))
+    }
+
+    /// Answered or not, the hook is advisory and the session continues.
+    func testTheHookStillExitsZeroAfterAnswering() throws {
+        let home = tempHome()
+        try markClydeReady(in: home)
+        _ = answerFirstRequest(in: home, with: #"{"behavior":"allow"}"#)
+
+        XCTAssertEqual(try runHook(payload: permissionRequest(sid: "s"), home: home), 0)
+    }
+
+    /// Nothing is left behind for the next request to trip over.
+    func testTheRequestAndItsAnswerAreCleanedUp() throws {
+        let home = tempHome()
+        try markClydeReady(in: home)
+        _ = answerFirstRequest(in: home, with: #"{"behavior":"allow"}"#)
+
+        try runHook(payload: permissionRequest(sid: "s"), home: home)
+
+        let leftovers = (try? FileManager.default.contentsOfDirectory(
+            atPath: permissionsDir(in: home).path))?.filter {
+                $0.hasSuffix(".request") || $0.hasSuffix(".decision")
+            } ?? []
+        XCTAssertEqual(leftovers, [], "leftovers would be answered stale next time")
     }
 
 }

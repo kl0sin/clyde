@@ -420,7 +420,9 @@ func testDisabledMeansClydeNeverAnswers() throws {
 
 - [ ] **Step 2: Run it — it fails**
 
-- [ ] **Step 3: Gate the store on the setting**, defaulting to `false`. Clyde simply never answers; the hook's window closes and the terminal asks, which is exactly today's behaviour. Nothing in the hook needs to know whether the feature is on.
+- [ ] **Step 3: Gate the store on the setting**, defaulting to `false`, and keep `~/.clyde/permissions/ready` fresh only while the setting is on — the store touches it on the same tick that expires requests, and removes it when the setting goes off or Clyde quits.
+
+  **Correction to this plan, made during Task 2.** It said nothing in the hook needs to know whether the feature is on, and that was wrong: with the feature off the hook would still wait out its window on every permission request before the terminal asked, so every user who never enabled it would pay the delay. The hook now writes and waits only when that file is fresh, which also covers Clyde being closed or crashed.
 
 - [ ] **Step 4: Test passes. Add the Settings toggle** with a line saying what it does and that the terminal still asks whenever Clyde does not answer in time.
 

@@ -49,6 +49,9 @@ PERMISSIONS_DIR="$HOME/.clyde/permissions"
 # How long a request stays answerable. Written into each request so a
 # reader can tell a live one from one whose moment has passed.
 DECISION_WINDOW_SECONDS=4
+# A readiness file older than this means Clyde is gone — it refreshes it
+# while it runs — so the request is not worth waiting on.
+READY_MAX_AGE_SECONDS=120
 LOG_DIR="$HOME/.clyde/logs"
 HISTORY_DIR="$HOME/.clyde/history"
 HOOK_LOG="$LOG_DIR/hook.log"
@@ -622,6 +625,35 @@ print(json.dumps(v if isinstance(v, (dict, list)) else {}))
     fi
 }
 
+# Clyde keeps `permissions/ready` fresh while it is running with panel
+# answering switched on. No fresh file means nobody is going to answer,
+# and then nobody waits: a user who never turned this on must not pay
+# the decision window on every permission request.
+clyde_is_ready() {
+    local ready="$PERMISSIONS_DIR/ready"
+    [ -f "$ready" ] || return 1
+    local age
+    age=$(( $(date +%s) - $(stat -f %m "$ready" 2>/dev/null || echo 0) ))
+    [ "$age" -ge 0 ] && [ "$age" -le "$READY_MAX_AGE_SECONDS" ]
+}
+
+# Reads `behavior` out of a decision file. Anything unreadable, absent
+# or unexpected comes back empty and is treated as "ask".
+read_decision_behavior() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c "
+import json, sys
+try:
+    v = json.load(open(sys.argv[1])).get('behavior', '')
+except Exception:
+    v = ''
+print(v if v in ('allow', 'deny') else '')
+" "$1" 2>/dev/null || printf ''
+    else
+        printf ''
+    fi
+}
+
 atomic_write() {
     local target=$1
     local body=$2
@@ -920,6 +952,10 @@ case "$HOOK_EVENT" in
         # here. `expires_at` is written now so a reader can tell a live
         # request from one whose moment has passed without knowing how
         # long the window is.
+        # Nobody home: no file to write, no wait, no cost. The attention
+        # event above already fired, so the badge behaves as it always
+        # has and the terminal asks its own question.
+        if clyde_is_ready; then
         PERM_TOOL_NAME=$(extract_field tool_name)
         ESC_PERM_TOOL=$(printf '%s' "$PERM_TOOL_NAME" | tr -d '\n\r' | sed 's/\\/\\\\/g; s/"/\\"/g')
         PERM_TOOL_INPUT=$(extract_json_object tool_input)
@@ -927,6 +963,32 @@ case "$HOOK_EVENT" in
         mkdir -p "$PERMISSIONS_DIR" 2>/dev/null
         atomic_write "$PERMISSIONS_DIR/$REQUEST_ID.request" \
             "{\"request_id\": \"$REQUEST_ID\", \"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"tool_name\": \"$ESC_PERM_TOOL\", \"tool_input\": $PERM_TOOL_INPUT, \"created_at\": $TIMESTAMP, \"expires_at\": $((TIMESTAMP + DECISION_WINDOW_SECONDS))}"
+
+        # Wait for the panel, in tenths of a second: fast enough that a
+        # click feels instant, slow enough not to spin.
+        DECISION_FILE="$PERMISSIONS_DIR/$REQUEST_ID.decision"
+        BEHAVIOR=""
+        WAITED=0
+        while [ "$WAITED" -lt $((DECISION_WINDOW_SECONDS * 10)) ]; do
+            if [ -f "$DECISION_FILE" ]; then
+                BEHAVIOR=$(read_decision_behavior "$DECISION_FILE")
+                break
+            fi
+            sleep 0.1
+            WAITED=$((WAITED + 1))
+        done
+
+        # Leftovers would be read as answers to a later request.
+        rm -f "$DECISION_FILE" "$PERMISSIONS_DIR/$REQUEST_ID.request"
+        # Anything that is not an explicit allow or deny is the
+        # terminal's question to ask — including an answer we could not
+        # read. Clyde never denies on the user's behalf by accident.
+        case "$BEHAVIOR" in
+            allow|deny) ;;
+            *) BEHAVIOR="ask" ;;
+        esac
+        printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior": "%s"}}}\n' "$BEHAVIOR"
+        fi
         ;;
     PermissionDenied)
         # User denied the permission prompt — the attention flag is no
