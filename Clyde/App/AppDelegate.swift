@@ -277,6 +277,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerGlobalHotKey()
         installExpandedDragMonitor()
         closeStraySettingsWindows()
+        // A way to open the panel without System Events. The scenario
+        // scripts drove it through Automation, which needs a permission
+        // that has been denied mid-session more than once — and a check
+        // that cannot run is not a check. Reading a default costs
+        // nothing and is never true for a user who has not set it.
+        if UserDefaults.standard.bool(forKey: "openPanelAtLaunch") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                self?.appViewModel.isCollapsed = false
+            }
+        }
+
         // Onboarding is deferred until the panel has been up for a moment
         // and we can present a non-blocking dialog.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in

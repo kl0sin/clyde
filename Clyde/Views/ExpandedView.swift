@@ -7,65 +7,6 @@ struct ExpandedView: View {
     @ObservedObject var appViewModel: AppViewModel
     @ObservedObject var sessionViewModel: SessionListViewModel
 
-    /// The advisory's detail, drawn inside the panel so it carries the
-    /// app's own radius, spacing and colours rather than a system
-    /// popover's.
-    private func advisoryCard(_ issue: HookInstaller.HealthIssue) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            HStack(spacing: Spacing.xxs) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color(red: 0.95, green: 0.75, blue: 0.35))
-                Text(issue.bannerTitle ?? issue.chipLabel)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(TextColor.primary)
-                Spacer(minLength: Spacing.sm)
-                Button {
-                    showsAdvisory = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(TextColor.tertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close")
-            }
-
-            Text(issue.bannerMessage)
-                .font(.system(size: 11))
-                .foregroundStyle(TextColor.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let url = issue.bannerActionURL, let title = issue.bannerActionTitle {
-                Button(title) {
-                    NSWorkspace.shared.open(url)
-                    showsAdvisory = false
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(TextColor.primary)
-                .padding(.horizontal, Spacing.xs)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.small)
-                        .fill(Color.white.opacity(0.12))
-                )
-                .padding(.top, 2)
-            }
-        }
-        .padding(Spacing.sm)
-        .frame(width: 250, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Radius.medium)
-                .fill(Color(white: 0.13))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.medium)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
-        )
-    }
-
     /// The advisory the summary-bar chip stands for, if any.
     private var advisory: HookInstaller.HealthIssue? {
         appViewModel.hookHealthIssue.flatMap { $0.presentation == .chip ? $0 : nil }
@@ -153,7 +94,8 @@ struct ExpandedView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { showsAdvisory = false }
 
-            advisoryCard(advisory)
+            AdvisoryDetail(issue: advisory) { showsAdvisory = false }
+                .frame(width: 250)
                 .padding(.trailing, Spacing.sm)
                 .padding(.bottom, 34)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))

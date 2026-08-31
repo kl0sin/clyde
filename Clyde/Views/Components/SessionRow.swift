@@ -829,12 +829,15 @@ struct SessionStatusIndicator: View {
 
     var body: some View {
         ZStack {
-            // Squircle base — same shape as the header sprite.
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            // Stepped corners rather than a radius: the corner of a
+            // drawn sprite, which is what this holds. The compact
+            // panel's slot uses the same shape, so the mark is one
+            // thing in both modes rather than two dialects of it.
+            SteppedSquare(step: 4)
                 .fill(isActive ? accent.opacity(0.18) : Color(white: 0.11))
                 .frame(width: 34, height: 34)
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(
+            SteppedSquare(step: 4)
+                .stroke(
                     isActive
                         ? accent.opacity(session.needsAttention && attentionPulse ? 0.65 : 0.55)
                         : Color(white: 0.18),
@@ -843,26 +846,22 @@ struct SessionStatusIndicator: View {
                 .frame(width: 34, height: 34)
 
             if isActive {
-                // Active session: full sprite. The busy scale beat is
-                // driven by a TimelineView (frame-locked) so the
-                // animation always runs reliably — SwiftUI's
-                // withAnimation/.repeatForever in onAppear has been
-                // unreliable for newly-appearing rows.
-                let mascotState: ClydeState = session.needsAttention ? .attention : .busy
-                if session.status == .busy && !session.needsAttention {
-                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                        let t = context.date.timeIntervalSinceReferenceDate
-                        let phase: Double = reduceMotion ? 0 : (sin(t * .pi * 2 / 1.4) + 1) / 2  // 0…1, 1.4s cycle
-                        let scale = 1.0 + phase * 0.12               // 1.0 … 1.12
-                        ClydeAnimationView(state: mascotState, pixelSize: 1.5, ambientIdleEnabled: false)
-                            .frame(width: 24, height: 24)
-                            .scaleEffect(scale, anchor: .center)
-                    }
-                    .frame(width: 24, height: 24)
-                } else {
-                    ClydeAnimationView(state: mascotState, pixelSize: 1.5, ambientIdleEnabled: false)
-                        .frame(width: 24, height: 24)
-                }
+                // The session's own state, in the same four pixels the
+                // compact panel uses. The mascot said "Clyde", which
+                // every row already is; this says what *this* session
+                // is doing, and it says it identically in both modes —
+                // one object in three states rather than a sprite here
+                // and a grid there.
+                //
+                // The mascot keeps the header, the summary bar and the
+                // widget, where it stands for the app rather than for a
+                // session.
+                PixelStatusIndicator(
+                    state: session.needsAttention ? .needsAttention : .working,
+                    size: 7,
+                    spacing: 3
+                )
+                .frame(width: 24, height: 24)
 
                 if session.needsAttention {
                     Circle()

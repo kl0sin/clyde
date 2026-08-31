@@ -253,9 +253,12 @@ compact-mode)
     install_hook
     say "Launching the dev build in compact mode"
     defaults write io.github.kl0sin.clyde.dev panelMode compact
+    # Opens the panel without System Events. Automation permission has
+    # been denied mid-session more than once, and a check that cannot
+    # run is not a check.
+    defaults write io.github.kl0sin.clyde.dev openPanelAtLaunch -bool true
     build_and_run
-    open_panel
-    sleep 2
+    sleep 3
     note "geometry:"
     "$REPO_ROOT/scripts/dev/window-geometry.swift" >/dev/null 2>&1 || true
     swift "$REPO_ROOT/scripts/dev/window-geometry.swift" Clyde | sed 's/^/    /'

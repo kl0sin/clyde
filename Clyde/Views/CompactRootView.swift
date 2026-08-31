@@ -10,8 +10,12 @@ struct CompactRootView: View {
     @ObservedObject var appViewModel: AppViewModel
     @ObservedObject var sessionViewModel: SessionListViewModel
 
+    @SwiftUI.State private var showsAdvisory = false
+
     static let gripHeight: CGFloat = 14
-    static let footerHeight: CGFloat = 26
+    /// Taller than it looks: the counts need air under them or they
+    /// read as resting on the window's edge.
+    static let footerHeight: CGFloat = 34
     static let defaultRowCap = 4
 
     /// The height this view wants, which is the only thing in the app
@@ -28,6 +32,7 @@ struct CompactRootView: View {
         let empty: CGFloat = sessions.isEmpty ? CompactSessionRow.quietHeight : 0
         return gripHeight
             + cardPadding * 2
+            + separatorHeight
             + cards + gaps + empty
             + (request.map(requestHeight) ?? 0)
             + footerHeight
@@ -36,6 +41,7 @@ struct CompactRootView: View {
     /// Cards sit inset from the panel's edge so they read as surfaces
     /// on it rather than as bands across it.
     static let cardPadding: CGFloat = 7
+    static let separatorHeight: CGFloat = 0.5
 
     /// How much room an open question needs, worked out before it is
     /// drawn. The window's height is computed and applied deliberately
@@ -101,6 +107,20 @@ struct CompactRootView: View {
                 .frame(height: Self.gripHeight)
 
             cards
+
+            if showsAdvisory,
+               let advisory = appViewModel.hookHealthIssue,
+               advisory.presentation == .chip {
+                AdvisoryDetail(issue: advisory) { showsAdvisory = false }
+                    .padding(.horizontal, Self.cardPadding)
+                    .padding(.bottom, Self.cardPadding)
+            }
+
+            // The full panel separates its summary bar the same way.
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(height: 0.5)
+                .padding(.horizontal, Self.cardPadding)
 
             footer
         }
@@ -174,6 +194,15 @@ struct CompactRootView: View {
 
             Spacer(minLength: Spacing.xs)
 
+            // The same advisory the full panel's summary bar carries.
+            // Without it, switching to compact silently hid the fact
+            // that the global shortcut is off — the panel that is meant
+            // to stay open was the one place it went unsaid.
+            if let advisory = appViewModel.hookHealthIssue,
+               advisory.presentation == .chip {
+                AdvisoryChip(issue: advisory) { showsAdvisory.toggle() }
+            }
+
             Button {
                 appViewModel.panelMode = .full
             } label: {
@@ -195,6 +224,7 @@ struct CompactRootView: View {
             .accessibilityLabel("Expand to the full panel")
         }
         .padding(.horizontal, Spacing.sm)
+        .padding(.bottom, 4)
         .frame(height: Self.footerHeight)
     }
 

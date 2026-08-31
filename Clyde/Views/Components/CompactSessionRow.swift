@@ -51,9 +51,13 @@ struct CompactSessionRow: View {
     /// Shortening the quiet ones was tried and took their structure
     /// away: a name and a long string of text with nothing holding them
     /// apart.
-    static let cardHeight: CGFloat = 44
+    /// Two lines and their padding, and no more. At 44 the card was
+    /// comfortable and four sessions came to 61% of the full panel,
+    /// which is not a compact mode — it is the same panel with less in
+    /// it.
+    static let cardHeight: CGFloat = 40
     /// Space between cards, so they read as separate surfaces.
-    static let gap: CGFloat = 6
+    static let gap: CGFloat = 5
 
     static func height(for session: Session) -> CGFloat { cardHeight }
 
@@ -128,12 +132,19 @@ struct CompactSessionRow: View {
         let accent = PixelStatusIndicator.color(for: content.state)
         let isActive = content.state != .idle
 
-        HStack(spacing: 10) {
+        // 7 (card inset) + 11 (card padding) + 24 (slot) + 16 = 58,
+        // which is where the full panel's session names start:
+        // 12 + 34 + 12. Switching modes then moves the window's
+        // contents, not the column they are read down.
+        HStack(spacing: 16) {
             slotView(state: content.state)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(content.name)
-                    .font(.system(size: 12.5,
+                    // 13 is the full panel's session name. Weight
+                    // carries the state; the size is shared, so a name
+                    // does not change size when the mode does.
+                    .font(.system(size: 13,
                                   weight: Self.namesAreProminent(in: content.state) ? .semibold : .medium))
                     .foregroundStyle(Self.namesAreProminent(in: content.state)
                                      ? TextColor.primary : TextColor.secondary)
@@ -141,7 +152,11 @@ struct CompactSessionRow: View {
 
                 if let meta = content.meta {
                     HStack(spacing: 5) {
-                        MicroLabel(text: meta, color: accent)
+                        // Only an active state colours its label. A green
+                        // WAITING on every quiet card shouts the least
+                        // interesting thing on screen.
+                        MicroLabel(text: meta,
+                                   color: isActive ? accent : TextColor.tertiary)
                         if let worktree = content.worktree { Chip(text: worktree, tinted: true) }
                         if let agents = content.agentCount { Chip(text: "◉ \(agents)", tinted: false) }
                     }
@@ -190,7 +205,7 @@ struct CompactSessionRow: View {
     @ViewBuilder
     private func cardBackground(state: PixelStatusIndicator.State, accent: Color) -> some View {
         ZStack {
-            Color.white.opacity(0.028)
+            Color.white.opacity(0.042)
 
             if state != .idle {
                 RadialGradient(
@@ -214,7 +229,7 @@ struct CompactSessionRow: View {
     private func borderColour(state: PixelStatusIndicator.State, accent: Color) -> Color {
         switch state {
         case .idle: return .white.opacity(isHovered ? 0.12 : 0.05)
-        case .working, .needsAttention: return accent.opacity(0.30)
+        case .working, .needsAttention: return accent.opacity(0.22)
         }
     }
 
@@ -251,9 +266,9 @@ struct CompactSessionRow: View {
         let isActive = state != .idle
 
         ZStack {
-            SteppedSquare()
+            SteppedSquare(step: 4)
                 .fill(isActive ? accent.opacity(0.16) : Color.white.opacity(0.05))
-            SteppedSquare()
+            SteppedSquare(step: 4)
                 .stroke(isActive ? accent.opacity(0.40) : Color.white.opacity(0.07), lineWidth: 1)
 
             switch Self.slot(for: session, index: index) {
@@ -321,9 +336,12 @@ private struct Chip: View {
 private struct DitherField: View {
     var body: some View {
         Canvas { context, size in
-            let spacing: CGFloat = 3
+            // Wider apart and a touch stronger than the mockup's CSS:
+            // one CSS pixel is half a point on this display, so the
+            // literal port came out invisible.
+            let spacing: CGFloat = 4
             var offset = -size.height
-            let colour = GraphicsContext.Shading.color(.white.opacity(0.045))
+            let colour = GraphicsContext.Shading.color(.white.opacity(0.075))
             while offset < size.width {
                 var line = Path()
                 line.move(to: CGPoint(x: offset, y: size.height))
@@ -356,7 +374,7 @@ private struct SweepLine: View {
                 }
             } else {
                 Rectangle()
-                    .fill(color.opacity(0.35))
+                    .fill(color.opacity(0.28))
                     .frame(height: 1)
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
@@ -366,9 +384,12 @@ private struct SweepLine: View {
     }
 
     private func segment(width: CGFloat, phase: Double) -> some View {
-        let segmentWidth = width * 0.38
+        let segmentWidth = width * 0.28
         let travel = width + segmentWidth
-        return LinearGradient(colors: [.clear, color, .clear],
+        // At full strength this read as a coloured bottom border rather
+        // than as light crossing the card — the eye takes a saturated
+        // hairline as structure.
+        return LinearGradient(colors: [.clear, color.opacity(0.38), .clear],
                               startPoint: .leading, endPoint: .trailing)
             .frame(width: segmentWidth, height: 1)
             .offset(x: -segmentWidth + travel * phase)
