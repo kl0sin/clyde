@@ -173,6 +173,40 @@ enum HookInstaller {
         case accessibilityNotTrusted            // macOS hasn't granted accessibility, so ⌃⌘C is dead
         case inputMonitoringNotTrusted          // reading keys outside our own windows is a separate grant
 
+        /// Where an issue asks for the user's attention.
+        ///
+        /// A banner takes about a quarter of a 420-point panel and comes
+        /// back on every launch. That is right for an install that is
+        /// actually broken and much too much for an advisory the user
+        /// may have deliberately decided not to act on — the global
+        /// shortcut is a convenience, and tracking works without it.
+        /// Those get a chip in the summary bar with the detail on hover.
+        enum Presentation: Equatable {
+            case banner
+            case chip
+        }
+
+        var presentation: Presentation {
+            switch self {
+            case .accessibilityNotTrusted, .inputMonitoringNotTrusted, .cleatHooksCapDisabled:
+                return .chip
+            default:
+                return .banner
+            }
+        }
+
+        /// A couple of words. Everything else lives in the hover.
+        var chipLabel: String {
+            switch self {
+            case .accessibilityNotTrusted, .inputMonitoringNotTrusted:
+                return "Shortcut off"
+            case .cleatHooksCapDisabled:
+                return "Cleat hooks off"
+            default:
+                return bannerTitle ?? "Needs attention"
+            }
+        }
+
         /// Optional short headline rendered above the body in the
         /// banner. Use it when the long-form message has a natural
         /// "what's wrong" → "what to do" split worth surfacing as

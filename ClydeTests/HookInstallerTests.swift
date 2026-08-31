@@ -732,4 +732,33 @@ final class HookInstallerTests: XCTestCase {
             XCTAssertNil(issue.bannerCommand, "\(issue) must not surface a CLI command — its fix lives in Settings")
         }
     }
+
+    // MARK: - How an issue asks for attention
+
+    /// A quarter of the panel, on every launch, for something the user
+    /// may have decided not to fix, is too much. Advisories became a
+    /// chip in the summary bar; a broken hook still takes the banner,
+    /// because tracking is actually not working then.
+    func testAdvisoriesAreShownAsAChipNotABanner() {
+        XCTAssertEqual(HookInstaller.HealthIssue.accessibilityNotTrusted.presentation, .chip)
+        XCTAssertEqual(HookInstaller.HealthIssue.inputMonitoringNotTrusted.presentation, .chip)
+        XCTAssertEqual(HookInstaller.HealthIssue.cleatHooksCapDisabled.presentation, .chip)
+    }
+
+    func testRealBreakageStillTakesTheBanner() {
+        XCTAssertEqual(HookInstaller.HealthIssue.notInstalled.presentation, .banner)
+        XCTAssertEqual(HookInstaller.HealthIssue.claudeNotInstalled.presentation, .banner)
+        XCTAssertEqual(HookInstaller.HealthIssue.scriptMissing.presentation, .banner)
+        XCTAssertEqual(HookInstaller.HealthIssue.outdated(installed: 1, current: 2).presentation, .banner)
+    }
+
+    /// The chip has room for a couple of words, and the detail belongs
+    /// in the hover.
+    func testTheChipLabelIsShort() {
+        XCTAssertEqual(HookInstaller.HealthIssue.accessibilityNotTrusted.chipLabel, "Shortcut off")
+        XCTAssertEqual(HookInstaller.HealthIssue.inputMonitoringNotTrusted.chipLabel, "Shortcut off")
+        XCTAssertLessThanOrEqual(
+            HookInstaller.HealthIssue.cleatHooksCapDisabled.chipLabel.count, 16)
+    }
+
 }
