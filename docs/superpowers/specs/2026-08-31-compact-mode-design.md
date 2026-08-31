@@ -16,7 +16,9 @@ Clyde has three ways to sit on a screen: a menu-bar icon, a 130×46 widget, and 
 
 **Rows are 30 points, down from 44.** The second line and the numbered slot go; the status, the name, the worktree badge, the agent count and the elapsed time stay on one line. Four sessions cost 160 points against 420 today. A 24-point row was drawn and rejected: 8 points of padding is too little for a row that is clickable and draggable.
 
-**Height follows the session count**, capped by a setting (default 4). Over the cap, the oldest idle sessions drop off — never the working ones.
+**Height follows the session count**, capped by a setting (default 4). Over the cap, the oldest idle sessions drop off — never the working ones, and never one that is waiting on an answer.
+
+**Order: needs-you, then working, then idle by most recent.** An earlier draft of this spec put working first; that was wrong. A session waiting on you is the only one that requires anything — a working session needs nothing and is there to be glanced at. In a panel kept open beside the work, the thing to act on belongs at the top.
 
 **Agents are a count, not a list**, with their own mark — a small head with two eyes, from the mascot's family — so `4` is unmistakably four agents. Names remain in the full panel.
 

@@ -210,6 +210,40 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    /// Which shape the panel takes when it opens.
+    enum PanelMode: String {
+        case full
+        case compact
+    }
+
+    static let panelModeKey = "panelMode"
+    static let compactRowCapKey = "compactRowCap"
+
+    static func storedPanelMode() -> PanelMode {
+        UserDefaults.standard.string(forKey: panelModeKey)
+            .flatMap(PanelMode.init(rawValue:)) ?? .full
+    }
+
+    static func storePanelMode(_ mode: PanelMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: panelModeKey)
+    }
+
+    /// The panel reopens in the mode it was left in.
+    @Published var panelMode: PanelMode = AppViewModel.storedPanelMode() {
+        didSet {
+            guard panelMode != oldValue else { return }
+            Self.storePanelMode(panelMode)
+        }
+    }
+
+    /// How many rows compact shows before the quiet sessions drop off.
+    @Published var compactRowCap: Int = {
+        let saved = UserDefaults.standard.integer(forKey: AppViewModel.compactRowCapKey)
+        return saved > 0 ? saved : CompactRootView.defaultRowCap
+    }() {
+        didSet { UserDefaults.standard.set(compactRowCap, forKey: Self.compactRowCapKey) }
+    }
+
     /// Permission requests the hook is waiting on. Empty unless the
     /// user turned panel answering on — nothing writes a request
     /// otherwise.
