@@ -138,7 +138,14 @@ struct SessionRow: View {
                 // -subagent marker carried the single-agent case; v0.7.0
                 // retired that marker and left one agent showing nothing.
                 if let agentsLabel = session.activeAgentsLabel {
-                    SubagentSummaryLine(session: session)
+                    // Agents replaced the tool line wholesale, so a
+                    // session with agents was the one working state
+                    // that said nothing about what it is doing.
+                    HStack(spacing: 5) {
+                        MicroLabel(text: session.activeTool?.toolName ?? "working",
+                                   color: SessionTheme.processingColor)
+                        SubagentSummaryLine(session: session)
+                    }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("\(agentsLabel) running")
                         .accessibilityAddTraits(.updatesFrequently)
@@ -199,14 +206,20 @@ struct SessionRow: View {
                             }
                             .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                         } else {
-                            Text(session.workingDirectory.isEmpty
-                                 ? "Unknown path"
-                                 : abbreviatePath(session.workingDirectory))
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(TextColor.tertiary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                            HStack(spacing: 5) {
+                                MicroLabel(text: session.status == .busy ? "working" : "waiting",
+                                           color: session.status == .busy
+                                               ? SessionTheme.processingColor
+                                               : TextColor.tertiary)
+                                Text(session.workingDirectory.isEmpty
+                                     ? "Unknown path"
+                                     : abbreviatePath(session.workingDirectory))
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(TextColor.tertiary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                         }
                     }
                     .frame(height: 14, alignment: .leading)

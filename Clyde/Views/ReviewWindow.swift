@@ -221,11 +221,12 @@ struct ReviewView: View {
                 .frame(width: 34, height: 34)
                 .padding(Spacing.xs)
                 .background(
-                    RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
+                    // The same stepped frame the panel's sprites wear.
+                    SteppedSquare(step: 50 * SteppedSquare.stepRatio)
                         .fill(SessionTheme.processingColor.opacity(0.16))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
+                    SteppedSquare(step: 50 * SteppedSquare.stepRatio)
                         .stroke(SessionTheme.processingColor.opacity(0.45), lineWidth: 1)
                 )
                 .accessibilityHidden(true)

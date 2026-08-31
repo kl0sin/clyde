@@ -28,11 +28,14 @@ struct ExpandedHeader: View {
             // with the state so the user can read the dominant state from
             // the header alone, even before glancing at the stats.
             ZStack {
-                RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
+                // Stepped, like every other sprite frame in the app now
+                // — the mark should not change shape with the window it
+                // is in.
+                SteppedSquare(step: 56 * SteppedSquare.stepRatio)
                     .fill(accentColor.opacity(0.16))
                     .frame(width: 56, height: 56)
-                RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
-                    .strokeBorder(accentColor.opacity(0.45), lineWidth: 0.75)
+                SteppedSquare(step: 56 * SteppedSquare.stepRatio)
+                    .stroke(accentColor.opacity(0.45), lineWidth: 0.75)
                     .frame(width: 56, height: 56)
                 ClydeAnimationView(state: clydeState, pixelSize: 2.625)
                     .frame(width: 42, height: 42)

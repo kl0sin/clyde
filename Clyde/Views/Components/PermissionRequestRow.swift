@@ -75,10 +75,10 @@ struct PermissionRequestRow: View {
             HStack(spacing: Spacing.xxs) {
                 Image(systemName: "hand.raised.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(TextColor.secondary)
-                Text(request.toolName)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(TextColor.primary)
+                    .foregroundStyle(SessionTheme.attentionColor)
+                // The same micro-label a row uses for the tool it is
+                // running: one typeface for one kind of fact.
+                MicroLabel(text: request.toolName, color: SessionTheme.attentionColor)
             }
 
             // Wraps rather than scrolls. Horizontal scrolling was the
@@ -116,22 +116,48 @@ struct PermissionRequestRow: View {
         }
         .padding(Spacing.xs)
         .background(
-            RoundedRectangle(cornerRadius: Radius.medium)
-                .fill(Color.black.opacity(0.25))
+            // The question belongs to a session that needs you, so it
+            // wears that state's surface: the same wash, radius and lit
+            // top edge as the card above it, rather than a plain dark
+            // box that reads as something bolted on.
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.white.opacity(0.042))
+                RadialGradient(colors: [SessionTheme.attentionColor.opacity(0.16), .clear],
+                               center: .leading, startRadius: 0, endRadius: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        )
+        .overlay(alignment: .top) {
+            LinearGradient(colors: [.clear, .white.opacity(0.14), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(height: 1)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(SessionTheme.attentionColor.opacity(0.28), lineWidth: 1)
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Self.accessibilityLabel(for: request))
     }
 
     private func button(_ decision: PermissionDecision) -> some View {
-        Button(Self.label(for: decision)) { onDecide(decision) }
+        // Allow carries the state's colour and Deny stays neutral, but
+        // both keep their words: this is the one control in the app
+        // where reading the wrong one runs a command.
+        let allowing = decision == .allow
+        return Button(Self.label(for: decision)) { onDecide(decision) }
             .buttonStyle(.plain)
-            .font(.system(size: 11, weight: .medium))
-            .padding(.horizontal, Spacing.xs)
-            .padding(.vertical, 3)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(allowing ? Color.white : TextColor.secondary)
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, 4)
             .background(
-                RoundedRectangle(cornerRadius: Radius.small)
-                    .fill(Color.white.opacity(decision == .allow ? 0.18 : 0.08))
+                RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                    .fill(allowing
+                          ? SessionTheme.attentionColor.opacity(0.85)
+                          : Color.white.opacity(0.09))
             )
             .accessibilityLabel("\(Self.label(for: decision)) \(request.toolName)")
             .accessibilityHint(request.summary)

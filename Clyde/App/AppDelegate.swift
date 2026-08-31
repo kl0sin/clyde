@@ -287,6 +287,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.appViewModel.isCollapsed = false
             }
         }
+        // Same idea for the other windows, so a UI pass can look at all
+        // of them without a human clicking through menus.
+        if let window = UserDefaults.standard.string(forKey: "openWindowAtLaunch") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                switch window {
+                case "settings": self?.openSettings()
+                case "review": self?.openReview()
+                default: break
+                }
+            }
+        }
 
         // Onboarding is deferred until the panel has been up for a moment
         // and we can present a non-blocking dialog.
