@@ -41,6 +41,17 @@ enum AppPaths {
         clydeDir.appendingPathComponent("history")
     }
 
+    /// Permission requests the hook is waiting on, the answers Clyde
+    /// writes back, and the readiness marker that tells the hook
+    /// whether waiting is worth it at all.
+    static var permissionsDir: URL {
+        clydeDir.appendingPathComponent("permissions")
+    }
+
+    static var permissionsReadyMarker: URL {
+        permissionsDir.appendingPathComponent("ready")
+    }
+
     static var logsDir: URL {
         clydeDir.appendingPathComponent("logs")
     }
