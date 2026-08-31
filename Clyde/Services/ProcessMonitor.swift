@@ -274,7 +274,22 @@ final class ProcessMonitor: ObservableObject {
     /// process inspection, no child filtering, no heuristics. The hook
     /// either says "busy" (marker file exists) or it doesn't (idle).
     func classifyStatus(pid: pid_t) async -> SessionStatus {
-        return hookBusyPIDs.contains(pid) ? .busy : .idle
+        return statusIncludingAgents(pid: pid)
+    }
+
+    /// Busy while the hook says so **or** while a subagent is still
+    /// running. `Stop` clears the busy marker but deliberately leaves
+    /// `-agents/` in place, because subagents routinely outlive the
+    /// parent's turn — so reading only the marker showed "ready" beside
+    /// a spinning agent and fired the "session finished" notification
+    /// while four of them were still working.
+    ///
+    /// A teammate flagged idle by `TeammateIdle` does not count: it is
+    /// waiting, not working.
+    private func statusIncludingAgents(pid: pid_t) -> SessionStatus {
+        if hookBusyPIDs.contains(pid) { return .busy }
+        let agents = hookAgentsByPID[pid] ?? []
+        return agents.contains { !$0.isIdle } ? .busy : .idle
     }
 
     /// Detect project dir for a pgrep-discovered claude PID. The current
@@ -1078,7 +1093,7 @@ final class ProcessMonitor: ObservableObject {
         var updated = sessions
         for index in updated.indices where !updated[index].isGhost {
             let pid = updated[index].pid
-            let newStatus: SessionStatus = hookBusyPIDs.contains(pid) ? .busy : .idle
+            let newStatus = statusIncludingAgents(pid: pid)
             if updated[index].status != newStatus {
                 updated[index].status = newStatus
                 updated[index].statusChangedAt = Date()

@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 41
+# clyde-hook-version: 42
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -1149,6 +1149,9 @@ case "$HOOK_EVENT" in
             # Completes a record SubagentStart may already have opened —
             # the description arrives only here, so it has to reach the
             # record no matter which of the two events won the race.
+            printf '[%s] agent-merge pre tool_use_id=%s type=%s sid=%s\n' \
+                "$(date "+%Y-%m-%d %H:%M:%S")" "$TOOL_USE_ID" "$SUBAGENT_TYPE" "$SESSION_ID" \
+                >>"$HOOK_LOG" 2>/dev/null
             if ! merge_agent_record pre "$TOOL_USE_ID" "$SUBAGENT_TYPE" "$DESCRIPTION"; then
                 # python3 missing — degrade to the pre-v28 shape. The
                 # background-agent fix needs a real JSON parser; the
@@ -1191,11 +1194,21 @@ case "$HOOK_EVENT" in
         rm -f "$EVENTS_DIR/$KEY.json"
         ;;
     SubagentStart)
+        # Correlation diagnostics. A session with two subagents of the
+        # same type showed one of them, and reading the merge did not
+        # explain it: PreToolUse(Agent) and SubagentStart share no
+        # identifier, so they are matched on agent type and the oldest
+        # unmatched candidate, which is ambiguous exactly when types
+        # repeat. Record the ids so the next occurrence is diagnosable
+        # from the log instead of theorised about.
         # The subagent is now actually running. Adopt the pending entry
         # PreToolUse(Agent) wrote so the row is keyed on the agent's own
         # identity from here on — PostToolUse can then stop deleting it.
         AGENT_ID=$(extract_field agent_id)
         AGENT_TYPE=$(extract_field agent_type)
+        printf '[%s] agent-merge start agent_id=%s type=%s sid=%s\n' \
+            "$(date "+%Y-%m-%d %H:%M:%S")" "$AGENT_ID" "$AGENT_TYPE" "$SESSION_ID" \
+            >>"$HOOK_LOG" 2>/dev/null
         if [ -n "$AGENT_ID" ]; then
             merge_agent_record start "$AGENT_ID" "$AGENT_TYPE" "" || true
         fi

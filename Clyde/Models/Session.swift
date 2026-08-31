@@ -172,11 +172,46 @@ struct Session: Identifiable, Equatable {
         return tool.summary.isEmpty ? tool.toolName : "\(tool.toolName) · \(tool.summary)"
     }
 
+    /// True while the session still has work in flight — its own turn,
+    /// or a subagent running past it.
+    ///
+    /// The busy marker is written by `UserPromptSubmit` and cleared by
+    /// `Stop`, but `-agents/` records deliberately survive `Stop`
+    /// because subagents routinely outlive the parent's turn. Reading
+    /// only the marker meant a session showed "ready" beside a spinning
+    /// agent, and the "finished" notification fired while four agents
+    /// were still working.
+    ///
+    /// A teammate flagged idle by `TeammateIdle` is not doing work and
+    /// does not hold the session open on its own.
+    var isWorking: Bool {
+        if status == .busy { return true }
+        return activeSubagents.contains { !$0.isIdle }
+    }
+
     /// The project folder name extracted from the working directory, or
     /// nil if the cwd is empty / the home directory.
     var projectName: String? {
         guard !workingDirectory.isEmpty, workingDirectory != NSHomeDirectory() else { return nil }
-        return (workingDirectory as NSString).lastPathComponent
+        return Self.projectFolder(from: workingDirectory)
+    }
+
+    /// The folder a session belongs to.
+    ///
+    /// Normally the last component of the cwd. Inside a worktree it is
+    /// the repository that owns it: Claude Code puts worktrees under
+    /// `<repo>/.claude/worktrees/<name>` and moves the session there,
+    /// so the plain answer renamed a session mid-flight to the branch
+    /// it had just created — and the worktree badge beside it showed
+    /// the same word twice while the project itself disappeared from
+    /// the row.
+    static func projectFolder(from path: String) -> String {
+        let marker = "/.claude/worktrees/"
+        if let range = path.range(of: marker) {
+            let repoRoot = String(path[path.startIndex..<range.lowerBound])
+            return (repoRoot as NSString).lastPathComponent
+        }
+        return (path as NSString).lastPathComponent
     }
 
     var displayName: String {
@@ -189,7 +224,7 @@ struct Session: Identifiable, Equatable {
         // `lsof` finds only the global ~/.claude/settings file, so we treat
         // it as "unknown" and fall back to the generic label.
         if !workingDirectory.isEmpty && workingDirectory != NSHomeDirectory() {
-            return Self.sanitize((workingDirectory as NSString).lastPathComponent)
+            return Self.sanitize(Self.projectFolder(from: workingDirectory))
         }
         if workingDirectory == NSHomeDirectory() {
             return "Home"

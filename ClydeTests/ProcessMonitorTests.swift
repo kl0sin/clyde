@@ -1284,4 +1284,41 @@ final class ProcessMonitorTests: XCTestCase {
         (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count) ?? 0
     }
 
+
+    /// The whole point of the fix, at the level that actually fires the
+    /// notification: a session whose turn ended while a subagent runs
+    /// on must not flip to idle.
+    func testASessionStaysBusyWhileASubagentRuns() async throws {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeInfoFile(in: dir, sessionId: sid)
+        writeBusyFile(in: dir, sessionId: sid, pid: pid)
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        let monitor = ProcessMonitor(shell: shell, pollingInterval: 1, stateDir: dir,
+                                     isLiveClaudeProcessCheck: { _ in true })
+        var wentIdle = false
+        monitor.onSessionBecameIdle = { _ in wentIdle = true }
+        await monitor.poll()
+
+        // The agent is dispatched, then the turn ends — Stop removes the
+        // busy marker and deliberately leaves the agent record.
+        let agentsDir = dir.appendingPathComponent("\(sid)-agents")
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+        let record: [String: Any] = [
+            "session_id": sid, "pid": Int(pid), "agent_id": "a1",
+            "subagent_type": "general-purpose", "summary": "work",
+            "started_at": Int(Date().timeIntervalSince1970)
+        ]
+        try JSONSerialization.data(withJSONObject: record)
+            .write(to: agentsDir.appendingPathComponent("a1.json"))
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-busy"))
+
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.sessions.first?.status, .busy,
+                       "an agent is still doing the session's work")
+        XCTAssertFalse(wentIdle, "the finished notification must not fire yet")
+    }
+
 }

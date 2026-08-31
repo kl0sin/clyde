@@ -6,6 +6,9 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **A session in a worktree keeps its project's name.** When Claude creates a worktree it moves the session into `<repo>/.claude/worktrees/<name>`, and Clyde named sessions after their folder — so a session working in `work-hub` renamed itself to the branch, showed that same word again in the worktree badge, and the project it belonged to was nowhere on the row.
+- **A session is not "ready" while its agents are still working.** The busy marker is cleared when Claude's own turn ends, but subagents routinely outlive it, so a row could read ready beside a spinning agent — and the "session finished" notification fired while four of them were still running. An agent that has gone idle does not hold the session open.
+
 - **⌃⌘C works.** The global shortcut needs two separate macOS permissions, and Clyde only ever asked about one. With accessibility granted the banner cleared, the shortcut still did nothing, and there was no way to find out why — input monitoring, which is what lets an app see key presses outside its own windows, sat empty and unmentioned. Clyde now checks both and the banner sends you to whichever pane is missing.
 - **The shortcut survives Caps Lock.** It was matched by comparing the modifier keys for exact equality, and macOS counts Caps Lock among them, so ⌃⌘C did nothing whenever Caps Lock happened to be on. It is now matched on the C key itself.
 
