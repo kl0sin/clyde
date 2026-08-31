@@ -103,6 +103,7 @@ Scoped deliberately to permission decisions. Sending prompts from the panel was 
 - [ ] Map the landmines up front: `PreToolUse` fires on every tool call, so a blocking hook puts Clyde in the critical path of every session — it must degrade to the terminal's own prompt on timeout, never hang and never fail noisily. Claude's hook timeout bounds how long the user has to answer, and any inbound channel is a new local attack surface: today anything that can write to `~/.clyde/` can only lie about what the panel shows, afterwards it can approve tool calls !hi
 - [ ] Decide the mechanism — `PreToolUse` `permissionDecision` returned from the hook vs. an out-of-band channel — before committing to a UI !hi
 - [ ] Ship it off by default behind a setting until it has run on more than one machine !md
+- [ ] Compact mode — a fourth way to keep Clyde on screen: the session rows at 30 pt each, 400 wide, no header, Activity or summary bar, left open beside the work it reports on. Four sessions cost 160 pt against 420 today. The status dot becomes a four-pixel indicator: a wave travelling the grid while working, at rest when idle, filled and still when it needs you. Designed and settled — spec `docs/superpowers/specs/2026-08-31-compact-mode-design.md`, plan `docs/superpowers/plans/2026-08-31-compact-mode-plan.md`, mockup drawn at 1:1 !hi #ux
 
 ## Phase: v0.9.x — Panel space
 
