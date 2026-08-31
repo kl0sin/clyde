@@ -556,9 +556,10 @@ final class AppViewModel: ObservableObject {
                 shouldAutoInstall = true
             case .autoRepairFailed:
                 shouldAutoInstall = false
-            case .accessibilityNotTrusted:
-                // Only macOS can grant this; the banner links straight
-                // to the right System Settings pane.
+            case .accessibilityNotTrusted, .inputMonitoringNotTrusted:
+                // Only macOS can grant these; the banner links straight
+                // to the right System Settings pane for whichever one is
+                // missing. Reinstalling the hook would do nothing.
                 shouldAutoInstall = false
             case .cleatHooksCapDisabled:
                 // Pure advisory — Clyde can't enable cleat's capability

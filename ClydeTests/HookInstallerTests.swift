@@ -31,6 +31,7 @@ final class HookInstallerTests: XCTestCase {
         // don't flip depending on whether the machine running the suite
         // has granted the test runner accessibility access.
         HookInstaller.accessibilityTrustedOverride = true
+        HookInstaller.inputMonitoringTrustedOverride = true
     }
 
     override func tearDown() async throws {
@@ -39,6 +40,7 @@ final class HookInstallerTests: XCTestCase {
         CleatProbe.cleatOnPathOverride = nil
         CleatProbe.configPathOverride = nil
         HookInstaller.accessibilityTrustedOverride = nil
+        HookInstaller.inputMonitoringTrustedOverride = nil
         if let tempHome {
             try? FileManager.default.removeItem(at: tempHome)
         }
@@ -454,6 +456,41 @@ final class HookInstallerTests: XCTestCase {
         HookInstaller.accessibilityTrustedOverride = false
 
         XCTAssertEqual(HookInstaller.healthCheck(), .accessibilityNotTrusted)
+    }
+
+    /// The permission that actually made ⌃⌘C dead on two machines.
+    ///
+    /// macOS splits these: Accessibility lets an app control others,
+    /// Input Monitoring lets it read key presses outside its own
+    /// windows — which is what a global keyDown monitor does. Clyde
+    /// only ever checked Accessibility, so the banner cleared, the
+    /// monitor installed happily, and no key event ever arrived. The
+    /// failure was silent in every direction.
+    func testHealthCheckFlagsMissingInputMonitoring() throws {
+        try HookInstaller.install()
+        HookInstaller.accessibilityTrustedOverride = true
+        HookInstaller.inputMonitoringTrustedOverride = false
+
+        XCTAssertEqual(HookInstaller.healthCheck(), .inputMonitoringNotTrusted)
+    }
+
+    /// Accessibility is reported first: it is the one users are told
+    /// about everywhere else, and fixing it alone is not enough.
+    func testMissingBothReportsAccessibilityFirst() throws {
+        try HookInstaller.install()
+        HookInstaller.accessibilityTrustedOverride = false
+        HookInstaller.inputMonitoringTrustedOverride = false
+
+        XCTAssertEqual(HookInstaller.healthCheck(), .accessibilityNotTrusted)
+    }
+
+    /// The banner has to point at the pane that grants the missing
+    /// permission. Sending someone to Accessibility when Input
+    /// Monitoring is what is empty is how this stayed unfound.
+    func testTheInputMonitoringBannerLinksToItsOwnPane() {
+        let url = HookInstaller.HealthIssue.inputMonitoringNotTrusted.bannerActionURL
+        XCTAssertEqual(url?.absoluteString,
+                       "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
     }
 
     func testHealthCheckStaysQuietWhenAccessibilityIsGranted() throws {

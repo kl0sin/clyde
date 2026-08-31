@@ -67,7 +67,7 @@ struct OnboardingView: View {
                     icon: "keyboard",
                     color: .green,
                     title: "Press ⌃⌘C from anywhere",
-                    description: "Toggles this panel. May need accessibility access."
+                    description: "Toggles this panel. Needs accessibility and input monitoring access."
                 )
             }
             .padding(.horizontal, 32)

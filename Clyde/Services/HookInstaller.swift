@@ -1,4 +1,5 @@
 import Foundation
+import IOKit.hid
 import ApplicationServices
 
 /// Installs the Clyde notification hook into Claude's settings.
@@ -170,6 +171,7 @@ enum HookInstaller {
         case autoRepairFailed(reason: String)   // we tried to fix it and write threw
         case cleatHooksCapDisabled              // cleat installed but its hooks cap is off
         case accessibilityNotTrusted            // macOS hasn't granted accessibility, so ⌃⌘C is dead
+        case inputMonitoringNotTrusted          // reading keys outside our own windows is a separate grant
 
         /// Optional short headline rendered above the body in the
         /// banner. Use it when the long-form message has a natural
@@ -180,7 +182,7 @@ enum HookInstaller {
             switch self {
             case .cleatHooksCapDisabled:
                 return "Cleat hook bridge is off"
-            case .accessibilityNotTrusted:
+            case .accessibilityNotTrusted, .inputMonitoringNotTrusted:
                 return "Global shortcut is off"
             default:
                 return nil
@@ -211,6 +213,8 @@ enum HookInstaller {
                 return "Run this in your terminal so Clyde can track sandboxed sessions."
             case .accessibilityNotTrusted:
                 return "macOS hasn't granted Clyde accessibility access, so ⌃⌘C does nothing from other apps. Everything else works."
+            case .inputMonitoringNotTrusted:
+                return "macOS hasn't granted Clyde input monitoring, so ⌃⌘C does nothing from other apps. It's a separate switch from accessibility. Everything else works."
             }
         }
 
@@ -241,7 +245,7 @@ enum HookInstaller {
         /// anywhere useful).
         var isActionable: Bool {
             switch self {
-            case .cleatHooksCapDisabled, .accessibilityNotTrusted:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .inputMonitoringNotTrusted:
                 return false
             case .claudeNotInstalled,
                  .notInstalled,
@@ -264,7 +268,7 @@ enum HookInstaller {
         /// rediscovers Settings — stay non-dismissable.
         var isDismissable: Bool {
             switch self {
-            case .cleatHooksCapDisabled, .accessibilityNotTrusted:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .inputMonitoringNotTrusted:
                 return true
             default:
                 return false
@@ -284,6 +288,8 @@ enum HookInstaller {
                 return "cleatHooksCapDisabled"
             case .accessibilityNotTrusted:
                 return "accessibilityNotTrusted"
+            case .inputMonitoringNotTrusted:
+                return "inputMonitoringNotTrusted"
             default:
                 return nil
             }
@@ -305,6 +311,8 @@ enum HookInstaller {
             switch self {
             case .accessibilityNotTrusted:
                 return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            case .inputMonitoringNotTrusted:
+                return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
             default:
                 return nil
             }
@@ -314,6 +322,9 @@ enum HookInstaller {
     /// Test override for `isAccessibilityTrusted`. Production never sets it.
     nonisolated(unsafe) static var accessibilityTrustedOverride: Bool?
 
+    /// Test override for `isInputMonitoringTrusted`. Production never sets it.
+    nonisolated(unsafe) static var inputMonitoringTrustedOverride: Bool?
+
     /// True iff macOS trusts Clyde for accessibility, which is what the
     /// global ⌃⌘C monitor needs. Queried without the system prompt: the
     /// banner asks for the permission in context, rather than a modal
@@ -321,6 +332,17 @@ enum HookInstaller {
     static func isAccessibilityTrusted() -> Bool {
         if let override = accessibilityTrustedOverride { return override }
         return AXIsProcessTrusted()
+    }
+
+    /// True iff macOS lets Clyde see key presses outside its own
+    /// windows. Separate from accessibility, and separately grantable:
+    /// ⌃⌘C was dead on two machines while `AXIsProcessTrusted()`
+    /// returned true, the banner was clear, and the global monitor was
+    /// installed — it simply never received an event. Queried without
+    /// prompting, like its neighbour.
+    static func isInputMonitoringTrusted() -> Bool {
+        if let override = inputMonitoringTrustedOverride { return override }
+        return IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
     }
 
     /// Test override for `isClaudeCodeInstalled`. When non-nil, the
@@ -443,6 +465,12 @@ enum HookInstaller {
         // never buried under a convenience advisory.
         if !isAccessibilityTrusted() {
             return .accessibilityNotTrusted
+        }
+        // The other half of the same shortcut. Reported second because
+        // fixing accessibility alone does not bring ⌃⌘C back, and a
+        // user told about both at once fixes neither.
+        if !isInputMonitoringTrusted() {
+            return .inputMonitoringNotTrusted
         }
 
         return nil

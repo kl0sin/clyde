@@ -6,6 +6,9 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **⌃⌘C works.** The global shortcut needs two separate macOS permissions, and Clyde only ever asked about one. With accessibility granted the banner cleared, the shortcut still did nothing, and there was no way to find out why — input monitoring, which is what lets an app see key presses outside its own windows, sat empty and unmentioned. Clyde now checks both and the banner sends you to whichever pane is missing.
+- **The shortcut survives Caps Lock.** It was matched by comparing the modifier keys for exact equality, and macOS counts Caps Lock among them, so ⌃⌘C did nothing whenever Caps Lock happened to be on. It is now matched on the C key itself.
+
 
 ## [0.8.2] — 2026-08-30
 

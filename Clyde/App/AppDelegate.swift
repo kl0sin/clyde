@@ -931,21 +931,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor private func registerGlobalHotKey() {
         let handler: (NSEvent) -> Void = { [weak self] event in
             guard let self else { return }
-            // ⌃⌘C — control + command + "c"
-            let needsModifiers: NSEvent.ModifierFlags = [.control, .command]
-            let activeFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard activeFlags == needsModifiers else { return }
-            guard event.charactersIgnoringModifiers?.lowercased() == "c" else { return }
+            guard Self.isToggleShortcut(event) else {
+                // Any modified press of C, not just one that already
+                // carries ⌃⌘. Narrowing this to "control and command
+                // are both held" assumes the modifiers arrive intact,
+                // which is the thing under suspicion: a keyboard
+                // remapper that turns right-command into right-option
+                // produces silence here rather than evidence. Only the
+                // key code and modifiers are recorded, never what was
+                // typed.
+                let modified = !event.modifierFlags
+                    .intersection([.command, .control, .option, .shift])
+                    .isEmpty
+                if event.keyCode == 8 && modified {
+                    let flags = event.modifierFlags
+                    ClydeLog.ui.debug("""
+                        Hotkey near miss: keyCode=\(event.keyCode) \
+                        cmd=\(flags.contains(.command)) ctrl=\(flags.contains(.control)) \
+                        opt=\(flags.contains(.option)) shift=\(flags.contains(.shift)) \
+                        caps=\(flags.contains(.capsLock)) fn=\(flags.contains(.function))
+                        """)
+                }
+                return
+            }
+            ClydeLog.ui.info("Global shortcut fired")
             DispatchQueue.main.async {
                 self.toggleFromHotkey()
             }
         }
 
         globalHotKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: handler)
+        // Whether the monitor exists and whether macOS trusts us are
+        // different questions, and a dead shortcut looks identical
+        // either way. Say both out loud at startup.
+        // Both permissions, because the shortcut needs both and a dead
+        // one looks identical whichever is missing. Input monitoring is
+        // the one that was empty while everything else looked fine.
+        ClydeLog.ui.info("""
+            Global hotkey monitor installed=\(self.globalHotKeyMonitor != nil) \
+            accessibilityTrusted=\(HookInstaller.isAccessibilityTrusted()) \
+            inputMonitoringTrusted=\(HookInstaller.isInputMonitoringTrusted())
+            """)
         localHotKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             handler(event)
             return event
         }
+    }
+
+    /// ⌃⌘C, matched on the physical key and the modifiers that carry
+    /// meaning.
+    ///
+    /// Reported dead on two machines, and the old comparison has two
+    /// ways of producing exactly that. It required the modifier flags to
+    /// equal [.control, .command], but `deviceIndependentFlagsMask`
+    /// carries Caps Lock and `.function` too, so the shortcut stopped
+    /// working whenever Caps Lock happened to be on. And it read the
+    /// letter from `charactersIgnoringModifiers`, which with Control
+    /// held can arrive as U+0003 rather than "c" — a keyboard where that
+    /// happens is a keyboard where the shortcut never works at all.
+    ///
+    /// keyCode 8 is C on every layout that has one, and the character is
+    /// accepted in either spelling as a fallback for layouts that report
+    /// a different code.
+    static func isToggleShortcut(_ event: NSEvent) -> Bool {
+        // Caps Lock and .function say nothing about intent. Everything
+        // else does: ⌃⌘⇧C is a different shortcut, and may be bound
+        // elsewhere.
+        let meaningful: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+        let active = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            .intersection(meaningful)
+        guard active == [.control, .command] else { return false }
+
+        if event.keyCode == 8 { return true }
+        let typed = event.charactersIgnoringModifiers?.lowercased()
+        return typed == "c" || typed == "\u{03}"
     }
 
     @MainActor private func toggleFromHotkey() {
