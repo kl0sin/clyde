@@ -106,6 +106,20 @@ jobs:
       - name: Build
         run: scripts/release/build.sh
 
+      - name: Measure the window geometry
+        # Before signing and notarizing: a failure here should cost a
+        # tag, not a notarization round trip and two commits pushed back
+        # to main. The bundle's geometry does not change when it is
+        # signed — measured both ways on v0.8.2.
+        #
+        # If this fails, the tag exists with no release behind it. Fix,
+        # `git tag -d` / `git push origin --delete`, and tag again.
+        #
+        # --strict: no windows at all fails here rather than skipping. A
+        # runner image that quietly loses its window server would
+        # otherwise quietly stop protecting releases.
+        run: scripts/dev/check-window-geometry.sh --app build/release/Clyde.app --strict
+
       - name: Sign
         if: steps.signed.outputs.signing == 'true'
         env:

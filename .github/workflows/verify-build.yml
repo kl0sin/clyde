@@ -37,25 +37,7 @@ jobs:
           grep PANEL-PROBE /tmp/panel-test.log || echo "no probe output"
 
       - name: Measure the built bundle's windows
-        run: |
-          # The panel exists from launch at alpha 0, so nothing has to be
-          # opened — CGWindowList reads it directly and needs no
-          # permission. A runner with no window server reports no windows
-          # at all, which is a different answer from a wrong size: say so
-          # and move on rather than failing a build over the environment.
-          open build/release/Clyde.app
-          sleep 12
-          if ! geometry=$(swift scripts/dev/window-geometry.swift Clyde); then
-            echo "SKIPPED: no Clyde windows visible on this runner (no window server)"
-            exit 0
-          fi
-          echo "$geometry"
-          panel=$(echo "$geometry" | awk '{print $1}' | grep '^400x' | head -1)
-          widget=$(echo "$geometry" | awk '{print $1}' | grep '^130x' | head -1)
-          fail=0
-          [ "$panel" = "400x420" ] || { echo "::error::expanded panel is ${panel:-missing}, expected 400x420"; fail=1; }
-          [ "$widget" = "130x46" ] || { echo "::error::widget is ${widget:-missing}, expected 130x46"; fail=1; }
-          exit $fail
+        run: scripts/dev/check-window-geometry.sh --app build/release/Clyde.app
 
       - name: Package
         run: ditto -c -k --keepParent build/release/Clyde.app Clyde-app.zip

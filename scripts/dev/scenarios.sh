@@ -249,35 +249,13 @@ OSA
 # is what this scenario is for. Run it after every release, against the
 # DMG — not against a local build.
 panel-size)
-    EXPECTED_PANEL="400x420"
-    EXPECTED_WIDGET="130x46"
     say "Measuring the panel of whatever Clyde is currently running"
     note "version: $(defaults read /Applications/Clyde.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo unknown)"
-    # Nothing is clicked open. The expanded panel is built at launch and
-    # kept at alpha 0 until the user asks for it, and CGWindowList sees
-    # it there — no Automation permission, no System Events, no window
-    # to bring to the front. Driving this through AppleScript is what
-    # made the v0.8.0 regression so expensive to prove.
-    GEOMETRY=$(swift "$REPO_ROOT/scripts/dev/window-geometry.swift" Clyde 2>/dev/null)
-    if [ -z "$GEOMETRY" ]; then
-        say "FAIL — no Clyde windows found"
-        note "is Clyde running? this scenario measures a running app, not a bundle"
-        exit 1
-    fi
-    note "windows:"
-    printf '%s\n' "$GEOMETRY" | sed 's/^/    /'
-    PANEL=$(printf '%s\n' "$GEOMETRY" | awk '{print $1}' | grep '^400x' | head -1)
-    WIDGET=$(printf '%s\n' "$GEOMETRY" | awk '{print $1}' | grep '^130x' | head -1)
-    FAILED=0
-    [ "$PANEL" = "$EXPECTED_PANEL" ] || { note "panel:  ${PANEL:-missing} (expected $EXPECTED_PANEL)"; FAILED=1; }
-    [ "$WIDGET" = "$EXPECTED_WIDGET" ] || { note "widget: ${WIDGET:-missing} (expected $EXPECTED_WIDGET)"; FAILED=1; }
-    if [ "$FAILED" = "0" ]; then
-        say "PASS — panel $PANEL, widget $WIDGET"
-    else
-        say "FAIL — a window is not the size it declares"
-        note "a panel taller than the screen loses its Activity bar off the bottom edge"
-        exit 1
-    fi
+    # Nothing is clicked open: the expanded panel is built at launch and
+    # kept at alpha 0 until the user asks for it, and CGWindowList reads
+    # it there without any permission. The same check runs in CI against
+    # the bundle it builds — one definition of the expected sizes.
+    "$REPO_ROOT/scripts/dev/check-window-geometry.sh" --running
     ;;
 
 settings-history)
