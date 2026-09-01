@@ -19,8 +19,8 @@ struct SummaryBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ClydeAnimationView(state: clydeState, pixelSize: 0.75)
-                .frame(width: 12, height: 12)
+            ClydeAnimationView(state: clydeState, pixelSize: ClydeAnimationView.barPixelSize)
+                .frame(width: ClydeAnimationView.barSize, height: ClydeAnimationView.barSize)
 
             if sessionCount > 0 {
                 HStack(spacing: 6) {

@@ -116,6 +116,17 @@ struct ClydeAnimationView: View {
         self.ambientIdleEnabled = ambientIdleEnabled
     }
 
+    /// The size the mascot is drawn at in a status bar — the compact
+    /// window's footer and the full panel's summary bar, which carry
+    /// the same sprite and must carry it identically.
+    ///
+    /// One point per sprite pixel. It was 0.75, which put every pixel
+    /// of a pixel-art sprite on a three-quarter boundary and softened
+    /// the whole thing; at 1 it is crisp for the first time, and
+    /// bigger, which is what it was asked to be.
+    static let barPixelSize: CGFloat = 1
+    static var barSize: CGFloat { 16 * barPixelSize }
+
     private var gridWidth: CGFloat { 16 * pixelSize }
     private var gridHeight: CGFloat { 16 * pixelSize }
 

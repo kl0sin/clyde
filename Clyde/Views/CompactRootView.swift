@@ -190,8 +190,8 @@ struct CompactRootView: View {
             // The same sprite the full panel's summary bar carries, at
             // the same size: the footer should say "Clyde" without
             // spelling it.
-            ClydeAnimationView(state: appViewModel.clydeState, pixelSize: 0.75)
-                .frame(width: 12, height: 12)
+            ClydeAnimationView(state: appViewModel.clydeState, pixelSize: ClydeAnimationView.barPixelSize)
+                .frame(width: ClydeAnimationView.barSize, height: ClydeAnimationView.barSize)
 
             ForEach(counts, id: \.label) { count in
                 if isCrowded {
