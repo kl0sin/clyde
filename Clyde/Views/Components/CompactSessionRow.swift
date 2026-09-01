@@ -290,15 +290,9 @@ struct CompactSessionRow: View {
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(TextColor.tertiary)
             case .indicator:
-                // The mascot itself. It already recolours its antenna
-                // per state and breathes while it works, and five
-                // abstract glyphs drawn to avoid putting a face in a
-                // row all read as either someone else's logo or as
-                // nothing at all.
-                ClydeAnimationView(state: state == .needsAttention ? .attention : .busy,
-                                   pixelSize: 1.1,
-                                   ambientIdleEnabled: false)
-                    .frame(width: 18, height: 18)
+                // The same mark as the full panel's row, sized from
+                // this slot rather than that one.
+                PixelStatusIndicator(state: state, slot: 24)
             }
         }
         .frame(width: 24, height: 24)

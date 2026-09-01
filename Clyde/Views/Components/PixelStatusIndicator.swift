@@ -1,18 +1,21 @@
 import SwiftUI
 
-/// Three bars, rising and falling while a session works.
+/// A four-by-four grid of pixels with light travelling across it on the
+/// diagonal, while a session works.
 ///
-/// The shape a column of rows is scanned by. Four drafts came before
-/// it: a 2x2 grid (the Windows 8 logo), a ring of dots (every loader on
-/// the web, and round where this app is square), and the mascot's own
-/// antenna lifted out of the sprite — which had the strongest claim to
-/// the app's character and still did not look right on a row.
+/// The shape a column of rows is scanned by. Six drafts came before it:
+/// a 2x2 grid (the Windows 8 logo), a ring of dots (every loader on the
+/// web, and round where this app is square), the mascot's own antenna
+/// lifted out of the sprite, three rising bars, no mark at all, and the
+/// mascot itself — which is the app's face and was saying "Clyde" on a
+/// row that is already a Clyde session.
 ///
-/// Bars are square-edged, so they belong to the same world as the
-/// sprite without quoting it, and they carry the state in their shape:
-/// uneven and moving while working, flat at rest, all raised and still
-/// when a session needs you. That last part matters — the state
-/// survives the colour being taken away.
+/// What settled it was not the shape but the motion. Every earlier
+/// draft moved in steps: a bar handing over to the next bar, a lit row
+/// handing over to the row below. A diagonal wave has no handover and
+/// no lap — brightness is a continuous function of position and time,
+/// so there is no frame where something jumps, and no moment where the
+/// animation visibly starts again.
 struct PixelStatusIndicator: View {
 
     enum State: Equatable {
@@ -23,17 +26,32 @@ struct PixelStatusIndicator: View {
 
     let state: State
     /// One pixel of the sprite.
-    var size: CGFloat = 4
-    var spacing: CGFloat = 1
+    var size: CGFloat = 3
+    var spacing: CGFloat = 1.3
 
-    /// The wave's full period. Exactly four delay steps, so the fourth
-    /// pixel hands off to the first: any longer and the wave rests
-    /// between laps, which reads as a stutter rather than a cycle.
-    static let cycle: Double = 1.2
-    static let delayStep: Double = cycle / 3
+    /// The grid is square, and four is the smallest width where a
+    /// diagonal reads as a diagonal rather than as a corner.
+    static let columns = 4
 
-    /// Attention pulses this many times when it arrives, then holds.
-    static let arrivalPulses = 3
+    /// The wave's period. Slower than the 1.2s the bars ran at: this
+    /// window is meant to stay open beside the work, and the mockup's
+    /// speed control made the case that the calmer end of the range is
+    /// the one you can live with all day.
+    static let cycle: Double = 1.6
+
+    /// How many cells the wave spans end to end. The grid's longest
+    /// diagonal is seven cells (row + column runs 0…6), so at eight the
+    /// wave is always mid-travel: the leading edge has not yet reached
+    /// the far corner when the next crest enters at the near one.
+    static let wavelength: Double = 8
+
+    /// How often the wave is redrawn. 30fps rather than 60: the motion
+    /// is a slow fade in opacity, not something travelling across
+    /// pixels, and this window is meant to stay open all day. The test
+    /// that guards against stepped motion measures at exactly this
+    /// rate — asserting smoothness at a frame rate we never render
+    /// would be asserting nothing.
+    static let frameInterval: Double = 1.0 / 30.0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -63,37 +81,67 @@ struct PixelStatusIndicator: View {
         }
     }
 
-    /// What a pixel looks like when nothing is animating it. Filled for
-    /// attention, dim for idle, dimmer still for a working pixel
-    /// waiting its turn — so the three read apart in a screenshot, or
-    /// for someone who cannot tell the colours apart.
+    /// What a pixel looks like at the trough. Filled for attention, dim
+    /// for idle, dimmer still for a working pixel the wave has left —
+    /// so the three read apart in a screenshot, or for someone who
+    /// cannot tell the colours apart.
     static func restingOpacity(_ state: State) -> Double {
         switch state {
         case .needsAttention: return 1.0
         case .idle: return 0.7
-        // A waiting pixel at 0.28 vanished inside a 24-point slot: the
-        // wave read as one cell lighting in an empty square rather than
-        // as light travelling a grid that is always there.
-        case .working: return 0.45
+        // Low enough that the crest is unmistakable, high enough that
+        // the grid never stops being a grid: the wave should read as
+        // light crossing an object, not as cells switching on in a void.
+        case .working: return 0.24
         }
     }
 
-    /// Each bar starts a step after the last, so the group reads as one
-    /// movement rather than three independent blinks.
-    static func delay(forPixel index: Int) -> Double {
-        Double(index) * delayStep
+    // MARK: - Geometry
+
+    /// Every dimension of the mark, derived from the slot it sits in.
+    struct Metrics: Equatable {
+        let pixel: CGFloat
+        let spacing: CGFloat
+        var span: CGFloat { pixel * CGFloat(columns) + spacing * CGFloat(columns - 1) }
     }
 
-    /// How tall a bar stands, 0…1, at a given moment.
-    static func height(bar index: Int, at time: Double, state: State) -> Double {
-        switch state {
-        case .needsAttention: return 1
-        case .idle: return 0.28
-        case .working: return 0.3 + 0.7 * brightness(pixel: index, at: time)
-        }
+    /// One mark at two sizes rather than two marks. The compact slot is
+    /// 24 points and the full panel's is 34; deriving both from the slot
+    /// keeps the proportions identical, so the modes cannot drift apart
+    /// the way they did when each was tuned by hand.
+    /// The gap is a third of a pixel wide rather than a seventh: at 24
+    /// points the first draft's 0.9pt gaps antialiased away and the
+    /// grid read as four stripes. A pixel grid has to look like
+    /// separate pixels at the smaller of the two sizes, or it is not
+    /// the same mark in both.
+    static func metrics(slot: CGFloat) -> Metrics {
+        Metrics(pixel: slot * 0.083, spacing: slot * 0.055)
     }
 
-    /// How lit a pixel is at a given moment, 0…1.
+    init(state: State, size: CGFloat = 3, spacing: CGFloat = 1.3) {
+        self.state = state
+        self.size = size
+        self.spacing = spacing
+    }
+
+    init(state: State, slot: CGFloat) {
+        let metrics = Self.metrics(slot: slot)
+        self.init(state: state, size: metrics.pixel, spacing: metrics.spacing)
+    }
+
+    // MARK: - The wave
+
+    /// Where a cell sits along the wave's travel, at a given moment.
+    ///
+    /// Light moves on the diagonal, so a cell's place in the queue is
+    /// `row + column`: the top-left corner leads, the bottom-right one
+    /// trails, and the cells between them light in a band rather than a
+    /// row.
+    static func phase(row: Int, col: Int, at time: Double) -> Double {
+        time / cycle - Double(row + col) / wavelength
+    }
+
+    /// How lit a cell is at a given moment, 0…1.
     ///
     /// The wave is a function of the clock rather than a
     /// `.repeatForever` animation started in `onAppear`.
@@ -102,23 +150,18 @@ struct PixelStatusIndicator: View {
     /// in a panel the user opened a moment ago — and it is driven by a
     /// `TimelineView` for exactly this reason.
     ///
-    /// A raised cosine gives one smooth peak per cycle with no corners,
-    /// so neighbouring pixels overlap rather than hand over abruptly.
-    static func brightness(pixel index: Int, at time: Double) -> Double {
-        let phase = ((time - delay(forPixel: index)) / cycle).truncatingRemainder(dividingBy: 1)
-        let wrapped = phase < 0 ? phase + 1 : phase
-        return (cos(wrapped * 2 * .pi) + 1) / 2
+    /// A raised cosine has no corners anywhere in its period, which is
+    /// the whole point: the earlier drafts were rejected for looking
+    /// stepped, and a stepped look comes from the easing, not from the
+    /// shape being animated.
+    static func brightness(row: Int, col: Int, at time: Double) -> Double {
+        (1 - cos(phase(row: row, col: col, at: time) * 2 * .pi)) / 2
     }
 
-    static func opacity(pixel index: Int, at time: Double, state: State) -> Double {
+    static func opacity(row: Int, col: Int, at time: Double, state: State) -> Double {
         let resting = restingOpacity(state)
         guard animates(state) else { return resting }
-        return resting + (1 - resting) * brightness(pixel: index, at: time)
-    }
-
-    static func scale(pixel index: Int, at time: Double, state: State) -> Double {
-        guard animates(state) else { return state == .needsAttention ? 1 : 0.9 }
-        return 0.88 + 0.12 * brightness(pixel: index, at: time)
+        return resting + (1 - resting) * brightness(row: row, col: col, at: time)
     }
 
     var body: some View {
@@ -127,15 +170,14 @@ struct PixelStatusIndicator: View {
 
         Group {
             if moving {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                TimelineView(.animation(minimumInterval: Self.frameInterval)) { context in
                     grid(colour: colour,
                          time: context.date.timeIntervalSinceReferenceDate)
                 }
             } else {
-                // Still, and legible: the shape carries the state when
-                // the motion is gone — under reduced motion, in a
-                // screenshot, or for anyone who cannot tell the colours
-                // apart.
+                // Still, and legible: the state survives the motion
+                // being gone — under reduced motion, in a screenshot,
+                // or for anyone who cannot tell the colours apart.
                 grid(colour: colour, time: nil)
             }
         }
@@ -143,21 +185,22 @@ struct PixelStatusIndicator: View {
     }
 
     private func grid(colour: Color, time: Double?) -> some View {
-        HStack(alignment: .bottom, spacing: spacing) {
-            ForEach(0..<3, id: \.self) { index in
-                let fraction = time.map { Self.height(bar: index, at: $0, state: state) }
-                    ?? Self.height(bar: index, at: 0, state: state == .working ? .idle : state)
-                Rectangle()
-                    .fill(colour)
-                    .frame(width: size, height: max(size, barSpan * fraction))
-                    .opacity(state == .idle ? 0.75 : 1)
+        VStack(spacing: spacing) {
+            ForEach(0..<Self.columns, id: \.self) { row in
+                HStack(spacing: spacing) {
+                    ForEach(0..<Self.columns, id: \.self) { col in
+                        Rectangle()
+                            .fill(colour)
+                            .frame(width: size, height: size)
+                            .opacity(
+                                time.map {
+                                    Self.opacity(row: row, col: col, at: $0, state: state)
+                                } ?? Self.restingOpacity(state == .working ? .idle : state)
+                            )
+                    }
+                }
             }
         }
-        .frame(height: barSpan, alignment: .bottom)
     }
-
-    /// The tallest a bar stands. Three of them plus their gaps make a
-    /// square-ish block, which is what sits well inside a slot.
-    private var barSpan: CGFloat { size * 3 + spacing * 2 }
 
 }

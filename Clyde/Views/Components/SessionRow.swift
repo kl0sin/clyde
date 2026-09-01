@@ -906,22 +906,20 @@ struct SessionStatusIndicator: View {
                 .frame(width: 34, height: 34)
 
             if isActive {
-                // The session's own state, in the same four pixels the
-                // compact panel uses. The mascot said "Clyde", which
-                // every row already is; this says what *this* session
-                // is doing, and it says it identically in both modes —
-                // one object in three states rather than a sprite here
-                // and a grid there.
+                // The session's own state, in the same grid the
+                // compact panel uses — sized from the slot, so the two
+                // modes are one mark at two sizes rather than two marks
+                // that have to be kept in step by hand.
                 //
                 // The mascot keeps the header, the summary bar and the
                 // widget, where it stands for the app rather than for a
-                // session.
+                // session. On a row it was saying "Clyde", which every
+                // row here already is.
                 PixelStatusIndicator(
                     state: session.needsAttention ? .needsAttention : .working,
-                    size: 7,
-                    spacing: 3
+                    slot: 34
                 )
-                .frame(width: 24, height: 24)
+                .frame(width: 34, height: 34)
 
                 if session.needsAttention {
                     Circle()
