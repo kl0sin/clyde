@@ -905,7 +905,7 @@ struct SessionStatusIndicator: View {
                                             ? PixelStatusIndicator.slotStrokeOpacity + 0.2
                                             : PixelStatusIndicator.slotStrokeOpacity)
                         : Color(white: 0.18),
-                    lineWidth: isActive ? 1.5 : 1
+                    lineWidth: isActive ? PixelStatusIndicator.slotStrokeWidth(slot: 34) : 1
                 )
                 .frame(width: 34, height: 34)
 

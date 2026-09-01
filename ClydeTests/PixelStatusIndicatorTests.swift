@@ -205,6 +205,16 @@ final class PixelStatusIndicatorTests: XCTestCase {
         XCTAssertEqual(compact.span / 24, full.span / 34, accuracy: 0.0001)
     }
 
+    /// The frame around it is one rule too — opacity and thickness
+    /// both — so neither mode can be restyled on its own again.
+    func testTheFrameIsTheSameWeightInBothModes() {
+        XCTAssertEqual(PixelStatusIndicator.slotStrokeWidth(slot: 24) / 24,
+                       PixelStatusIndicator.slotStrokeWidth(slot: 34) / 34,
+                       accuracy: 0.0001)
+        XCTAssertGreaterThan(PixelStatusIndicator.slotStrokeWidth(slot: 24), 1.0,
+                             "a hairline disappears on a non-retina display")
+    }
+
     /// And it leaves room to breathe inside the slot rather than
     /// filling it corner to corner.
     func testTheMarkSitsInsideItsSlot() {

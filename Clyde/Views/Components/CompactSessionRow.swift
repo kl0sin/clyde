@@ -287,7 +287,9 @@ struct CompactSessionRow: View {
                 .stroke(isActive
                             ? accent.opacity(PixelStatusIndicator.slotStrokeOpacity)
                             : Color.white.opacity(0.07),
-                        lineWidth: 1)
+                        lineWidth: isActive
+                            ? PixelStatusIndicator.slotStrokeWidth(slot: 24)
+                            : 1)
 
             switch Self.slot(for: session, index: index) {
             case .number(let n):

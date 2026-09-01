@@ -103,6 +103,12 @@ struct PixelStatusIndicator: View {
     static let slotFillOpacity: Double = 0.16
     static let slotStrokeOpacity: Double = 0.45
 
+    /// How thick that border is, also derived from the slot. The two
+    /// modes had 1.5 and 1.0 — which happen to be nearly proportional,
+    /// so the difference never showed, but only by luck: nothing tied
+    /// them together and either could have been changed alone.
+    static func slotStrokeWidth(slot: CGFloat) -> CGFloat { slot * 0.044 }
+
     // MARK: - Geometry
 
     /// Every dimension of the mark, derived from the slot it sits in.
