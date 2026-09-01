@@ -48,3 +48,25 @@ enum TextColor {
     /// shape *and* text both read as disabled.
     static let disabled = Color(white: 0.55)
 }
+
+// MARK: - Rules
+
+/// The lines that separate things. Two kinds, and no more.
+///
+/// There were three: a 1-point opaque grey above the summary bar, a
+/// half-point six-percent white above compact's footer, and a `Divider`
+/// with a background behind it between rows — which is two lines of
+/// different greys drawn on top of each other. Same job, three answers.
+enum Rule {
+    /// Half a point: one device pixel on a display that draws a point
+    /// as a pixel, and a hairline on one that does not.
+    static let thickness: CGFloat = 0.5
+
+    /// Between two rows of the same list. Faint — the rows are the
+    /// thing, the seam is not.
+    static let row = Color.white.opacity(0.06)
+
+    /// Between two bands of a window: a list and the bar under it.
+    /// A step stronger, because it separates parts rather than items.
+    static let band = Color.white.opacity(0.10)
+}

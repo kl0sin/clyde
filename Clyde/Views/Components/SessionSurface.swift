@@ -25,8 +25,8 @@ struct SessionSurface: View {
     /// `Divider` the full panel used, which drew its own line and then
     /// took a background behind it: two greys, reading as one heavy
     /// rule.
-    static let separatorHeight: CGFloat = 0.5
-    static let separatorColour = Color.white.opacity(0.06)
+    static let separatorHeight: CGFloat = Rule.thickness
+    static let separatorColour = Rule.row
 
     /// How strong the wash is.
     ///

@@ -88,7 +88,10 @@ struct ExpandedHeader: View {
                 .accessibilityHint("Or press Control-Command-C from anywhere")
             }
         }
-        .padding(.horizontal, Spacing.md)
+        // The window's margin, the same one the rows, the Activity bar
+        // and the summary bar sit on. At 16 the header alone was inset
+        // further and the window read ragged down its left side.
+        .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.sm)
         .background(
             // Soft state-coloured gradient bleeding from the top so the

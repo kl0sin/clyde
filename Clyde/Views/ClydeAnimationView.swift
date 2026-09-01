@@ -127,6 +127,17 @@ struct ClydeAnimationView: View {
     static let barPixelSize: CGFloat = 1
     static var barSize: CGFloat { 16 * barPixelSize }
 
+    /// How much transparent margin the sprite carries on its left.
+    ///
+    /// Asked of the sprite rather than written down. In a bar the
+    /// mascot is drawn bare, so what the eye lines up is its ink, not
+    /// its frame — and aligning the frame to the window's margin put
+    /// the robot three points right of every box above it. In the
+    /// header it is inside a visible avatar, where the box is the
+    /// element and the box is what aligns.
+    static let inkLeadingColumn: Int = ClydeSprite.bodyCells.map(\.col).min() ?? 0
+    static var barInkInset: CGFloat { CGFloat(inkLeadingColumn) * barPixelSize }
+
     private var gridWidth: CGFloat { 16 * pixelSize }
     private var gridHeight: CGFloat { 16 * pixelSize }
 

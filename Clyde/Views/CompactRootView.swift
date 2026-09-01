@@ -39,10 +39,6 @@ struct CompactRootView: View {
             + footerHeight
     }
 
-    /// The panel's own inset, for everything that is not a row. Rows
-    /// run edge to edge — they are bands across the panel now, not
-    /// surfaces on it.
-    static let cardPadding: CGFloat = 7
     /// The breathing room above the first row and below the last.
     static let listPadding: CGFloat = 4
     static let separatorHeight: CGFloat = 0.5
@@ -114,15 +110,15 @@ struct CompactRootView: View {
                let advisory = appViewModel.hookHealthIssue,
                advisory.presentation == .chip {
                 AdvisoryDetail(issue: advisory) { showsAdvisory = false }
-                    .padding(.horizontal, Self.cardPadding)
-                    .padding(.bottom, Self.cardPadding)
+                    .padding(.horizontal, Spacing.sm)
+                    .padding(.bottom, Spacing.xs)
             }
 
-            // The full panel separates its summary bar the same way.
+            // The full panel separates its summary bar the same way —
+            // literally the same rule now, edge to edge in both.
             Rectangle()
-                .fill(Color.white.opacity(0.06))
-                .frame(height: 0.5)
-                .padding(.horizontal, Self.cardPadding)
+                .fill(Rule.band)
+                .frame(height: Rule.thickness)
 
             footer
         }
@@ -192,6 +188,8 @@ struct CompactRootView: View {
             // spelling it.
             ClydeAnimationView(state: appViewModel.clydeState, pixelSize: ClydeAnimationView.barPixelSize)
                 .frame(width: ClydeAnimationView.barSize, height: ClydeAnimationView.barSize)
+                // Its ink on the window's margin, not its frame.
+                .padding(.leading, -ClydeAnimationView.barInkInset)
 
             ForEach(counts, id: \.label) { count in
                 if isCrowded {

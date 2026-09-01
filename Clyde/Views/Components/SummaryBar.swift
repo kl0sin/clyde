@@ -21,6 +21,8 @@ struct SummaryBar: View {
         HStack(spacing: 10) {
             ClydeAnimationView(state: clydeState, pixelSize: ClydeAnimationView.barPixelSize)
                 .frame(width: ClydeAnimationView.barSize, height: ClydeAnimationView.barSize)
+                // Its ink on the window's margin, not its frame.
+                .padding(.leading, -ClydeAnimationView.barInkInset)
 
             if sessionCount > 0 {
                 HStack(spacing: 6) {
@@ -53,7 +55,7 @@ struct SummaryBar: View {
         .padding(.vertical, 6)
         .background(Color.white.opacity(0.03))
         .overlay(
-            Rectangle().frame(height: 1).foregroundStyle(Color(white: 0.18)),
+            Rectangle().frame(height: Rule.thickness).foregroundStyle(Rule.band),
             alignment: .top
         )
         .accessibilityElement(children: .combine)
