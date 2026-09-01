@@ -6,10 +6,27 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+### Compact mode
+
+- **A fourth way for Clyde to sit on your screen: the session rows, and nothing else.** The panel is built to be opened, read and closed — a header, an activity trail and a summary bar take four hundred of its points before a single session is drawn. Compact mode drops all of it and keeps the rows, small enough to leave open beside the work it is reporting on. Switch with the button in the panel's header; ⌃⌘C toggles whichever mode you used last, so the shortcut still means "show me Clyde", and the mode and position survive a restart.
+- **The window is exactly as tall as it needs to be.** Its height follows the number of sessions, and it grows downward so the top edge stays where you put it. Over a limit you set (four rows by default) the quiet sessions drop off the bottom — never one that is working, and never one that is waiting on an answer, because those sort above them.
+- **Permission requests can be answered without leaving compact.** The question opens under the session that asked it, with the command wrapped rather than shortened, and the window returns to its size once you have answered. Deferring to the terminal would have meant the feature you switched on does not work in the window you keep open.
+- **A session waiting on you is always at the top.** Both windows now list sessions the same way: whoever needs an answer first, then whoever is working, then everyone else — and inside each group, the order you dragged rows into. The two panels used to disagree, so the same four sessions read differently depending on which one you had open.
+- **Rows arrive, leave and change places instead of teleporting.** A session that starts working moves to its new position visibly, so you can see which row moved and where it came from. All of it stops under macOS's "Reduce motion".
+
+### Everywhere
+
+- **A working session is drawn rather than dotted.** The coloured dot said which state a session was in and nothing about whether anything was happening. In its place is a grid of pixels with light crossing it on the diagonal — moving while a session works, holding still and filled when one needs an answer, and giving way to the session number when it is quiet. The state survives the colour being taken away, which a dot never managed, and it is the same mark at both sizes in both windows.
+- **Both windows are one design.** They had drifted into two: cards in one and rows in the other, different orders, different marks, different surfaces. Sessions are rows in both now, drawn on the same surface, ordered by the same rule.
+
+### Sessions Clyde reads right
+
 - **An interrupted session stops showing as working.** Pressing Ctrl+C while Claude is writing emits no hook event at all — it is indistinguishable from finishing — so the session stayed "working" until the next prompt, or indefinitely if you walked away. Clyde now stops believing a busy marker that nothing has touched for fifteen minutes while no tool is running and no agent is working. It goes quiet without claiming the session finished, because it did not.
 - **A session in a worktree keeps its project's name.** When Claude creates a worktree it moves the session into `<repo>/.claude/worktrees/<name>`, and Clyde named sessions after their folder — so a session working in `work-hub` renamed itself to the branch, showed that same word again in the worktree badge, and the project it belonged to was nowhere on the row.
 - **A session keeps its project's name when a command changes directory.** Claude Code emits a `CwdChanged` event when a shell inside a tool call runs `cd`, and Clyde renamed the session after it — so a session that briefly visited a temporary directory was listed under that directory's name from then on, permanently, even though every event afterwards carried the real project path. The name now comes from those events instead, which makes it self-correcting: a session that really has moved is renamed by the next thing it does, and one that only wandered for a moment never loses its name.
 - **A session is not "ready" while its agents are still working.** The busy marker is cleared when Claude's own turn ends, but subagents routinely outlive it, so a row could read ready beside a spinning agent — and the "session finished" notification fired while four of them were still running. An agent that has gone idle does not hold the session open.
+
+### The shortcut, and what it needed
 
 - **⌃⌘C works.** The global shortcut needs two separate macOS permissions, and Clyde only ever asked about one. With accessibility granted the banner cleared, the shortcut still did nothing, and there was no way to find out why — input monitoring, which is what lets an app see key presses outside its own windows, sat empty and unmentioned. Clyde now checks both and the banner sends you to whichever pane is missing.
 - **The shortcut survives Caps Lock.** It was matched by comparing the modifier keys for exact equality, and macOS counts Caps Lock among them, so ⌃⌘C did nothing whenever Caps Lock happened to be on. It is now matched on the C key itself.
