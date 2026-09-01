@@ -56,8 +56,8 @@ struct ReviewView: View {
             }
 
             Rectangle()
-                .fill(Color(white: 0.18))
-                .frame(height: 1)
+                .fill(Rule.band)
+                .frame(height: Rule.thickness)
                 .padding(.vertical, Spacing.xxs)
 
             periodSwitch
@@ -101,8 +101,8 @@ struct ReviewView: View {
                     ForEach(Array(projects.enumerated()), id: \.element.project) { index, row in
                         if index > 0 {
                             Rectangle()
-                                .fill(Color(white: 0.18))
-                                .frame(height: 1)
+                                .fill(Rule.band)
+                                .frame(height: Rule.thickness)
                         }
                         Button {
                             projectFilter = (projectFilter == row.project) ? nil : row.project

@@ -455,14 +455,14 @@ struct NotificationsSettingsTab: View {
             .toggleStyle(.switch)
 
             if notificationService.soundEnabled {
-                Divider().background(Color(white: 0.2))
+                Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
                 soundPickerRow(
                     label: "When session becomes ready",
                     selection: $notificationService.readySound
                 )
 
-                Divider().background(Color(white: 0.2))
+                Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
                 soundPickerRow(
                     label: "When permission is required",
@@ -537,7 +537,7 @@ struct PushSettingsTab: View {
                 }
                 .toggleStyle(.switch)
 
-                Divider().background(Color(white: 0.2))
+                Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
                 Toggle(isOn: $pushService.notifyOnAttention) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -575,9 +575,9 @@ struct PushSettingsTab: View {
     private var ntfyConfig: some View {
         SettingsSection(title: "ntfy Configuration") {
             settingsField(label: "Server", placeholder: "https://ntfy.sh", text: $pushService.ntfyServer)
-            Divider().background(Color(white: 0.2))
+            Rectangle().fill(Rule.band).frame(height: Rule.thickness)
             settingsField(label: "Topic", placeholder: "my-clyde-notifications", text: $pushService.ntfyTopic)
-            Divider().background(Color(white: 0.2))
+            Rectangle().fill(Rule.band).frame(height: Rule.thickness)
             settingsField(label: "Access token (optional)", placeholder: "tk_...", text: $pushService.ntfyToken, isSecure: true)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -602,7 +602,7 @@ struct PushSettingsTab: View {
     private var pushoverConfig: some View {
         SettingsSection(title: "Pushover Configuration") {
             settingsField(label: "User key", placeholder: "u...", text: $pushService.pushoverUserKey, isSecure: true)
-            Divider().background(Color(white: 0.2))
+            Rectangle().fill(Rule.band).frame(height: Rule.thickness)
             settingsField(label: "Application token", placeholder: "a...", text: $pushService.pushoverAppToken, isSecure: true)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -627,7 +627,7 @@ struct PushSettingsTab: View {
     private var webhookConfig: some View {
         SettingsSection(title: "Webhook Configuration") {
             settingsField(label: "URL", placeholder: "https://example.com/webhook", text: $pushService.webhookURL)
-            Divider().background(Color(white: 0.2))
+            Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
             HStack {
                 Text("Method")
@@ -823,7 +823,7 @@ struct AdvancedSettingsTab: View {
                 }
                 .buttonStyle(.plain)
 
-                Divider().background(Color(white: 0.2))
+                Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Reveal hook log")
@@ -1099,7 +1099,7 @@ struct AboutSettingsTab: View {
                 }
             }
 
-            Divider().background(Color(white: 0.2))
+            Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
             Button(action: {
                 UpdateController.shared.checkForUpdates(nil)
@@ -1118,7 +1118,7 @@ struct AboutSettingsTab: View {
             }
             .buttonStyle(.plain)
 
-            Divider().background(Color(white: 0.2))
+            Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
             Button(action: {
                 // Access AppViewModel through NotificationCenter to copy diagnostics
@@ -1143,7 +1143,7 @@ struct AboutSettingsTab: View {
             }
             .buttonStyle(.plain)
 
-            Divider().background(Color(white: 0.2))
+            Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
             Button(action: { showAcknowledgements = true }) {
                 HStack {
@@ -1221,7 +1221,7 @@ struct AboutSettingsTab: View {
             }
         }
 
-        Divider().background(Color(white: 0.2))
+        Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
         Button(action: { NSApplication.shared.terminate(nil) }) {
             HStack {
@@ -1368,6 +1368,11 @@ struct SettingsSection<Content: View>: View {
                 content
             }
             .padding(Spacing.sm)
+            // Every section is as wide as the pane, not as wide as its
+            // own longest line. Measured on a capture, four cards on
+            // one screen came out 405, 418, 414 and 375 points wide —
+            // a right edge that moved by forty points down the page.
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(white: 0.13))
             .clipShape(RoundedRectangle(cornerRadius: Radius.medium))
         }
@@ -1398,7 +1403,7 @@ struct AcknowledgementsSheet: View {
             .padding(.vertical, 14)
             .background(Color(white: 0.11))
 
-            Divider().background(Color(white: 0.2))
+            Rectangle().fill(Rule.band).frame(height: Rule.thickness)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
