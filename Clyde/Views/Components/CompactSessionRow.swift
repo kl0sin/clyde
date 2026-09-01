@@ -75,11 +75,24 @@ struct CompactSessionRow: View {
     /// edges. It was 11 against 8, which read as the mark being pushed
     /// to the right.
     static let slotSize: CGFloat = 26
-    static let leadingInset: CGFloat = (cardHeight - slotSize) / 2
-    /// Between the slot and the text — the same again, so the mark has
-    /// equal air on all four sides rather than three. Only the row's
-    /// bottom edge moves away from it, and only when a row carries more
-    /// than its two lines.
+
+    /// What centring the slot in the row leaves above and below it.
+    /// Not set anywhere — stated here so the horizontal inset can be
+    /// compared against it.
+    static let verticalInset: CGFloat = (cardHeight - slotSize) / 2
+
+    /// The window's margin, not the row's.
+    ///
+    /// Wider than the vertical inset on purpose. A row's leading edge
+    /// is also the left edge of everything in the window — the footer
+    /// sits at this same 12 — and a row inset less than its neighbours
+    /// leaves the window with a ragged left edge, which is worse than
+    /// the mark having slightly more air on its sides than above it.
+    /// Vertical space, by contrast, belongs to the row alone.
+    static let leadingInset: CGFloat = Spacing.sm
+
+    /// Between the slot and the text: the same as the leading inset, so
+    /// the mark's left and right are equal.
     static let slotGap: CGFloat = leadingInset
     /// Past the slot column, so the line separates the text.
     static let separatorInset: CGFloat = leadingInset + slotSize + slotGap

@@ -37,9 +37,9 @@ struct SessionRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-        // The same gap as the row's own inset, so the mark has equal
-        // air on all four sides.
-        HStack(alignment: .top, spacing: Spacing.xs) {
+        // The same gap as the row's own inset, so the mark's left and
+        // right are equal.
+        HStack(alignment: .top, spacing: Spacing.sm) {
             SessionStatusIndicator(session: session, idleIndex: idleIndex)
 
             // Bounded, or the second line pushes the elapsed time off
@@ -293,9 +293,10 @@ struct SessionRow: View {
         }
         }
         .opacity(session.isGhost ? 0.55 : 1.0)
-        // The same inset on the left as above and below, so the mark
-        // sits the same distance from three of the row's four edges.
-        .padding(.horizontal, Spacing.xs)
+        // Wider than the vertical inset on purpose: a row's leading
+        // edge is also the left edge of everything else in the window,
+        // and the Activity bar and the summary bar both sit at 12.
+        .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.xs)
         .background(
             ZStack {

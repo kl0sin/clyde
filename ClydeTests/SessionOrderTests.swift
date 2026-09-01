@@ -178,23 +178,25 @@ final class SessionSurfaceTests: XCTestCase {
 @MainActor
 final class RowInsetTests: XCTestCase {
 
-    func testTheCompactSlotIsInsetEquallyOnThreeSides() {
-        let vertical = (CompactSessionRow.cardHeight - CompactSessionRow.slotSize) / 2
-
-        XCTAssertEqual(CompactSessionRow.leadingInset, vertical,
-                       "the mark is further from one edge than the others")
+    /// Left and right match. Top and bottom deliberately do not: a
+    /// row's leading edge is the window's margin, shared with the
+    /// footer, and a row inset less than its neighbours leaves the
+    /// window with a ragged left edge.
+    func testTheMarksLeftAndRightMatch() {
+        XCTAssertEqual(CompactSessionRow.slotGap, CompactSessionRow.leadingInset)
+        XCTAssertGreaterThan(CompactSessionRow.leadingInset, CompactSessionRow.verticalInset)
     }
 
-    /// Four sides, not three: the gap to the text on the right is the
-    /// same as the gap to the row's leading edge.
-    func testTheGapToTheTextMatchesTheLeadingInset() {
-        XCTAssertEqual(CompactSessionRow.slotGap, CompactSessionRow.leadingInset)
+    /// And the row lines up with the rest of the window rather than
+    /// setting its own margin.
+    func testTheRowSharesTheWindowsMargin() {
+        XCTAssertEqual(CompactSessionRow.leadingInset, Spacing.sm)
     }
 
     /// Derived rather than written down, so enlarging the slot cannot
-    /// leave the inset behind.
-    func testTheInsetFollowsTheSlot() {
-        XCTAssertEqual(CompactSessionRow.leadingInset * 2 + CompactSessionRow.slotSize,
+    /// leave the vertical inset behind.
+    func testTheVerticalInsetFollowsTheSlot() {
+        XCTAssertEqual(CompactSessionRow.verticalInset * 2 + CompactSessionRow.slotSize,
                        CompactSessionRow.cardHeight)
     }
 
