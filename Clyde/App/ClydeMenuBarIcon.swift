@@ -7,11 +7,15 @@ import AppKit
 /// drops all the colour detail from `ClydeSprite.body` and just paints any
 /// non-transparent pixel in solid black.
 enum ClydeMenuBarIcon {
-    /// Produces an `NSImage` with `isTemplate = true`. The default size of
-    /// 18pt matches macOS' standard menu bar extra icon footprint.
-    /// Used as a fallback when there are no live Clyde sessions to render
-    /// the richer status capsule for.
-    static func templateImage(size: CGFloat = 18) -> NSImage {
+    /// Produces an `NSImage` with `isTemplate = true`. Used as a
+    /// fallback when there are no live Clyde sessions to render the
+    /// richer status capsule for.
+    ///
+    /// 16pt rather than the 18 that matches macOS' menu bar footprint:
+    /// the sprite is a 16x16 grid, so 18 made every pixel of it 1.125
+    /// points and softened the silhouette. A whole point per pixel is
+    /// worth two points of size.
+    static func templateImage(size: CGFloat = 16) -> NSImage {
         let sprite = ClydeSprite.body
         let gridSize = 16
         let pxSize = size / CGFloat(gridSize)
@@ -88,7 +92,11 @@ enum ClydeMenuBarStatus {
     private static let height: CGFloat = 20
     private static let cornerRadius: CGFloat = 6
     private static let horizontalPadding: CGFloat = 6
-    private static let spriteSize: CGFloat = 13
+    /// One point per sprite pixel — the sprite is a 16x16 grid, and at
+    /// 13 points each of its pixels was 0.8125 of a point. In a bar
+    /// that is twenty points tall there is no other whole number that
+    /// fits, and the fractional one turned the mascot to grey mush.
+    private static let spriteSize: CGFloat = 16
     /// Gap between sprite and count digits.
     private static let spriteToCountGap: CGFloat = 6
     /// Right padding after the count digits inside the capsule.

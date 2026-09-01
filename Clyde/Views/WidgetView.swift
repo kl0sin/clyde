@@ -201,7 +201,10 @@ private struct CompactStatusView: View {
                 .foregroundStyle(fg)
                 .frame(width: 30, height: 30)
                 .background(bg)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                // The stepped corner every sprite frame in the app
+                // wears. A rounded rectangle here was the widget
+                // speaking the language the panels stopped speaking.
+                .clipShape(SteppedSquare(step: 30 * SteppedSquare.stepRatio))
         }
     }
 
@@ -227,7 +230,7 @@ private struct CompactStatusView: View {
 
             ZStack {
                 // Outer glow that breathes with the beat.
-                RoundedRectangle(cornerRadius: 8)
+                SteppedSquare(step: 34 * SteppedSquare.stepRatio)
                     .fill(color)
                     .frame(width: 34, height: 34)
                     .blur(radius: 12)
@@ -242,12 +245,12 @@ private struct CompactStatusView: View {
                     .foregroundStyle(color)
                     .frame(width: 30, height: 30)
                     .background(bg)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(SteppedSquare(step: 30 * SteppedSquare.stepRatio))
                     .scaleEffect(scale)
 
                 // Constant 1 pt border whose alpha pulses with the beat.
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(color, lineWidth: 1)
+                SteppedSquare(step: 30 * SteppedSquare.stepRatio)
+                    .stroke(color, lineWidth: 1)
                     .frame(width: 30, height: 30)
                     .opacity(borderAlpha)
                     .scaleEffect(scale)
