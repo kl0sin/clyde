@@ -110,9 +110,12 @@ struct SessionListView: View {
                 .opacity(isDropTarget && !dropAbove ? 1 : 0)
 
             if item.session.id != sessions.last?.id {
-                Divider()
-                    .background(Color(white: 0.15))
-                    .padding(.leading, 52)
+                // A hairline, not a `Divider` — see SessionSurface.
+                // The same one compact draws.
+                Rectangle()
+                    .fill(SessionSurface.separatorColour)
+                    .frame(height: SessionSurface.separatorHeight)
+                    .padding(.leading, Spacing.xs + 34 + Spacing.sm)
             }
         }
     }

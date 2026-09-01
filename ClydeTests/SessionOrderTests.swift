@@ -171,3 +171,36 @@ final class SessionSurfaceTests: XCTestCase {
         XCTAssertGreaterThan(AttentionBadgeMark.overhang, 0)
     }
 }
+
+/// Where the mark sits in a row. Both panels put it the same distance
+/// from three of the row's four edges — the fourth is the bottom, which
+/// grows when a row carries more than one line.
+@MainActor
+final class RowInsetTests: XCTestCase {
+
+    func testTheCompactSlotIsInsetEquallyOnThreeSides() {
+        let vertical = (CompactSessionRow.cardHeight - CompactSessionRow.slotSize) / 2
+
+        XCTAssertEqual(CompactSessionRow.leadingInset, vertical,
+                       "the mark is further from one edge than the others")
+    }
+
+    /// Derived rather than written down, so enlarging the slot cannot
+    /// leave the inset behind.
+    func testTheInsetFollowsTheSlot() {
+        XCTAssertEqual(CompactSessionRow.leadingInset * 2 + CompactSessionRow.slotSize,
+                       CompactSessionRow.cardHeight)
+    }
+
+    /// Past the slot column, so the line separates the text rather than
+    /// cutting the row in two.
+    func testTheSeparatorClearsTheSlot() {
+        XCTAssertGreaterThan(CompactSessionRow.separatorInset,
+                             CompactSessionRow.leadingInset + CompactSessionRow.slotSize)
+    }
+
+    /// Faint enough to be a seam rather than a rule.
+    func testTheSeparatorIsAHairline() {
+        XCTAssertLessThanOrEqual(SessionSurface.separatorHeight, 0.5)
+    }
+}

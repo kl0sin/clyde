@@ -291,7 +291,9 @@ struct SessionRow: View {
         }
         }
         .opacity(session.isGhost ? 0.55 : 1.0)
-        .padding(.horizontal, Spacing.sm)
+        // The same inset on the left as above and below, so the mark
+        // sits the same distance from three of the row's four edges.
+        .padding(.horizontal, Spacing.xs)
         .padding(.vertical, Spacing.xs)
         .background(
             ZStack {

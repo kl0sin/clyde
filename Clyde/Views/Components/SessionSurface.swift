@@ -18,6 +18,16 @@ struct SessionSurface: View {
     let accent: Color
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// The hairline between two rows.
+    ///
+    /// Something has to keep two quiet rows apart — they have no
+    /// surface of their own — but it can be far fainter than the
+    /// `Divider` the full panel used, which drew its own line and then
+    /// took a background behind it: two greys, reading as one heavy
+    /// rule.
+    static let separatorHeight: CGFloat = 0.5
+    static let separatorColour = Color.white.opacity(0.06)
+
     /// How strong the wash is.
     ///
     /// Compact ran these at 0.20 and 0.22 and read as tinted rather

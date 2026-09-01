@@ -67,9 +67,19 @@ struct CompactSessionRow: View {
     /// gaps and rounded borders said the same thing in a second visual
     /// language, and the two windows stopped looking like one app.
     static let gap: CGFloat = 0
-    static let separatorHeight: CGFloat = 0.5
+
+    /// The slot, and the room around it.
+    ///
+    /// The leading inset equals the slot's own margin above and below,
+    /// so the mark sits the same distance from three of the row's four
+    /// edges. It was 11 against 8, which read as the mark being pushed
+    /// to the right.
+    static let slotSize: CGFloat = 26
+    static let leadingInset: CGFloat = (cardHeight - slotSize) / 2
+    /// Between the slot and the text.
+    static let slotGap: CGFloat = 16
     /// Past the slot column, so the line separates the text.
-    static let separatorInset: CGFloat = 43
+    static let separatorInset: CGFloat = leadingInset + slotSize + slotGap
 
     static func height(for session: Session) -> CGFloat { cardHeight }
 
@@ -148,7 +158,7 @@ struct CompactSessionRow: View {
         // which is where the full panel's session names start:
         // 12 + 34 + 12. Switching modes then moves the window's
         // contents, not the column they are read down.
-        HStack(spacing: 16) {
+        HStack(spacing: Self.slotGap) {
             slotView(state: content.state)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -179,7 +189,7 @@ struct CompactSessionRow: View {
 
             trailingView(content: content, isActive: isActive)
         }
-        .padding(.horizontal, 11)
+        .padding(.horizontal, Self.leadingInset)
         .frame(height: Self.cardHeight)
         .background(SessionSurface(state: content.state, accent: accent))
         // The wash fades in when a session starts working instead of
@@ -194,8 +204,8 @@ struct CompactSessionRow: View {
             // the text rather than cutting the row in two.
             if showsSeparator {
                 Rectangle()
-                    .fill(Color(white: 0.15))
-                    .frame(height: Self.separatorHeight)
+                    .fill(SessionSurface.separatorColour)
+                    .frame(height: SessionSurface.separatorHeight)
                     .padding(.leading, Self.separatorInset)
             }
         }
@@ -245,16 +255,16 @@ struct CompactSessionRow: View {
             // The step is a proportion, not a constant: 4 points on a
             // 24-point slot is a deeper bite than 4 on a 34-point one,
             // and the two modes stopped looking like the same mark.
-            SteppedSquare(step: 24 * SteppedSquare.stepRatio)
+            SteppedSquare(step: Self.slotSize * SteppedSquare.stepRatio)
                 .fill(isActive
                         ? accent.opacity(PixelStatusIndicator.slotFillOpacity)
                         : PixelStatusIndicator.quietSlotFill)
-            SteppedSquare(step: 24 * SteppedSquare.stepRatio)
+            SteppedSquare(step: Self.slotSize * SteppedSquare.stepRatio)
                 .stroke(isActive
                             ? accent.opacity(PixelStatusIndicator.slotStrokeOpacity)
                             : PixelStatusIndicator.quietSlotStroke,
                         lineWidth: isActive
-                            ? PixelStatusIndicator.slotStrokeWidth(slot: 24)
+                            ? PixelStatusIndicator.slotStrokeWidth(slot: Self.slotSize)
                             : 1)
 
             switch Self.slot(for: session, index: index) {
@@ -265,10 +275,10 @@ struct CompactSessionRow: View {
             case .indicator:
                 // The same mark as the full panel's row, sized from
                 // this slot rather than that one.
-                PixelStatusIndicator(state: state, slot: 24)
+                PixelStatusIndicator(state: state, slot: Self.slotSize)
             }
         }
-        .frame(width: 24, height: 24)
+        .frame(width: Self.slotSize, height: Self.slotSize)
     }
 
     static func accessibilityLabel(for content: Content) -> String {
