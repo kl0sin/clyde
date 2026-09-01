@@ -154,6 +154,13 @@ final class SessionSurfaceTests: XCTestCase {
                           SessionSurface.washOpacity(for: .working), 0.05)
     }
 
+    /// Felt rather than seen. Above roughly an eighth the hatching
+    /// stops being a texture and becomes stripes on the row.
+    func testTheHatchingStaysAtTheThresholdOfVisible() {
+        XCTAssertGreaterThan(SessionSurface.ditherOpacity, 0.05)
+        XCTAssertLessThan(SessionSurface.ditherOpacity, 0.13)
+    }
+
     /// The badge hangs off the slot's corner rather than resting inside
     /// it — tucked in, it read as something sitting on the grid.
     func testTheBadgeOverhangsTheSlot() {

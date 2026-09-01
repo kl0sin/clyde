@@ -37,6 +37,16 @@ struct SessionSurface: View {
         }
     }
 
+    /// How strong the hatching is.
+    ///
+    /// Raised from 0.075 when the wash came down: the hatching itself
+    /// never changed, but a lighter ground under it made the same
+    /// contrast read as less texture. Measured along one line of a row,
+    /// this is the swing between a hatched point and the one beside it
+    /// — a few units out of 255, which is where it belongs. It is meant
+    /// to be felt rather than seen.
+    static let ditherOpacity: Double = 0.10
+
     static func borderColour(state: PixelStatusIndicator.State, accent: Color) -> Color {
         state == .idle ? .white.opacity(0.05) : accent.opacity(0.18)
     }
@@ -96,7 +106,7 @@ struct DitherField: View {
             // literal port came out invisible.
             let spacing: CGFloat = 4
             var offset = -size.height
-            let colour = GraphicsContext.Shading.color(.white.opacity(0.075))
+            let colour = GraphicsContext.Shading.color(.white.opacity(SessionSurface.ditherOpacity))
             while offset < size.width {
                 var line = Path()
                 line.move(to: CGPoint(x: offset, y: size.height))
