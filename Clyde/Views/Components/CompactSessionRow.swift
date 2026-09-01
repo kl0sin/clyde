@@ -20,6 +20,8 @@ struct CompactSessionRow: View {
         let name: String
         let worktree: String?
         let agentCount: Int?
+        /// "cleat" when the session runs inside a Cleat container.
+        let runtime: String
         /// What the session is doing, in a word or two. Nil for a quiet
         /// session, whose whole story fits in `trailing`.
         let meta: String?
@@ -68,11 +70,6 @@ struct CompactSessionRow: View {
     /// language, and the two windows stopped looking like one app.
     static let gap: CGFloat = 0
 
-    /// The agent mark's geometry, out here so a test can hold it to the
-    /// same whole-point rule as every other mark in the app.
-    static let agentHead: CGFloat = 10
-    static let agentEye: CGFloat = 2
-    static let agentEyeGap: CGFloat = 2
 
     /// The slot, and the room around it.
     ///
@@ -119,6 +116,7 @@ struct CompactSessionRow: View {
             name: disambiguator.map { "\(session.displayName) \($0)" } ?? session.displayName,
             worktree: session.worktreeName.isEmpty ? nil : session.worktreeName,
             agentCount: workingAgents > 0 ? workingAgents : nil,
+            runtime: session.runtime,
             meta: meta(for: session, state: state),
             trailing: trailing(for: session, state: state),
             state: state
@@ -202,7 +200,10 @@ struct CompactSessionRow: View {
                         MicroLabel(text: meta,
                                    color: isActive ? accent : TextColor.tertiary)
                         if let worktree = content.worktree { Chip(text: worktree, tinted: true) }
-                        if let agents = content.agentCount { AgentChip(count: agents) }
+                        if let agents = content.agentCount {
+                            Chip(text: agents == 1 ? "1 agent" : "\(agents) agents", tinted: false)
+                        }
+                        if content.runtime == "cleat" { CleatChip() }
                     }
                 }
             }
@@ -317,56 +318,31 @@ struct CompactSessionRow: View {
 
 // MARK: - Pieces
 
-/// The agents a session has out, as a head and a number.
+/// A session's agents, and whether it runs in a container.
 ///
-/// It was `◉ 1`, and at eight and a half points that character is a
-/// dot — it said "something", not "an agent". The mark is the smallest
-/// thing that still reads as one of Clyde's own: a head with two eyes,
-/// drawn on whole points so it stays square.
-private struct AgentChip: View {
-    let count: Int
-
-    /// Whole points at the size this is drawn: a 9-point head with
-    /// 2-point eyes, which is the smallest pair that reads as a face
-    /// rather than as noise.
-    static let head = CompactSessionRow.agentHead
-    static let eye = CompactSessionRow.agentEye
-    /// Two points between the eyes, not one. At one the pair rendered
-    /// as a single five-point bar — a face needs the gap more than it
-    /// needs the eyes.
-    static let eyeGap = CompactSessionRow.agentEyeGap
-
+/// The agent count was a drawn mark twice — the character `◉`, which at
+/// this size is a dot, and then a ten-point head with two eyes, which
+/// was legible and still looked like an ornament. Both were inventions
+/// for something the full panel already says in words: "1 agent". It
+/// says the same words here, and the two windows agree without a third
+/// glyph existing in the world.
+private struct CleatChip: View {
     var body: some View {
-        HStack(spacing: 4) {
-            Canvas { context, _ in
-                let ink = GraphicsContext.Shading.color(TextColor.secondary)
-                // Head: an outline rather than a fill, so the eyes read
-                // as holes in a face and not as two dots on a block.
-                context.stroke(
-                    Path(roundedRect: CGRect(x: 0.5, y: 0.5, width: Self.head - 1, height: Self.head - 1),
-                         cornerRadius: 2),
-                    with: ink, lineWidth: 1)
-                let pair = Self.eye * 2 + Self.eyeGap
-                let firstEye = (Self.head - pair) / 2
-                for x in [firstEye, firstEye + Self.eye + Self.eyeGap] {
-                    context.fill(
-                        Path(CGRect(x: x, y: 4, width: Self.eye, height: Self.eye)),
-                        with: ink)
-                }
-            }
-            .frame(width: Self.head, height: Self.head)
-
-            Text("\(count)")
+        HStack(spacing: 3) {
+            Image(systemName: "shippingbox.fill")
+                .font(.system(size: 7.5, weight: .semibold))
+            Text("cleat")
                 .font(.system(size: 8.5, design: .monospaced))
-                .foregroundStyle(TextColor.secondary)
         }
+        // The same cyan the panel's badge wears: a container is the one
+        // thing about a session that is neither a state nor a place.
+        .foregroundStyle(Color(red: 0.35, green: 0.78, blue: 0.85))
         .padding(.horizontal, 5)
         .padding(.vertical, 1)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(Color.white.opacity(0.11))
+                .fill(Color(red: 0.35, green: 0.78, blue: 0.85).opacity(0.16))
         )
-        .accessibilityHidden(true)
     }
 }
 

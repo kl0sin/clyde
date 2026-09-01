@@ -318,29 +318,3 @@ final class AgentHandoverTests: XCTestCase {
     }
 }
 
-/// The mark on the agent chip. It was the character `◉`, which at eight
-/// and a half points is a dot — it said "something", not "an agent".
-@MainActor
-final class AgentChipTests: XCTestCase {
-
-    /// Whole points, like every other mark in the app: a fractional
-    /// head or eye blurs its own edges at this size.
-    func testTheHeadIsDrawnOnWholePoints() {
-        for value in [CompactSessionRow.agentHead, CompactSessionRow.agentEye,
-                      CompactSessionRow.agentEyeGap] {
-            XCTAssertEqual(value, value.rounded(), "\(value) is not a whole point")
-        }
-    }
-
-    /// The gap between the eyes is what makes a face. At one point the
-    /// pair rendered as a single bar.
-    func testTheEyesAreSeparated() {
-        XCTAssertGreaterThanOrEqual(CompactSessionRow.agentEyeGap, 2)
-    }
-
-    /// And the pair fits inside the head with room around it.
-    func testTheEyesFitInsideTheHead() {
-        let pair = CompactSessionRow.agentEye * 2 + CompactSessionRow.agentEyeGap
-        XCTAssertLessThan(pair, CompactSessionRow.agentHead - 2)
-    }
-}
