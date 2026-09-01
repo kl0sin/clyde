@@ -66,7 +66,7 @@ struct WidgetView: View {
             Button(action: { NotificationCenter.default.post(name: .clydeOpenSettings, object: nil) }) {
                 Label("Settings", systemImage: "gearshape")
             }
-            Rectangle().fill(Rule.band).frame(height: Rule.thickness)
+            Divider()
             Button(action: { NSApplication.shared.terminate(nil) }) {
                 Label("Quit Clyde", systemImage: "power")
             }
