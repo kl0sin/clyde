@@ -107,6 +107,15 @@ Scoped deliberately to permission decisions. Sending prompts from the panel was 
 - [x] Compact mode shipped, and it took the rest of the app with it. Rows rather than cards in both panels, one ordering rule, one status mark drawn on whole points, one surface, one margin. The four-pixel indicator of the spec became a 4x4 grid crossed by a diagonal wave after six drafts — the first five moved in steps, and the steps were what read as crude !hi #ux
 - [x] The session review window came along for the ride: worktrees fold into their repository instead of appearing as projects of their own, the calendar fills the window, and the trail is closed until asked for !md #ux
 
+## Phase: v0.9.1 — First hours of v0.9.0
+
+Held deliberately: v0.9.0 shipped on 1 September and these are fixes found in the first hour of using it. Waiting a day of ordinary use before tagging, so anything else the release turns up travels with them rather than as a third tag in two days.
+
+- [x] A session announced it had finished in the middle of working. Claude Code ends the parent's turn while its agents keep running, which clears the busy marker — so the second or two between an agent returning and the parent picking the work back up had no evidence of work at all, and the session went green and rang the bell. It stays working across that handover now !hi
+- [x] A subagent's mark sat two and a half points above the name beside it, from the sprite growing 12 → 16 points while the row still aligned both to the top. Fixed with an alignment guide rather than a nudge !lo #ux
+- [ ] Compact open beside real work for an hour: is the wave ignorable, does the reordering read, does the height behave as sessions come and go? The one question this release shipped without an answer to !md #ux #qa
+- [ ] Watch for anything else in a day of ordinary use before tagging !md #qa
+
 ## Phase: v0.9.x — Panel space
 
 - [ ] The four options Claude Code offers are not the two Clyde shows. Allow and Deny answer "run this"; "always allow this path" and "switch to auto mode" are durable policy changes, and a window measured in seconds is the wrong place to make one. Deliberate for now — but if the hook protocol can express them, decide whether the panel should offer a way to say "and stop asking about this" that is harder to hit by accident !lo #ux
