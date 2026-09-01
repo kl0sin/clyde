@@ -836,7 +836,13 @@ private struct SubagentList: View {
             // work: the sprite settles, the duration stops ticking, and
             // the accent drops to the same grey as secondary text.
             let trailing = agent.isIdle ? "idle" : formatElapsed(elapsed)
-            HStack(alignment: .top, spacing: 6) {
+            // The mark's centre against the first line's centre, rather
+            // than both against the top. The sprite is taller than a
+            // 10-point line, so aligning the tops put the text two and a
+            // half points above the middle of the robot beside it — and
+            // a nudge would have been a number that stops being right
+            // the moment either size changes.
+            HStack(alignment: .agentMark, spacing: 6) {
                 ClydeAnimationView(
                     state: agent.isIdle ? .idle : .busy,
                     pixelSize: ClydeAnimationView.barPixelSize,
@@ -844,7 +850,7 @@ private struct SubagentList: View {
                 )
                 .frame(width: ClydeAnimationView.barSize,
                        height: ClydeAnimationView.barSize)
-                .padding(.top, 1)
+                .alignmentGuide(.agentMark) { $0[VerticalAlignment.center] }
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack {
@@ -858,6 +864,7 @@ private struct SubagentList: View {
                             .foregroundStyle(Color(white: 0.55))
                             .monospacedDigit()
                     }
+                    .alignmentGuide(.agentMark) { $0[VerticalAlignment.center] }
                     if !agent.summary.isEmpty {
                         Text(agent.summary)
                             .font(.system(size: 10, design: .monospaced))
@@ -1038,4 +1045,24 @@ struct AttentionBadgeMark: View {
         .frame(height: Self.height)
         .accessibilityHidden(true)
     }
+}
+
+// MARK: - Aligning a mark with a line
+
+/// Puts a sprite's centre on the centre of the line beside it.
+///
+/// The row under a session lists its agents: a 16-point mark against a
+/// 10-point line, with a second line under it when the agent has a
+/// summary. Aligning the tops leaves the text sitting above the middle
+/// of the mark, and centring the whole stack would drop the mark
+/// halfway down a two-line row instead. This aligns exactly the two
+/// things that should agree.
+private enum AgentMarkAlignmentID: AlignmentID {
+    static func defaultValue(in dimensions: ViewDimensions) -> CGFloat {
+        dimensions[VerticalAlignment.center]
+    }
+}
+
+extension VerticalAlignment {
+    static let agentMark = VerticalAlignment(AgentMarkAlignmentID.self)
 }

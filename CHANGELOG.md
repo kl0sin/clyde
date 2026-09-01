@@ -6,6 +6,9 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **A session no longer announces it has finished when its agent hands work back.** Claude Code ends the parent's turn while its agents keep running, which clears the marker Clyde reads as "working" — so for the second or two between an agent returning and the parent picking the work back up there was no evidence of work at all. The session went green, played the "session finished" sound, and went back to working. It now stays working across that handover.
+- **An agent's mark lines up with its name.** The sprite beside a subagent's row sat two and a half points below the line of text next to it.
+
 ## [0.9.0] — 2026-09-01
 
 Clyde has spent three releases answering what your Claude sessions are doing. This one changes what you can do about it. A fourth window keeps the session rows and nothing else, small enough to leave open beside the work it reports on — and when Claude asks permission to run something, you can answer it there, on the session that asked, without going back to the terminal. Underneath both, the two windows that had drifted into two designs are one again: rows in both, ordered the same way, drawn on the same surface, with a status mark that says what a session is doing rather than only which state it is in.

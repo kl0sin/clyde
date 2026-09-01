@@ -55,6 +55,10 @@ final class ProcessMonitor: ObservableObject {
     /// every PreToolUse, so a running turn keeps it fresh.
     private var hookBusySince: [pid_t: Date] = [:]
 
+    /// When each session's last working agent went away. See
+    /// `agentHandoverGrace`.
+    private var lastAgentFinishedAt: [pid_t: Date] = [:]
+
     /// How long a busy marker may sit untouched, with nothing else
     /// showing life, before Clyde stops believing it.
     ///
@@ -304,7 +308,25 @@ final class ProcessMonitor: ObservableObject {
             return hasBeenAbandoned(pid: pid) ? .idle : .busy
         }
         let agents = hookAgentsByPID[pid] ?? []
-        return agents.contains { !$0.isIdle } ? .busy : .idle
+        if agents.contains(where: { !$0.isIdle }) { return .busy }
+        return isInAgentHandover(pid: pid) ? .busy : .idle
+    }
+
+    /// The seconds after an agent finishes during which a session is
+    /// still treated as working.
+    ///
+    /// Measured from a real session: the parent resumes within a second
+    /// or two of its agent returning, but between the two there is no
+    /// busy marker and no agent record, so the session read as finished
+    /// — green for a moment, with the "session finished" sound — and
+    /// then went back to working. A grace of a few seconds costs a late
+    /// notification on a session that really did end with its agent,
+    /// and buys not announcing the end of work that is still going.
+    static let agentHandoverGrace: TimeInterval = 5
+
+    private func isInAgentHandover(pid: pid_t) -> Bool {
+        guard let finished = lastAgentFinishedAt[pid] else { return false }
+        return Date().timeIntervalSince(finished) < Self.agentHandoverGrace
     }
 
     /// True when a busy marker looks left behind rather than live.
@@ -1063,6 +1085,22 @@ final class ProcessMonitor: ObservableObject {
             if !agents.isEmpty {
                 byPID[parentPID] = agents.sorted { $0.startedAt < $1.startedAt }
             }
+        }
+
+        // When a session's last working agent disappears, remember the
+        // moment. The parent's turn has usually ended by then — Claude
+        // Code fires `Stop` while agents keep running, and that removes
+        // the busy marker — so the agent record is the only evidence of
+        // work left. Losing it leaves a gap of a second or two before
+        // the parent's next tool call writes the marker again, and in
+        // that gap the session read as finished and rang the bell.
+        for (pid, agents) in hookAgentsByPID {
+            let wasWorking = agents.contains { !$0.isIdle }
+            let isWorking = (byPID[pid] ?? []).contains { !$0.isIdle }
+            if wasWorking && !isWorking { lastAgentFinishedAt[pid] = Date() }
+        }
+        for pid in lastAgentFinishedAt.keys where byPID[pid]?.contains(where: { !$0.isIdle }) == true {
+            lastAgentFinishedAt[pid] = nil
         }
 
         let changed = byPID != hookAgentsByPID

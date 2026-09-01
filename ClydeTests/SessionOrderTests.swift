@@ -295,3 +295,25 @@ final class RowMetaColourTests: XCTestCase {
                        SessionTheme.processingColor)
     }
 }
+
+/// The gap between an agent finishing and its parent picking the work
+/// back up. Claude Code fires `Stop` while agents are still running,
+/// which removes the busy marker — so once the last agent's record goes
+/// there is a second or two with no evidence of work at all, and the
+/// session read as finished and rang the bell before going back to
+/// working.
+@MainActor
+final class AgentHandoverTests: XCTestCase {
+
+    func testTheGraceIsLongEnoughToCoverTheGap() {
+        // Measured on a real session: the parent's next tool call landed
+        // one to two seconds after its agent returned.
+        XCTAssertGreaterThanOrEqual(ProcessMonitor.agentHandoverGrace, 3)
+    }
+
+    /// And short enough that a session which really did end with its
+    /// agent is not left looking busy.
+    func testTheGraceIsShortEnoughToNotLie() {
+        XCTAssertLessThanOrEqual(ProcessMonitor.agentHandoverGrace, 8)
+    }
+}
