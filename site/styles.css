@@ -390,12 +390,15 @@ h1 {
 
 .showcase-tablist {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Four across. At three, the fourth tab dropped onto a row of its own
+     and read as a separate thing rather than as the last of a set. */
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-bottom: 32px;
 }
 
 .showcase-tab {
+  transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -485,11 +488,26 @@ h1 {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  animation: showcase-fade 0.45s ease both;
+  animation: showcase-fade 0.5s cubic-bezier(0.22, 0.8, 0.3, 1) both;
+}
+
+/* The panel arrives; its two halves arrive after it, a beat apart. One
+   fade of eight pixels was there before and read as nothing happening. */
+.showcase-panel > .showcase-copy {
+  animation: showcase-rise 0.5s cubic-bezier(0.22, 0.8, 0.3, 1) 0.06s both;
+}
+
+.showcase-panel > .showcase-image {
+  animation: showcase-rise 0.55s cubic-bezier(0.22, 0.8, 0.3, 1) 0.12s both;
 }
 
 @keyframes showcase-fade {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: scale(0.985); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes showcase-rise {
+  from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -580,7 +598,11 @@ h1 {
 }
 
 .showcase-image-menubar img {
-  max-width: 80%;
+  /* A strip of the real bar, so the capsule reads as something in a
+     menu bar rather than as a small grey box on its own. Full width of
+     the column, never scaled up past its own pixels. */
+  width: 100%;
+  max-width: 392px;
 }
 
 /* ============================================================
@@ -1102,6 +1124,7 @@ footer {
     padding: 28px;
   }
   .showcase-copy h3 { font-size: 22px; }
+  .showcase-tablist { grid-template-columns: repeat(2, 1fr); }
   .showcase-image-menubar { padding: 20px 0; }
   .showcase-image-menubar img { max-width: 100%; }
 
