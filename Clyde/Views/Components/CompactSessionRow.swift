@@ -76,8 +76,11 @@ struct CompactSessionRow: View {
     /// to the right.
     static let slotSize: CGFloat = 26
     static let leadingInset: CGFloat = (cardHeight - slotSize) / 2
-    /// Between the slot and the text.
-    static let slotGap: CGFloat = 16
+    /// Between the slot and the text — the same again, so the mark has
+    /// equal air on all four sides rather than three. Only the row's
+    /// bottom edge moves away from it, and only when a row carries more
+    /// than its two lines.
+    static let slotGap: CGFloat = leadingInset
     /// Past the slot column, so the line separates the text.
     static let separatorInset: CGFloat = leadingInset + slotSize + slotGap
 

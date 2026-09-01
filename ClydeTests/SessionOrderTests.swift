@@ -185,6 +185,12 @@ final class RowInsetTests: XCTestCase {
                        "the mark is further from one edge than the others")
     }
 
+    /// Four sides, not three: the gap to the text on the right is the
+    /// same as the gap to the row's leading edge.
+    func testTheGapToTheTextMatchesTheLeadingInset() {
+        XCTAssertEqual(CompactSessionRow.slotGap, CompactSessionRow.leadingInset)
+    }
+
     /// Derived rather than written down, so enlarging the slot cannot
     /// leave the inset behind.
     func testTheInsetFollowsTheSlot() {

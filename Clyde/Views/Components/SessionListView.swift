@@ -115,7 +115,7 @@ struct SessionListView: View {
                 Rectangle()
                     .fill(SessionSurface.separatorColour)
                     .frame(height: SessionSurface.separatorHeight)
-                    .padding(.leading, Spacing.xs + 34 + Spacing.sm)
+                    .padding(.leading, Spacing.xs + 34 + Spacing.xs)
             }
         }
     }

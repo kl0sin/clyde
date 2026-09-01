@@ -37,7 +37,9 @@ struct SessionRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-        HStack(alignment: .top, spacing: 12) {
+        // The same gap as the row's own inset, so the mark has equal
+        // air on all four sides.
+        HStack(alignment: .top, spacing: Spacing.xs) {
             SessionStatusIndicator(session: session, idleIndex: idleIndex)
 
             // Bounded, or the second line pushes the elapsed time off
