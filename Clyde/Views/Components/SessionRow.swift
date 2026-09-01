@@ -144,8 +144,12 @@ struct SessionRow: View {
                     // session with agents was the one working state
                     // that said nothing about what it is doing.
                     HStack(spacing: 5) {
+                        // The state's own colour, not work's. A session
+                        // that is waiting on an answer *while* a tool is
+                        // open took this branch and wore a purple label
+                        // beside a blue mark.
                         MicroLabel(text: session.activeTool?.toolName ?? "working",
-                                   color: SessionTheme.processingColor)
+                                   color: accent)
                         SubagentSummaryLine(session: session)
                     }
                         .accessibilityElement(children: .combine)
@@ -168,7 +172,7 @@ struct SessionRow: View {
                                 // is the detail compact has no room for.
                                 HStack(spacing: 5) {
                                     MicroLabel(text: tool.toolName,
-                                               color: SessionTheme.processingColor)
+                                               color: accent)
                                     Text(detail(after: tool.toolName, in: text) +
                                          " · \(formatDuration(from: tool.startedAt, now: context.date))")
                                         .font(.system(size: 10, design: .monospaced))

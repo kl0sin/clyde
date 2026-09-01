@@ -267,3 +267,31 @@ final class ProjectRootTests: XCTestCase {
         XCTAssertEqual(ProjectMark.initial(for: "42-things"), "4")
     }
 }
+
+/// What a row says it is doing, and in which colour. A session can be
+/// waiting on an answer *while* a tool call is open — that is exactly
+/// what a permission request is — and the tool line took precedence
+/// while wearing the colour of work.
+@MainActor
+final class RowMetaColourTests: XCTestCase {
+
+    private func session(status: SessionStatus = .idle, attention: Bool = false) -> Session {
+        var s = Session(pid: 1, workingDirectory: "/repo", status: status)
+        s.needsAttention = attention
+        return s
+    }
+
+    func testAttentionOutranksWorkForTheRowsColour() {
+        let asking = session(status: .busy, attention: true)
+
+        XCTAssertEqual(PixelStatusIndicator.color(for: PixelStatusIndicator.state(for: asking)),
+                       SessionTheme.attentionColor)
+    }
+
+    func testWorkKeepsItsOwnColour() {
+        let working = session(status: .busy)
+
+        XCTAssertEqual(PixelStatusIndicator.color(for: PixelStatusIndicator.state(for: working)),
+                       SessionTheme.processingColor)
+    }
+}
