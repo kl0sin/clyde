@@ -23,6 +23,16 @@ struct SessionSurface: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// The neutral ground under a compact card.
+    ///
+    /// It exists because compact's cards float with gaps between them —
+    /// without it a quiet card is not a card. But at 0.042 it also sat
+    /// under the active ones, and there it did nothing except make the
+    /// same state read lighter in one window than the other. Low enough
+    /// now that the two panels' active rows land within a couple of
+    /// units of each other, and the border carries a quiet card.
+    static let baseOpacity: Double = 0.022
+
     /// How strong the wash is.
     ///
     /// Compact ran these at 0.20 and 0.22 and read as tinted rather
@@ -54,7 +64,7 @@ struct SessionSurface: View {
     var body: some View {
         ZStack {
             if showsBase {
-                Color.white.opacity(0.042)
+                Color.white.opacity(Self.baseOpacity)
             }
 
             if state != .idle {

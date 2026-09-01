@@ -154,6 +154,17 @@ final class SessionSurfaceTests: XCTestCase {
                           SessionSurface.washOpacity(for: .working), 0.05)
     }
 
+    /// Compact's cards float with gaps, so a quiet one needs a ground
+    /// of its own to be a card at all — but that ground also sat under
+    /// the active cards, where it did nothing except make the same
+    /// state read lighter in one window than the other.
+    func testTheCardsGroundIsFaintEnoughToMatchThePanel() {
+        XCTAssertGreaterThan(SessionSurface.baseOpacity, 0)
+        XCTAssertLessThan(SessionSurface.baseOpacity,
+                          SessionSurface.washOpacity(for: .working) / 4,
+                          "the ground is competing with the wash instead of sitting under it")
+    }
+
     /// Felt rather than seen. Above roughly an eighth the hatching
     /// stops being a texture and becomes stripes on the row.
     func testTheHatchingStaysAtTheThresholdOfVisible() {
