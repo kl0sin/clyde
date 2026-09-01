@@ -114,30 +114,20 @@ struct PermissionRequestRow: View {
             }
             .padding(.top, 2)
         }
-        .padding(Spacing.xs)
-        .background(
-            // The question belongs to a session that needs you, so it
-            // wears that state's surface: the same wash, radius and lit
-            // top edge as the card above it, rather than a plain dark
-            // box that reads as something bolted on.
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.white.opacity(0.042))
-                RadialGradient(colors: [SessionTheme.attentionColor.opacity(0.16), .clear],
-                               center: .leading, startRadius: 0, endRadius: 280)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-        )
-        .overlay(alignment: .top) {
-            LinearGradient(colors: [.clear, .white.opacity(0.14), .clear],
-                           startPoint: .leading, endPoint: .trailing)
-                .frame(height: 1)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, Spacing.xs)
+        // The question belongs to a session that needs you, so it wears
+        // that state's surface — literally the same view the row above
+        // it wears. It was a rounded, bordered card floating inside a
+        // list of full-width rows, which is the language both panels
+        // stopped speaking.
+        .background(SessionSurface(state: .needsAttention,
+                                   accent: SessionTheme.attentionColor))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Rule.band)
+                .frame(height: Rule.thickness)
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(SessionTheme.attentionColor.opacity(0.28), lineWidth: 1)
-        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Self.accessibilityLabel(for: request))
     }
