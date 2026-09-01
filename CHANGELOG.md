@@ -6,9 +6,16 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
-### Compact mode
+## [0.9.0] — 2026-09-01
+
+Clyde has spent three releases answering what your Claude sessions are doing. This one changes what you can do about it. A fourth window keeps the session rows and nothing else, small enough to leave open beside the work it reports on — and when Claude asks permission to run something, you can answer it there, on the session that asked, without going back to the terminal. Underneath both, the two windows that had drifted into two designs are one again: rows in both, ordered the same way, drawn on the same surface, with a status mark that says what a session is doing rather than only which state it is in.
+
+### Permission requests
 
 - **Answer a permission request from the panel.** When Claude asks to run something, the question opens on the session that asked it, with the command shown in full — wrapped rather than shortened, because a shortened command invites approving what you did not read. Allow or Deny, and the session carries on. You have ten seconds; miss it and the terminal asks exactly as it always has, so nothing is lost. Clyde never decides on its own, and the whole thing is off until you switch it on in Settings.
+- **It costs nothing when it is off, and nothing when you miss it.** The hook only waits while Clyde is running with the setting on; otherwise it does not pause at all. Ten seconds was four until the first real session proved four was not enough time to notice a row, read a command and click.
+
+### Compact mode
 
 - **A fourth way for Clyde to sit on your screen: the session rows, and nothing else.** The panel is built to be opened, read and closed — a header, an activity trail and a summary bar take four hundred of its points before a single session is drawn. Compact mode drops all of it and keeps the rows, small enough to leave open beside the work it is reporting on. Switch with the button in the panel's header; ⌃⌘C toggles whichever mode you used last, so the shortcut still means "show me Clyde", and the mode and position survive a restart.
 - **The window is exactly as tall as it needs to be.** Its height follows the number of sessions, and it grows downward so the top edge stays where you put it. Over a limit you set (four rows by default) the quiet sessions drop off the bottom — never one that is working, and never one that is waiting on an answer, because those sort above them.
