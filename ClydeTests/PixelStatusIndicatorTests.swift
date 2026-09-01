@@ -225,6 +225,48 @@ final class PixelStatusIndicatorTests: XCTestCase {
         XCTAssertGreaterThan(brightest, 0.9)
     }
 
+    // MARK: - The attention pulse
+
+    /// It used to be a `.repeatForever` animation started in
+    /// `onAppear`, which fires when the row appears and never again —
+    /// so a session already on screen when the question arrived got a
+    /// badge that never moved. Measured on eight captures, the badge
+    /// was the same size in every one. Driven by the clock instead, it
+    /// breathes whenever the state does.
+    func testTheBadgeBreathes() {
+        let sizes = stride(from: 0.0, to: PixelStatusIndicator.attentionPulseCycle, by: 0.05)
+            .map { PixelStatusIndicator.attentionScale(
+                at: PixelStatusIndicator.attentionPulse(at: $0)) }
+
+        XCTAssertGreaterThan(sizes.max()! - sizes.min()!, 0.1)
+    }
+
+    func testThePulseStaysWithinItsBounds() {
+        for tick in stride(from: 0.0, to: PixelStatusIndicator.attentionPulseCycle * 2, by: 0.01) {
+            let pulse = PixelStatusIndicator.attentionPulse(at: tick)
+            XCTAssertGreaterThanOrEqual(pulse, -0.0001)
+            XCTAssertLessThanOrEqual(pulse, 1.0001)
+        }
+        XCTAssertEqual(PixelStatusIndicator.attentionScale(at: 0), 0.92, accuracy: 0.001)
+        XCTAssertEqual(PixelStatusIndicator.attentionScale(at: 1), 1.10, accuracy: 0.001)
+    }
+
+    /// The border brightens with the badge, so the mark is one movement
+    /// rather than a disc moving beside a frame that does not.
+    func testTheBorderBreathesWithIt() {
+        XCTAssertEqual(PixelStatusIndicator.attentionStrokeOpacity(at: 0),
+                       PixelStatusIndicator.slotStrokeOpacity, accuracy: 0.001)
+        XCTAssertGreaterThan(PixelStatusIndicator.attentionStrokeOpacity(at: 1),
+                             PixelStatusIndicator.slotStrokeOpacity)
+    }
+
+    /// Slower than the wave: attention is meant to be noticed, and a
+    /// fast pulse beside a slow one reads as two unrelated things.
+    func testThePulseIsSlowerThanTheWave() {
+        XCTAssertLessThan(PixelStatusIndicator.attentionPulseCycle, 2.0)
+        XCTAssertGreaterThan(PixelStatusIndicator.attentionPulseCycle, 1.0)
+    }
+
     // MARK: - One mark at two sizes
 
     /// The compact slot is 24 points and the full panel's is 34. Both

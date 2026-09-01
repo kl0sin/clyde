@@ -872,9 +872,6 @@ struct SessionStatusIndicator: View {
     /// Slot number for idle sessions. Nil → render the active sprite.
     let idleIndex: Int?
 
-    @State private var bounce = false
-    @State private var attentionPulse = false
-
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isActive: Bool {
@@ -888,6 +885,22 @@ struct SessionStatusIndicator: View {
     }
 
     var body: some View {
+        Group {
+            if session.needsAttention && !reduceMotion {
+                TimelineView(.animation(minimumInterval: PixelStatusIndicator.frameInterval)) { context in
+                    slot(pulse: PixelStatusIndicator.attentionPulse(
+                        at: context.date.timeIntervalSinceReferenceDate))
+                }
+            } else {
+                // Held at the top of the breath rather than the bottom:
+                // still, but as visible as the pulse ever makes it.
+                slot(pulse: session.needsAttention ? 1 : 0)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func slot(pulse: Double) -> some View {
         ZStack {
             // Stepped corners rather than a radius: the corner of a
             // drawn sprite, which is what this holds. The compact
@@ -901,8 +914,8 @@ struct SessionStatusIndicator: View {
             SteppedSquare(step: 34 * SteppedSquare.stepRatio)
                 .stroke(
                     isActive
-                        ? accent.opacity(session.needsAttention && attentionPulse
-                                            ? PixelStatusIndicator.slotStrokeOpacity + 0.2
+                        ? accent.opacity(session.needsAttention
+                                            ? PixelStatusIndicator.attentionStrokeOpacity(at: pulse)
                                             : PixelStatusIndicator.slotStrokeOpacity)
                         : PixelStatusIndicator.quietSlotStroke,
                     lineWidth: isActive ? PixelStatusIndicator.slotStrokeWidth(slot: 34) : 1
@@ -930,7 +943,7 @@ struct SessionStatusIndicator: View {
                         .frame(width: 12, height: 12)
                         .overlay(AttentionBadgeMark())
                         .offset(x: 13, y: -13)
-                        .scaleEffect(attentionPulse ? 1.1 : 0.92)
+                        .scaleEffect(PixelStatusIndicator.attentionScale(at: pulse))
                 }
             } else {
                 // Idle: numbered slot. Two-digit format keeps width stable.
@@ -941,24 +954,6 @@ struct SessionStatusIndicator: View {
                     .foregroundStyle(TextColor.tertiary)
             }
         }
-        .onAppear {
-            if reduceMotion {
-                if session.status == .busy { bounce = true }
-                if session.needsAttention { attentionPulse = true }
-            } else {
-                if session.status == .busy {
-                    withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                        bounce = true
-                    }
-                }
-                if session.needsAttention {
-                    withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                        attentionPulse = true
-                    }
-                }
-            }
-        }
-        .accessibilityHidden(true)
     }
 }
 

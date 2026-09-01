@@ -110,6 +110,33 @@ struct PixelStatusIndicator: View {
     static let quietSlotFill = Color(white: 0.11)
     static let quietSlotStroke = Color(white: 0.18)
 
+    // MARK: - The attention pulse
+
+    /// How long one breath of the attention badge takes, in and out.
+    static let attentionPulseCycle: Double = 1.4
+
+    /// The pulse's position, 0…1, at a given moment.
+    ///
+    /// A function of the clock for the same reason the wave is: the
+    /// pulse used to be a `.repeatForever` animation started in
+    /// `onAppear`, which fires when the row appears and never again. A
+    /// session that is already on screen when the question arrives —
+    /// which is the ordinary case — got a badge that never moved.
+    static func attentionPulse(at time: Double) -> Double {
+        (1 - cos(time / attentionPulseCycle * 2 * .pi)) / 2
+    }
+
+    /// The badge breathes between these two.
+    static func attentionScale(at pulse: Double) -> CGFloat {
+        0.92 + 0.18 * pulse
+    }
+
+    /// And the slot's border brightens with it, so the whole mark is
+    /// one movement rather than a disc moving beside a static frame.
+    static func attentionStrokeOpacity(at pulse: Double) -> Double {
+        slotStrokeOpacity + 0.2 * pulse
+    }
+
     /// How thick that border is, also derived from the slot. The two
     /// modes had 1.5 and 1.0 — which happen to be nearly proportional,
     /// so the difference never showed, but only by luck: nothing tied
