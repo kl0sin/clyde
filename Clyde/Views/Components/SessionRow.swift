@@ -295,13 +295,15 @@ struct SessionRow: View {
         .padding(.vertical, Spacing.xs)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: Radius.medium)
-                    .fill(rowBackground)
+                // Square, edge to edge. Rounded corners made every row
+                // a card floating on the panel, which is the language
+                // compact used to speak and neither does now: a list of
+                // rows separated by a hairline.
+                Rectangle().fill(rowBackground)
                 // The texture compact had and this window did not: the
                 // wash, the hatching, the lit top edge, the sweep. Same
                 // view, same numbers — the two surfaces cannot drift.
                 SessionSurface(state: surfaceState, accent: accent)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.medium))
             }
         )
         .contentShape(Rectangle())

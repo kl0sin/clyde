@@ -32,16 +32,19 @@ struct CompactRootView: View {
         let gaps = CGFloat(max(0, sessions.count - 1)) * CompactSessionRow.gap
         let empty: CGFloat = sessions.isEmpty ? CompactSessionRow.quietHeight : 0
         return gripHeight
-            + cardPadding * 2
+            + listPadding * 2
             + separatorHeight
             + cards + gaps + empty
             + (request.map(requestHeight) ?? 0)
             + footerHeight
     }
 
-    /// Cards sit inset from the panel's edge so they read as surfaces
-    /// on it rather than as bands across it.
+    /// The panel's own inset, for everything that is not a row. Rows
+    /// run edge to edge — they are bands across the panel now, not
+    /// surfaces on it.
     static let cardPadding: CGFloat = 7
+    /// The breathing room above the first row and below the last.
+    static let listPadding: CGFloat = 4
     static let separatorHeight: CGFloat = 0.5
 
     /// How much room an open question needs, worked out before it is
@@ -135,7 +138,8 @@ struct CompactRootView: View {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, session in
                 CompactSessionRow(session: session,
                                   index: index,
-                                  disambiguator: suffixes[session.id]) {
+                                  disambiguator: suffixes[session.id],
+                                  showsSeparator: session.id != rows.last?.id) {
                     appViewModel.focusSession(session)
                 }
 
@@ -158,8 +162,7 @@ struct CompactRootView: View {
                     .frame(height: CompactSessionRow.quietHeight)
             }
         }
-        .padding(.horizontal, Self.cardPadding)
-        .padding(.vertical, Self.cardPadding)
+        .padding(.vertical, Self.listPadding)
         // A session that starts working, or starts waiting on you,
         // climbs the list. Springing there rather than teleporting is
         // what makes the movement legible: you see which row moved and

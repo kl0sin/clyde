@@ -40,6 +40,9 @@ struct CompactSessionRow: View {
     var index: Int = 0
     /// `#1` / `#2` when another session on screen shows the same name.
     var disambiguator: String? = nil
+    /// False for the last row, which has nothing below it to be
+    /// separated from.
+    var showsSeparator: Bool = true
     let onOpen: () -> Void
 
     @SwiftUI.State private var isHovered = false
@@ -59,7 +62,14 @@ struct CompactSessionRow: View {
     /// it.
     static let cardHeight: CGFloat = 40
     /// Space between cards, so they read as separate surfaces.
-    static let gap: CGFloat = 5
+    /// Rows, not cards: they sit against each other and a hairline
+    /// tells them apart, the same way the full panel's do. Cards with
+    /// gaps and rounded borders said the same thing in a second visual
+    /// language, and the two windows stopped looking like one app.
+    static let gap: CGFloat = 0
+    static let separatorHeight: CGFloat = 0.5
+    /// Past the slot column, so the line separates the text.
+    static let separatorInset: CGFloat = 43
 
     static func height(for session: Session) -> CGFloat { cardHeight }
 
@@ -171,26 +181,24 @@ struct CompactSessionRow: View {
         }
         .padding(.horizontal, 11)
         .frame(height: Self.cardHeight)
-        .background(
-            SessionSurface(state: content.state,
-                           accent: accent,
-                           // Compact's cards float with gaps between
-                           // them, so a quiet one needs a surface of its
-                           // own to be a card at all. The full panel's
-                           // rows are continuous and take the panel's.
-                           showsBase: true)
-        )
+        .background(SessionSurface(state: content.state, accent: accent))
         // The wash fades in when a session starts working instead of
         // being there the next frame — the difference between a light
         // coming on and a light having been on.
         .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: content.state)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(borderColour(state: content.state, accent: accent), lineWidth: 1)
-        )
-        .offset(y: isHovered ? -1 : 0)
+        .background(isHovered ? Color(white: 0.14) : .clear)
         .animation(.easeOut(duration: 0.14), value: isHovered)
+        .overlay(alignment: .bottom) {
+            // The same hairline the full panel puts between its rows,
+            // set in by the width of the slot column so it separates
+            // the text rather than cutting the row in two.
+            if showsSeparator {
+                Rectangle()
+                    .fill(Color(white: 0.15))
+                    .frame(height: Self.separatorHeight)
+                    .padding(.leading, Self.separatorInset)
+            }
+        }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture(perform: onOpen)
@@ -200,13 +208,6 @@ struct CompactSessionRow: View {
     }
 
     // MARK: - Surface
-
-    private func borderColour(state: PixelStatusIndicator.State, accent: Color) -> Color {
-        switch state {
-        case .idle: return .white.opacity(isHovered ? 0.12 : 0.05)
-        case .working, .needsAttention: return SessionSurface.borderColour(state: state, accent: accent)
-        }
-    }
 
     @ViewBuilder
     private func trailingView(content: Content, isActive: Bool) -> some View {

@@ -16,22 +16,7 @@ import SwiftUI
 struct SessionSurface: View {
     let state: PixelStatusIndicator.State
     let accent: Color
-    /// Whether the surface paints its own neutral ground. Compact's
-    /// cards float with gaps between them and need one; the full
-    /// panel's rows are continuous and sit on the panel's own.
-    var showsBase: Bool = false
-
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    /// The neutral ground under a compact card.
-    ///
-    /// It exists because compact's cards float with gaps between them —
-    /// without it a quiet card is not a card. But at 0.042 it also sat
-    /// under the active ones, and there it did nothing except make the
-    /// same state read lighter in one window than the other. Low enough
-    /// now that the two panels' active rows land within a couple of
-    /// units of each other, and the border carries a quiet card.
-    static let baseOpacity: Double = 0.022
 
     /// How strong the wash is.
     ///
@@ -63,10 +48,6 @@ struct SessionSurface: View {
 
     var body: some View {
         ZStack {
-            if showsBase {
-                Color.white.opacity(Self.baseOpacity)
-            }
-
             if state != .idle {
                 RadialGradient(
                     colors: [accent.opacity(Self.washOpacity(for: state)), .clear],
