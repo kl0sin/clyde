@@ -183,7 +183,7 @@ struct ReviewView: View {
             (s.totals(from: range.from, to: range.to),
              s.projects(from: range.from, to: range.to),
              s.dailyActivity(from: gridFrom, to: gridTo),
-             s.trail(from: range.from, to: range.to, project: filter))
+             s.trail(from: range.from, to: range.to, project: filter, limit: Self.trailLimit))
         }.value
         guard !Task.isCancelled else { return }
         totals = newTotals
@@ -229,19 +229,18 @@ struct ReviewView: View {
     /// way the panel does.
     private var header: some View {
         HStack(spacing: Spacing.sm) {
-            // Two points per sprite pixel. At 2.625 the sprite was
-            // drawn 42 points wide inside a 34-point frame — soft, and
-            // eight points larger than the box holding it.
-            ClydeAnimationView(state: .idle, pixelSize: 2)
-                .frame(width: 32, height: 32)
-                .padding(Spacing.xs)
+            // The panel's header, to the point: three points per sprite
+            // pixel in a 56-point frame. A window that shows Clyde's own
+            // data should not open with a smaller Clyde on it.
+            ClydeAnimationView(state: .idle, pixelSize: 3)
+                .frame(width: 48, height: 48)
+                .frame(width: 56, height: 56)
                 .background(
-                    // The same stepped frame the panel's sprites wear.
-                    SteppedSquare(step: 50 * SteppedSquare.stepRatio)
+                    SteppedSquare(step: 56 * SteppedSquare.stepRatio)
                         .fill(SessionTheme.processingColor.opacity(0.16))
                 )
                 .overlay(
-                    SteppedSquare(step: 50 * SteppedSquare.stepRatio)
+                    SteppedSquare(step: 56 * SteppedSquare.stepRatio)
                         .stroke(SessionTheme.processingColor.opacity(0.45), lineWidth: 1)
                 )
                 .accessibilityHidden(true)
@@ -462,14 +461,17 @@ struct ReviewView: View {
                     .foregroundStyle(TextColor.disabled)
                     .padding(.vertical, Spacing.xs)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(trail.enumerated()), id: \.offset) { _, entry in
-                            trailRow(entry)
-                        }
+                // No scroll view of its own. It had one, capped at 180
+                // points, inside a window that now scrolls — so the box
+                // ended at an arbitrary line and the page behind it
+                // could not be reached past it. The trail is part of the
+                // page now, and the page scrolls.
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(trail.enumerated()), id: \.offset) { _, entry in
+                        trailRow(entry)
                     }
                 }
-                .frame(maxHeight: 180)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
                         .fill(Color(white: 0.12))
@@ -555,6 +557,12 @@ struct ReviewView: View {
     }
 
     static let heatmapWeeks = 26
+
+    /// How many tool calls the trail shows. It was 200 in a box 180
+    /// points tall, so all but the first eight were behind a scroll
+    /// inside a scroll. Inline on a page that scrolls, the number has
+    /// to be one a person would actually read to the end of.
+    static let trailLimit = 60
 
     /// Names the branches when there are one or two, counts them past
     /// that: three names of a length nobody controls will not fit.

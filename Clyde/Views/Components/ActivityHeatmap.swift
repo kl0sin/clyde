@@ -33,8 +33,9 @@ struct ActivityHeatmap: View {
     /// stopped a third of the way across the window and left the rest
     /// of the row empty.
     private static let minCell: CGFloat = 11
-    private static let maxCell: CGFloat = 20
-    private static let gap: CGFloat = 3
+    private static let maxCell: CGFloat = 15
+    private static let minGap: CGFloat = 3
+    private static let maxGap: CGFloat = 6
     private static let gutter: CGFloat = 26
 
     /// Width the grid has been given, measured once and kept.
@@ -42,11 +43,32 @@ struct ActivityHeatmap: View {
 
     /// Whole points: a cell is a small square with a 2.5-point radius,
     /// and a fractional one blurs its own corners.
+    ///
+    /// The cell has a ceiling — past about fifteen points a
+    /// contribution grid stops reading as a calendar and starts reading
+    /// as a chart — so on a wide window what is left over goes to the
+    /// gaps instead. Growing the cells to fill the row was the first
+    /// attempt and made them noticeably chunky.
     private var cell: CGFloat {
-        guard availableWidth > 0 else { return Self.minCell }
-        let columns = CGFloat(weeks)
-        let free = availableWidth - Self.gutter - Self.gap * columns
-        return min(Self.maxCell, max(Self.minCell, (free / columns).rounded(.down)))
+        Self.cell(forWidth: availableWidth, columns: weeks)
+    }
+
+    private var gap: CGFloat {
+        Self.gap(forWidth: availableWidth, columns: weeks)
+    }
+
+    static func cell(forWidth width: CGFloat, columns: Int) -> CGFloat {
+        guard width > 0 else { return minCell }
+        let n = CGFloat(columns)
+        let free = width - gutter - minGap * n
+        return min(maxCell, max(minCell, (free / n).rounded(.down)))
+    }
+
+    static func gap(forWidth width: CGFloat, columns: Int) -> CGFloat {
+        guard width > 0 else { return minGap }
+        let n = CGFloat(columns)
+        let free = width - gutter - cell(forWidth: width, columns: columns) * n
+        return min(maxGap, max(minGap, (free / n).rounded(.down)))
     }
 
     /// Sequential ramp, validated for monotonic lightness against the
@@ -92,7 +114,7 @@ struct ActivityHeatmap: View {
             // Month labels sit above the column where that month starts,
             // so a glance can place "three weeks ago" on the calendar.
             let monthLabels = Self.monthLabels(for: columns)
-            HStack(alignment: .bottom, spacing: Self.gap) {
+            HStack(alignment: .bottom, spacing: gap) {
                 Color.clear.frame(width: Self.gutter, height: 1)
                 ForEach(Array(columns.enumerated()), id: \.offset) { index, _ in
                     // The label is wider than its column, so it must be
@@ -108,10 +130,10 @@ struct ActivityHeatmap: View {
             .frame(height: 10, alignment: .bottom)
             .accessibilityHidden(true)
 
-            HStack(alignment: .top, spacing: Self.gap) {
+            HStack(alignment: .top, spacing: gap) {
                 // Weekday gutter, every other row like the reference — all
                 // seven would be noisier than the grid itself.
-                VStack(spacing: Self.gap) {
+                VStack(spacing: gap) {
                     ForEach(0..<7, id: \.self) { row in
                         Text(Self.weekdayLabel(row: row))
                             .font(.system(size: 8))
@@ -122,9 +144,9 @@ struct ActivityHeatmap: View {
                 .accessibilityHidden(true)
 
                 ZStack(alignment: .topLeading) {
-                    HStack(alignment: .top, spacing: Self.gap) {
+                    HStack(alignment: .top, spacing: gap) {
                         ForEach(Array(columns.enumerated()), id: \.offset) { _, week in
-                            VStack(spacing: Self.gap) {
+                            VStack(spacing: gap) {
                                 ForEach(week, id: \.self) { day in
                                     cellView(for: day, activity: lookup[day], peak: peak)
                                 }
@@ -132,16 +154,20 @@ struct ActivityHeatmap: View {
                         }
                     }
 
-                    if let hovered, let position = Self.position(of: hovered, in: columns, cell: cell) {
+                    if let hovered, let position = Self.position(of: hovered, in: columns, cell: cell, gap: gap) {
                         tooltip(for: hovered, activity: lookup[hovered])
-                            .offset(x: position.x - Self.tooltipWidth / 2,
-                                    y: position.y - Self.tooltipHeight - Self.gap)
+                            .offset(x: Self.tooltipX(centredOn: position.x,
+                                                     gridWidth: gridWidth(columns: columns.count)),
+                                    y: position.y - Self.tooltipHeight - gap)
                             .allowsHitTesting(false)
                     }
                 }
             }
 
             legend
+                // It was sitting on the grid's bottom row, close enough
+                // to read as a seventh week.
+                .padding(.top, Spacing.xs)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Activity for the last \(weeks) weeks")
@@ -190,12 +216,31 @@ struct ActivityHeatmap: View {
     /// Computed from the layout constants rather than measured: the grid is
     /// a fixed lattice, so geometry readers per cell would be 180 of them
     /// for a number we already know.
-    static func position(of day: Date, in columns: [[Date]], cell: CGFloat) -> CGPoint? {
+    /// How wide the whole grid is, gutter included.
+    private func gridWidth(columns: Int) -> CGFloat {
+        Self.gutter + gap + CGFloat(columns) * (cell + gap) - gap
+    }
+
+    /// Where the hover card starts, kept inside the grid.
+    ///
+    /// Centred on its cell until that would put it past an edge, and
+    /// then flush with the edge instead. On the last column it used to
+    /// run past the window and get cut in half — which is where the
+    /// figures are.
+    static func tooltipX(centredOn x: CGFloat, gridWidth: CGFloat) -> CGFloat {
+        let ideal = x - tooltipWidth / 2
+        let last = max(0, gridWidth - tooltipWidth)
+        return min(max(0, ideal), last)
+    }
+
+    static func position(of day: Date, in columns: [[Date]],
+                         cell: CGFloat, gap: CGFloat) -> CGPoint? {
         for (column, week) in columns.enumerated() {
             if let row = week.firstIndex(of: day) {
+                let step = cell + gap
                 return CGPoint(
-                    x: gutter + gap + CGFloat(column) * (cell + gap) + cell / 2,
-                    y: CGFloat(row) * (cell + gap)
+                    x: gutter + gap + CGFloat(column) * step + cell / 2,
+                    y: CGFloat(row) * step
                 )
             }
         }
@@ -251,7 +296,7 @@ struct ActivityHeatmap: View {
     }
 
     private var legend: some View {
-        HStack(spacing: Self.gap) {
+        HStack(spacing: gap) {
             Spacer(minLength: 0)
             Text("Less")
                 .font(.system(size: 9))

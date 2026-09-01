@@ -91,9 +91,9 @@ final class ActivityHeatmapTests: XCTestCase {
         let columns = stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
 
         for cell in [CGFloat(11), 16, 20] {
-            let first = ActivityHeatmap.position(of: columns[0][0], in: columns, cell: cell)
-            let nextColumn = ActivityHeatmap.position(of: columns[1][0], in: columns, cell: cell)
-            let nextRow = ActivityHeatmap.position(of: columns[0][1], in: columns, cell: cell)
+            let first = ActivityHeatmap.position(of: columns[0][0], in: columns, cell: cell, gap: 3)
+            let nextColumn = ActivityHeatmap.position(of: columns[1][0], in: columns, cell: cell, gap: 3)
+            let nextRow = ActivityHeatmap.position(of: columns[0][1], in: columns, cell: cell, gap: 3)
 
             XCTAssertNotNil(first)
             XCTAssertEqual((nextColumn?.x ?? 0) - (first?.x ?? 0), cell + 3, accuracy: 0.01)
@@ -109,7 +109,7 @@ final class ActivityHeatmapTests: XCTestCase {
         let columns = stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
         let longAgo = Calendar.current.date(byAdding: .year, value: -1, to: Date())!
 
-        XCTAssertNil(ActivityHeatmap.position(of: Calendar.current.startOfDay(for: longAgo), in: columns, cell: 11))
+        XCTAssertNil(ActivityHeatmap.position(of: Calendar.current.startOfDay(for: longAgo), in: columns, cell: 11, gap: 3))
     }
 
     /// Today has to be in the grid — a calendar that stops yesterday looks
@@ -122,5 +122,36 @@ final class ActivityHeatmapTests: XCTestCase {
 
         XCTAssertTrue(days.contains(today))
         XCTAssertEqual(days.last, calendar.startOfDay(for: days.last ?? Date()))
+    }
+}
+
+/// The hover card carries the day's figures, so running past the
+/// window's edge cuts off the thing it exists to show.
+final class HeatmapTooltipClampTests: XCTestCase {
+
+    private let gridWidth: CGFloat = 520
+    private var width: CGFloat { 168 }   // ActivityHeatmap.tooltipWidth
+
+    func testItCentresOnTheCellWhenThereIsRoom() {
+        let x = ActivityHeatmap.tooltipX(centredOn: 260, gridWidth: gridWidth)
+
+        XCTAssertEqual(x, 260 - width / 2, accuracy: 0.01)
+    }
+
+    func testItStopsAtTheRightEdge() {
+        let x = ActivityHeatmap.tooltipX(centredOn: 515, gridWidth: gridWidth)
+
+        XCTAssertEqual(x + width, gridWidth, accuracy: 0.01)
+        XCTAssertLessThanOrEqual(x + width, gridWidth)
+    }
+
+    func testItStopsAtTheLeftEdge() {
+        XCTAssertEqual(ActivityHeatmap.tooltipX(centredOn: 4, gridWidth: gridWidth), 0)
+    }
+
+    /// A grid narrower than the card cannot satisfy both edges; it must
+    /// pick one rather than going negative.
+    func testANarrowGridPinsItToTheLeft() {
+        XCTAssertEqual(ActivityHeatmap.tooltipX(centredOn: 40, gridWidth: 100), 0)
     }
 }
