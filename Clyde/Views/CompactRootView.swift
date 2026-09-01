@@ -247,7 +247,10 @@ struct CompactRootView: View {
             .accessibilityLabel("Expand to the full panel")
         }
         .padding(.horizontal, Spacing.sm)
-        .padding(.bottom, 4)
+        // No vertical padding: the fixed height centres the contents,
+        // and a padding on one side only shifts that centre. A bottom
+        // padding of 4 was doing exactly that — ten points of air above
+        // the pills and fourteen below.
         .frame(height: Self.footerHeight)
     }
 
