@@ -96,6 +96,13 @@ struct PixelStatusIndicator: View {
         }
     }
 
+    /// The slot the mark sits in, in both modes. These lived as
+    /// separate hand-tuned numbers per mode until a side-by-side
+    /// capture showed the full panel's frame reading a third brighter
+    /// than compact's — the mark was one thing and its frame was two.
+    static let slotFillOpacity: Double = 0.16
+    static let slotStrokeOpacity: Double = 0.45
+
     // MARK: - Geometry
 
     /// Every dimension of the mark, derived from the slot it sits in.

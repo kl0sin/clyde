@@ -894,12 +894,16 @@ struct SessionStatusIndicator: View {
             // panel's slot uses the same shape, so the mark is one
             // thing in both modes rather than two dialects of it.
             SteppedSquare(step: 34 * SteppedSquare.stepRatio)
-                .fill(isActive ? accent.opacity(0.18) : Color(white: 0.11))
+                .fill(isActive
+                        ? accent.opacity(PixelStatusIndicator.slotFillOpacity)
+                        : Color(white: 0.11))
                 .frame(width: 34, height: 34)
             SteppedSquare(step: 34 * SteppedSquare.stepRatio)
                 .stroke(
                     isActive
-                        ? accent.opacity(session.needsAttention && attentionPulse ? 0.65 : 0.55)
+                        ? accent.opacity(session.needsAttention && attentionPulse
+                                            ? PixelStatusIndicator.slotStrokeOpacity + 0.2
+                                            : PixelStatusIndicator.slotStrokeOpacity)
                         : Color(white: 0.18),
                     lineWidth: isActive ? 1.5 : 1
                 )

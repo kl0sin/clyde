@@ -280,9 +280,14 @@ struct CompactSessionRow: View {
             // 24-point slot is a deeper bite than 4 on a 34-point one,
             // and the two modes stopped looking like the same mark.
             SteppedSquare(step: 24 * SteppedSquare.stepRatio)
-                .fill(isActive ? accent.opacity(0.16) : Color.white.opacity(0.05))
+                .fill(isActive
+                        ? accent.opacity(PixelStatusIndicator.slotFillOpacity)
+                        : Color.white.opacity(0.05))
             SteppedSquare(step: 24 * SteppedSquare.stepRatio)
-                .stroke(isActive ? accent.opacity(0.40) : Color.white.opacity(0.07), lineWidth: 1)
+                .stroke(isActive
+                            ? accent.opacity(PixelStatusIndicator.slotStrokeOpacity)
+                            : Color.white.opacity(0.07),
+                        lineWidth: 1)
 
             switch Self.slot(for: session, index: index) {
             case .number(let n):
