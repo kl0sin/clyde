@@ -171,6 +171,17 @@ struct PixelStatusIndicator: View {
         (1 - cos(phase(row: row, col: col, at: time) * 2 * .pi)) / 2
     }
 
+    /// The moment the wave is frozen at when it cannot move — under
+    /// reduced motion, or in a screenshot.
+    ///
+    /// Chosen so the crest sits across the middle of the grid: the mark
+    /// then still reads as light crossing it diagonally. Resting every
+    /// cell at the same brightness instead, which is what this did at
+    /// first, leaves a working session drawing the identical uniform
+    /// block that attention draws — the two states separated by nothing
+    /// but hue, which is exactly what the mark exists to avoid.
+    static let stillFrame: Double = cycle * 0.875
+
     static func opacity(row: Int, col: Int, at time: Double, state: State) -> Double {
         let resting = restingOpacity(state)
         guard animates(state) else { return resting }
@@ -206,9 +217,9 @@ struct PixelStatusIndicator: View {
                             .fill(colour)
                             .frame(width: size, height: size)
                             .opacity(
-                                time.map {
-                                    Self.opacity(row: row, col: col, at: $0, state: state)
-                                } ?? Self.restingOpacity(state == .working ? .idle : state)
+                                Self.opacity(row: row, col: col,
+                                             at: time ?? Self.stillFrame,
+                                             state: state)
                             )
                     }
                 }

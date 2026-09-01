@@ -190,6 +190,41 @@ final class PixelStatusIndicatorTests: XCTestCase {
                        PixelStatusIndicator.restingOpacity(.idle))
     }
 
+    // MARK: - When it cannot move
+
+    /// Under reduced motion the wave holds a frame rather than
+    /// flattening: a working session must not draw the same uniform
+    /// block that attention draws, or the two states are separated by
+    /// hue alone.
+    func testAFrozenWorkingMarkStillReadsAsADiagonal() {
+        let lit = cells.map {
+            PixelStatusIndicator.opacity(row: $0.row, col: $0.col,
+                                         at: PixelStatusIndicator.stillFrame,
+                                         state: .working)
+        }
+        XCTAssertGreaterThan(lit.max()! - lit.min()!, 0.4,
+                             "the frozen mark is flat, so it says nothing about the state")
+    }
+
+    func testAFrozenWorkingMarkIsNotTheAttentionMark() {
+        let attention = cells.map {
+            PixelStatusIndicator.opacity(row: $0.row, col: $0.col,
+                                         at: PixelStatusIndicator.stillFrame,
+                                         state: .needsAttention)
+        }
+        XCTAssertEqual(Set(attention).count, 1, "attention is a solid block")
+    }
+
+    /// And the frozen frame is one where the crest is on the grid,
+    /// not one where it has just left it.
+    func testTheFrozenFrameCatchesTheCrest() {
+        let brightest = cells.map {
+            PixelStatusIndicator.brightness(row: $0.row, col: $0.col,
+                                            at: PixelStatusIndicator.stillFrame)
+        }.max()!
+        XCTAssertGreaterThan(brightest, 0.9)
+    }
+
     // MARK: - One mark at two sizes
 
     /// The compact slot is 24 points and the full panel's is 34. Both
