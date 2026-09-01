@@ -447,6 +447,7 @@ h1 {
 
 /* Active tab — driven by the matching :checked radio. */
 #tab-expanded:checked ~ .showcase-tablist label[for="tab-expanded"],
+#tab-compact:checked  ~ .showcase-tablist label[for="tab-compact"],
 #tab-widget:checked   ~ .showcase-tablist label[for="tab-widget"],
 #tab-menubar:checked  ~ .showcase-tablist label[for="tab-menubar"] {
   background: linear-gradient(135deg, rgba(191, 90, 242, 0.14) 0%, rgba(74, 144, 226, 0.10) 100%);
@@ -455,6 +456,7 @@ h1 {
 }
 
 #tab-expanded:checked ~ .showcase-tablist label[for="tab-expanded"] .showcase-tab-num,
+#tab-compact:checked  ~ .showcase-tablist label[for="tab-compact"] .showcase-tab-num,
 #tab-widget:checked   ~ .showcase-tablist label[for="tab-widget"] .showcase-tab-num,
 #tab-menubar:checked  ~ .showcase-tablist label[for="tab-menubar"] .showcase-tab-num {
   color: var(--purple-bright);
@@ -463,6 +465,7 @@ h1 {
 /* Keyboard focus ring — radios are visually hidden but still focusable. */
 .showcase-tabs > input[type="radio"]:focus-visible + .showcase-tablist label,
 #tab-expanded:focus-visible ~ .showcase-tablist label[for="tab-expanded"],
+#tab-compact:focus-visible  ~ .showcase-tablist label[for="tab-compact"],
 #tab-widget:focus-visible   ~ .showcase-tablist label[for="tab-widget"],
 #tab-menubar:focus-visible  ~ .showcase-tablist label[for="tab-menubar"] {
   outline: 2px solid var(--purple-bright);
@@ -491,6 +494,7 @@ h1 {
 }
 
 #tab-expanded:checked ~ .showcase-panels .showcase-panel-expanded,
+#tab-compact:checked  ~ .showcase-panels .showcase-panel-compact,
 #tab-widget:checked   ~ .showcase-panels .showcase-panel-widget,
 #tab-menubar:checked  ~ .showcase-panels .showcase-panel-menubar {
   display: grid;
@@ -603,6 +607,21 @@ h1 {
 .section-header {
   text-align: center;
   margin-bottom: 60px;
+}
+
+/* A small flag on a showcase panel — same voice as .section-label, but
+   it sits inside a card rather than above a section. */
+.showcase-badge {
+  display: inline-block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  font-weight: 700;
+  color: var(--purple-bright);
+  border: 1px solid rgba(191, 90, 242, 0.35);
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin: 0 0 14px;
 }
 
 .section-label {

@@ -365,6 +365,7 @@ enum HookInstaller {
     /// firing out of nowhere at launch.
     static func isAccessibilityTrusted() -> Bool {
         if let override = accessibilityTrustedOverride { return override }
+        if UserDefaults.standard.bool(forKey: "assumeShortcutPermissions") { return true }
         return AXIsProcessTrusted()
     }
 
@@ -376,6 +377,13 @@ enum HookInstaller {
     /// prompting, like its neighbour.
     static func isInputMonitoringTrusted() -> Bool {
         if let override = inputMonitoringTrustedOverride { return override }
+        // A build used for screenshots is not the app a user installs:
+        // it carries a separate bundle identifier, so it has none of the
+        // permissions the installed copy has, and every capture came out
+        // with a warning chip that says nothing about the product. Reads
+        // a default that is never set for a real user, like the
+        // window-opening keys beside it.
+        if UserDefaults.standard.bool(forKey: "assumeShortcutPermissions") { return true }
         return IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
     }
 

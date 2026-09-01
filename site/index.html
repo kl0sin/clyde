@@ -82,12 +82,13 @@
       <div class="container">
         <div class="section-header">
           <p class="section-label">A quick tour</p>
-          <h2>Three views. Same source of truth.</h2>
-          <p class="section-sub">Clyde lives in three places at once — pick the level of detail you want, switch on the fly.</p>
+          <h2>Four views. Same source of truth.</h2>
+          <p class="section-sub">Clyde lives in four places at once — pick the level of detail you want, switch on the fly.</p>
         </div>
 
         <div class="showcase-tabs" role="tablist" aria-label="App screenshots">
           <input type="radio" name="showcase-tab" id="tab-expanded" checked>
+          <input type="radio" name="showcase-tab" id="tab-compact">
           <input type="radio" name="showcase-tab" id="tab-widget">
           <input type="radio" name="showcase-tab" id="tab-menubar">
 
@@ -99,15 +100,22 @@
                 <em>Every session, all at once</em>
               </span>
             </label>
-            <label for="tab-widget" class="showcase-tab" role="tab">
+            <label for="tab-compact" class="showcase-tab" role="tab">
               <span class="showcase-tab-num">02</span>
+              <span class="showcase-tab-text">
+                <strong>Compact panel</strong>
+                <em>Small enough to leave open</em>
+              </span>
+            </label>
+            <label for="tab-widget" class="showcase-tab" role="tab">
+              <span class="showcase-tab-num">03</span>
               <span class="showcase-tab-text">
                 <strong>Floating widget</strong>
                 <em>One glance, zero context switch</em>
               </span>
             </label>
             <label for="tab-menubar" class="showcase-tab" role="tab">
-              <span class="showcase-tab-num">03</span>
+              <span class="showcase-tab-num">04</span>
               <span class="showcase-tab-text">
                 <strong>Menu bar</strong>
                 <em>Quiet by default</em>
@@ -119,7 +127,7 @@
             <div class="showcase-panel showcase-panel-expanded" role="tabpanel">
               <div class="showcase-copy">
                 <h3>See every Claude session in one place.</h3>
-                <p>Hero header tells you the dominant state at a glance — <strong>1 attention, 2 working, 2 ready</strong>. The list shows each session with its directory and live activity. Click to focus the right terminal, drag to reorder, name them whatever makes sense to you.</p>
+                <p>The header counts the states at a glance. Under it, one row per session with its directory and what it is doing right now — whoever needs an answer first, then whoever is working. Click a row to focus its terminal, drag to reorder inside a state, name them whatever makes sense to you.</p>
                 <ul class="showcase-bullets">
                   <li>Real‑time, hook‑driven — never polled</li>
                   <li>Per‑session names, sounds, and ordering</li>
@@ -127,7 +135,23 @@
                 </ul>
               </div>
               <div class="showcase-image">
-                <img src="img/screenshots/expanded.png" alt="Clyde expanded view showing four Claude Code sessions with status pills" loading="lazy">
+                <img src="img/screenshots/expanded.png" alt="Clyde's panel showing four Claude Code sessions: one waiting on an answer, one working, two quiet" loading="lazy" width="400" height="420">
+              </div>
+            </div>
+
+            <div class="showcase-panel showcase-panel-compact" role="tabpanel">
+              <div class="showcase-copy">
+                <p class="showcase-badge">New in 0.9</p>
+                <h3>The rows, and nothing else.</h3>
+                <p>The panel is built to be opened, read and closed. Compact mode drops the header, the activity trail and the summary bar and keeps the sessions — small enough to leave open beside the work it is reporting on. It is exactly as tall as what it shows, and it grows downward, so the top edge stays where you put it.</p>
+                <ul class="showcase-bullets">
+                  <li>Whoever needs an answer is always at the top</li>
+                  <li>Past your row limit, only the quiet sessions drop off</li>
+                  <li>Answer a permission request without leaving it</li>
+                </ul>
+              </div>
+              <div class="showcase-image">
+                <img src="img/screenshots/compact.png" alt="Clyde's compact panel: four session rows — one waiting on an answer, two working, one quiet — with a status footer" loading="lazy" width="400" height="217">
               </div>
             </div>
 
@@ -142,7 +166,7 @@
                 </ul>
               </div>
               <div class="showcase-image">
-                <img src="img/screenshots/widget.png" alt="Clyde collapsed widget floating on a colourful desktop wallpaper" loading="lazy">
+                <img src="img/screenshots/widget.png" alt="Clyde's floating widget: the mascot, a blue badge with the count of sessions waiting on you, and ticks for the working and ready counts" loading="lazy" width="130" height="46">
               </div>
             </div>
 
@@ -157,7 +181,7 @@
                 </ul>
               </div>
               <div class="showcase-image showcase-image-menubar">
-                <img src="img/screenshots/menubar.png" alt="Clyde's menu bar item showing the Clyde silhouette next to a purple-and-green status capsule" loading="lazy">
+                <img src="img/screenshots/menubar.png" alt="Clyde's menu bar item: a capsule with the mascot and the count of sessions waiting on you, and ticks for the other two states" loading="lazy" width="64" height="26">
               </div>
             </div>
           </div>
@@ -169,7 +193,7 @@
     <section class="review" id="review">
       <div class="container">
         <div class="section-header">
-          <p class="section-label">New in 0.8</p>
+          <p class="section-label">Session review</p>
           <h2>Where did the day actually go?</h2>
           <p class="section-sub">Clyde has always answered what Claude is doing right now. It now remembers what it did.</p>
         </div>
@@ -177,16 +201,16 @@
         <div class="review-layout">
           <div class="review-copy">
             <h3>Six months of work, one square per day.</h3>
-            <p>The review window opens on a calendar shaded by how long Claude worked — hover any day for the time, the turns and the project that took most of it. Underneath, the numbers for today or the week: how long Claude was busy, split into thinking and tool time, and the two worst moments of the period.</p>
+            <p>The review window opens on a calendar shaded by how long Claude worked — hover any day for the time, the turns and the project that took most of it. Underneath, the numbers for today or the week: how long Claude was busy, split into thinking and tool time, the two worst moments of the period, and where the time went by project.</p>
             <ul class="review-bullets">
               <li><strong>Busy, honestly counted.</strong> A turn's wall-clock includes every tool call, so Clyde shows the split rather than passing your test suite off as the model thinking.</li>
               <li><strong>Longest wait, longest turn.</strong> Running totals mislead — leave a session overnight and it reads fourteen hours. The worst single moment on each side is the one you can act on.</li>
-              <li><strong>Per project, with the tool it leaned on.</strong> Time and turns for every directory you worked in.</li>
+              <li><strong>Per project, with the tool it leaned on.</strong> Time and turns for every repository you worked in — and a branch checked out in a worktree counts towards its project rather than appearing as one of its own.</li>
               <li><strong>Stays on your Mac.</strong> Kept locally and indefinitely; Settings shows what it costs and clears it in one click. Tool names and summaries only — never a word of your conversations.</li>
             </ul>
           </div>
           <div class="review-image">
-            <img src="img/screenshots/review.png" alt="Clyde's session review window: a six-month activity calendar, tiles for busy time, turns, longest wait and longest turn, a thinking-versus-tools bar, per-project totals and a list of recent tool calls" loading="lazy" width="560" height="792">
+            <img src="img/screenshots/review.png" alt="Clyde's session review window: a six-month activity calendar, tiles for busy time, turns, longest wait and longest turn, a thinking-versus-tools bar, and per-project totals" loading="lazy" width="620" height="720">
           </div>
         </div>
       </div>
@@ -201,6 +225,12 @@
         </div>
 
         <div class="feature-grid">
+          <div class="feature">
+            <div class="feature-icon icon-bell"></div>
+            <h3>Answer permission requests</h3>
+            <p>When Claude asks to run something, the question appears on its session for a few seconds and you can allow or deny it from the panel. Miss the moment and the terminal asks as usual — Clyde never decides on its own.</p>
+          </div>
+
           <div class="feature">
             <div class="feature-icon icon-bolt"></div>
             <h3>Real-time tracking</h3>
