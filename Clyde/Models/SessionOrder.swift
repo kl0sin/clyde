@@ -34,4 +34,28 @@ enum SessionOrder {
             }
             .map(\.element)
     }
+
+    /// The `#1` / `#2` suffix a row wears when two sessions would
+    /// otherwise show the same name, keyed by session.
+    ///
+    /// The full panel has done this since the beginning and compact
+    /// never did — so two sessions called `clyde` were one row twice,
+    /// with nothing on either to tell you which was which. That is the
+    /// same complaint as the two identically named agents; a window
+    /// that lists things has to let you tell them apart.
+    static func disambiguationSuffixes(for sessions: [Session]) -> [UUID: String] {
+        var counts: [String: Int] = [:]
+        for session in sessions {
+            counts[session.displayName, default: 0] += 1
+        }
+
+        var seen: [String: Int] = [:]
+        var suffixes: [UUID: String] = [:]
+        for session in sessions where (counts[session.displayName] ?? 0) > 1 {
+            let next = (seen[session.displayName] ?? 0) + 1
+            seen[session.displayName] = next
+            suffixes[session.id] = "#\(next)"
+        }
+        return suffixes
+    }
 }

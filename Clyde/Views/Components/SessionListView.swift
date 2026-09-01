@@ -138,21 +138,10 @@ struct SessionListView: View {
     /// Using the absolute position keeps row 02 always row 02 regardless
     /// of which rows are currently active.
     private var disambiguated: [(session: Session, suffix: String?, idleIndex: Int?)] {
-        var counts: [String: Int] = [:]
-        var indices: [String: Int] = [:]
-
-        for s in sessions {
-            counts[s.displayName, default: 0] += 1
-        }
+        let suffixes = SessionOrder.disambiguationSuffixes(for: sessions)
 
         return sessions.enumerated().map { offset, session in
-            let name = session.displayName
-            var suffix: String? = nil
-            if (counts[name] ?? 0) > 1 {
-                let nextIndex = (indices[name] ?? 0) + 1
-                indices[name] = nextIndex
-                suffix = "#\(nextIndex)"
-            }
+            let suffix = suffixes[session.id]
 
             let isActive = !session.isGhost && (session.needsAttention || session.status == .busy)
             // Active rows render a status badge instead of a number, so

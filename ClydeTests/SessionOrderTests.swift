@@ -56,3 +56,40 @@ final class SessionOrderTests: XCTestCase {
         XCTAssertEqual(SessionOrder.ranked(once).map(\.displayName), once.map(\.displayName))
     }
 }
+
+/// Telling two identically named sessions apart — the full panel has
+/// always done it, compact never did.
+@MainActor
+final class SessionDisambiguationTests: XCTestCase {
+
+    private func session(_ name: String) -> Session {
+        var s = Session(pid: pid_t.random(in: 1...30000),
+                        workingDirectory: "/repo",
+                        status: .idle)
+        s.customName = name
+        return s
+    }
+
+    func testUniqueNamesGetNoSuffix() {
+        let sessions = [session("clyde"), session("tally-up")]
+
+        XCTAssertTrue(SessionOrder.disambiguationSuffixes(for: sessions).isEmpty)
+    }
+
+    func testRepeatedNamesAreNumberedInOrder() {
+        let sessions = [session("clyde"), session("tally-up"), session("clyde")]
+        let suffixes = SessionOrder.disambiguationSuffixes(for: sessions)
+
+        XCTAssertEqual(suffixes[sessions[0].id], "#1")
+        XCTAssertEqual(suffixes[sessions[2].id], "#2")
+        XCTAssertNil(suffixes[sessions[1].id])
+    }
+
+    /// The compact row wears it too, in its name — the panel and the
+    /// compact window must not label the same session differently.
+    func testTheCompactRowShowsTheSuffix() {
+        let content = CompactSessionRow.content(for: session("clyde"), disambiguator: "#2")
+
+        XCTAssertEqual(content.name, "clyde #2")
+    }
+}

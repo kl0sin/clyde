@@ -38,6 +38,8 @@ struct CompactSessionRow: View {
     let session: Session
     /// Position in the list, for the slot number.
     var index: Int = 0
+    /// `#1` / `#2` when another session on screen shows the same name.
+    var disambiguator: String? = nil
     let onOpen: () -> Void
 
     @SwiftUI.State private var isHovered = false
@@ -68,11 +70,11 @@ struct CompactSessionRow: View {
         PixelStatusIndicator.state(for: session) == .idle ? .number(index + 1) : .indicator
     }
 
-    static func content(for session: Session) -> Content {
+    static func content(for session: Session, disambiguator: String? = nil) -> Content {
         let workingAgents = session.activeSubagents.filter { !$0.isIdle }.count
         let state = PixelStatusIndicator.state(for: session)
         return Content(
-            name: session.displayName,
+            name: disambiguator.map { "\(session.displayName) \($0)" } ?? session.displayName,
             worktree: session.worktreeName.isEmpty ? nil : session.worktreeName,
             agentCount: workingAgents > 0 ? workingAgents : nil,
             meta: meta(for: session, state: state),
@@ -128,7 +130,7 @@ struct CompactSessionRow: View {
     }
 
     var body: some View {
-        let content = Self.content(for: session)
+        let content = Self.content(for: session, disambiguator: disambiguator)
         let accent = PixelStatusIndicator.color(for: content.state)
         let isActive = content.state != .idle
 

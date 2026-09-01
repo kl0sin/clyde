@@ -87,6 +87,14 @@ struct CompactRootView: View {
         Self.visible(sessions: sessionViewModel.sessions, cap: appViewModel.compactRowCap)
     }
 
+    /// Computed over every session, not only the visible ones: two rows
+    /// called `clyde` need telling apart by the same names the full
+    /// panel gives them, or the two windows label the same session
+    /// differently.
+    private var suffixes: [UUID: String] {
+        SessionOrder.disambiguationSuffixes(for: sessionViewModel.sessions)
+    }
+
     private var expanded: PermissionRequest? {
         Self.expandedRequest(from: appViewModel.permissionRequests,
                              visiblePIDs: Set(rows.map(\.pid)))
@@ -125,7 +133,9 @@ struct CompactRootView: View {
     private var cards: some View {
         VStack(spacing: CompactSessionRow.gap) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, session in
-                CompactSessionRow(session: session, index: index) {
+                CompactSessionRow(session: session,
+                                  index: index,
+                                  disambiguator: suffixes[session.id]) {
                     appViewModel.focusSession(session)
                 }
 
