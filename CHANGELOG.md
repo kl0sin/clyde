@@ -23,7 +23,7 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 - **A branch is not a project.** Working in a git worktree put a second entry in the projects list — the same repository, listed again under the branch's directory, with the hours split between them. Worktrees now fold into the repository they came from, and the row names the branches the time was spent on. History recorded before this is folded on the way out, so the split does not persist for as long as the history does.
 - **The calendar uses the width it has.** Its cells were a fixed size, so the grid stopped a third of the way across the window and left the rest of the row empty. It now grows to fill whatever width the window is given.
-- **The report scrolls.** With more than a few projects the list ran off the bottom edge of the window and there was no way to reach the rest of it.
+- **The report opens on the two things it is for.** The calendar and the projects, with the activity trail closed behind a heading you can open when you are looking for one particular call. Past five projects the list scrolls inside its own box rather than pushing everything below it off the page, and the report itself scrolls too — with more than a few projects the list used to run off the bottom edge with no way to reach the rest of it.
 - **Projects carry a mark.** A coloured square with the project's initial, in the same shape a session's row uses. The colour comes from the name, so a project keeps it across periods and you learn it — and it is drawn from a set that avoids the colours which already mean working, waiting and needs-you.
 
 ### Sessions Clyde reads right

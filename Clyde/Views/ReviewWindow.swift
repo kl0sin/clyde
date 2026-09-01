@@ -43,6 +43,12 @@ struct ReviewView: View {
     /// cannot quietly change what the headline numbers mean.
     @State private var projectFilter: String?
 
+    /// The trail is closed until asked for. It is a log — useful when
+    /// you are looking for one particular call, and noise the rest of
+    /// the time, which is most of the time. Closed, this window is the
+    /// two things it is actually for: the calendar and the projects.
+    @State private var showsActivity = false
+
     var body: some View {
         // The window scrolls. It used to be a plain stack in a window
         // with a minimum height, so a machine with more than a handful
@@ -112,36 +118,14 @@ struct ReviewView: View {
             if projects.isEmpty {
                 emptyState
             } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(projects.enumerated()), id: \.element.project) { index, row in
-                        if index > 0 {
-                            Rectangle()
-                                .fill(Rule.band)
-                                .frame(height: Rule.thickness)
-                        }
-                        Button {
-                            projectFilter = (projectFilter == row.project) ? nil : row.project
-                        } label: {
-                            projectRow(row)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                        .fill(Color(white: 0.12))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                        .stroke(Color(white: 0.18), lineWidth: 1)
-                )
+                projectList
             }
 
             activitySection
         }
         .padding(Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task(id: TaskKey(period: period, project: projectFilter)) {
+        .task(id: TaskKey(period: period, project: projectFilter, showsActivity: showsActivity)) {
             // Reload once immediately, then keep reloading on the same
             // 30s cadence as the ingest tick, for as long as the window
             // stays visible — otherwise a window left open shows
@@ -423,15 +407,68 @@ struct ReviewView: View {
         .accessibilityAddTraits(isFiltered ? [.isButton, .isSelected] : .isButton)
     }
 
+    /// Every project, in a box that stops growing.
+    ///
+    /// Past about five the list would push everything below it off the
+    /// page; a machine with twenty repositories would have made this
+    /// window a list of projects with a calendar above it.
+    private var projectList: some View {
+        let rows = VStack(spacing: 0) {
+            ForEach(Array(projects.enumerated()), id: \.element.project) { index, row in
+                if index > 0 {
+                    Rectangle()
+                        .fill(Rule.band)
+                        .frame(height: Rule.thickness)
+                }
+                Button {
+                    projectFilter = (projectFilter == row.project) ? nil : row.project
+                } label: {
+                    projectRow(row)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+
+        return Group {
+            if projects.count > Self.projectsBeforeScrolling {
+                ScrollView { rows }
+                    .frame(maxHeight: Self.projectListMaxHeight)
+            } else {
+                rows
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                .fill(Color(white: 0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                .stroke(Color(white: 0.18), lineWidth: 1)
+        )
+    }
+
     // MARK: - Activity trail
 
     private var activitySection: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(spacing: Spacing.xs) {
-                Text("ACTIVITY")
-                    .font(.system(size: 10, weight: .semibold))
-                    .kerning(0.6)
+                Button {
+                    showsActivity.toggle()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8, weight: .bold))
+                            .rotationEffect(.degrees(showsActivity ? 90 : 0))
+                        Text("ACTIVITY")
+                            .font(.system(size: 10, weight: .semibold))
+                            .kerning(0.6)
+                    }
                     .foregroundStyle(TextColor.tertiary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(showsActivity ? "Hide the activity trail" : "Show the activity trail")
+                .accessibilityAddTraits(showsActivity ? [.isButton, .isSelected] : .isButton)
 
                 if let projectFilter {
                     Button {
@@ -455,31 +492,31 @@ struct ReviewView: View {
                 Spacer(minLength: 0)
             }
 
-            if trail.isEmpty {
-                Text("No tool calls recorded for this period.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(TextColor.disabled)
-                    .padding(.vertical, Spacing.xs)
-            } else {
-                // No scroll view of its own. It had one, capped at 180
-                // points, inside a window that now scrolls — so the box
-                // ended at an arbitrary line and the page behind it
-                // could not be reached past it. The trail is part of the
-                // page now, and the page scrolls.
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(trail.enumerated()), id: \.offset) { _, entry in
-                        trailRow(entry)
+            if showsActivity {
+                if trail.isEmpty {
+                    Text("No tool calls recorded for this period.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(TextColor.disabled)
+                        .padding(.vertical, Spacing.xs)
+                } else {
+                    // Part of the page: it had a scroll view of its own
+                    // inside a window that scrolls, which is a box that
+                    // ends at an arbitrary line.
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(trail.enumerated()), id: \.offset) { _, entry in
+                            trailRow(entry)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                            .fill(Color(white: 0.12))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                            .stroke(Color(white: 0.18), lineWidth: 1)
+                    )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                        .fill(Color(white: 0.12))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                        .stroke(Color(white: 0.18), lineWidth: 1)
-                )
             }
         }
     }
@@ -554,6 +591,9 @@ struct ReviewView: View {
     private struct TaskKey: Equatable {
         let period: Period
         let project: String?
+        /// Part of the key so the trail is fetched when it is opened
+        /// and not before: closed, it is a query nobody reads.
+        let showsActivity: Bool
     }
 
     static let heatmapWeeks = 26
@@ -563,6 +603,12 @@ struct ReviewView: View {
     /// inside a scroll. Inline on a page that scrolls, the number has
     /// to be one a person would actually read to the end of.
     static let trailLimit = 60
+
+    /// How many project rows fit before the box starts scrolling, and
+    /// how tall it is then. Five rows is enough to hold a working week's
+    /// worth of repositories without the box taking the window.
+    static let projectsBeforeScrolling = 5
+    static let projectListMaxHeight: CGFloat = 5 * 53
 
     /// Names the branches when there are one or two, counts them past
     /// that: three names of a length nobody controls will not fit.

@@ -227,10 +227,18 @@ struct ActivityHeatmap: View {
     /// then flush with the edge instead. On the last column it used to
     /// run past the window and get cut in half — which is where the
     /// figures are.
+    /// How close the card may come to an edge before it stops.
+    static let tooltipEdgeInset: CGFloat = 8
+
     static func tooltipX(centredOn x: CGFloat, gridWidth: CGFloat) -> CGFloat {
         let ideal = x - tooltipWidth / 2
-        let last = max(0, gridWidth - tooltipWidth)
-        return min(max(0, ideal), last)
+        let first = tooltipEdgeInset
+        let last = gridWidth - tooltipWidth - tooltipEdgeInset
+        // A grid narrower than the card plus its margins cannot satisfy
+        // both edges; it picks the leading one rather than going
+        // negative.
+        guard last > first else { return max(0, min(ideal, first)) }
+        return min(max(first, ideal), last)
     }
 
     static func position(of day: Date, in columns: [[Date]],

@@ -897,7 +897,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // own minimum, so lowering that minimum — which is what let the
         // content scroll instead of being clipped — silently shrank the
         // window it opened at.
-        window.setContentSize(NSSize(width: 620, height: 860))
+        window.setContentSize(NSSize(width: 620, height: 720))
         window.center()
 
         // Unlike the settings window, the review window doesn't need to

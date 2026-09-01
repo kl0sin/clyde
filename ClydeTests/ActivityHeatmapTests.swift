@@ -138,15 +138,17 @@ final class HeatmapTooltipClampTests: XCTestCase {
         XCTAssertEqual(x, 260 - width / 2, accuracy: 0.01)
     }
 
-    func testItStopsAtTheRightEdge() {
+    /// Stops short of the edge rather than against it: flush, it read
+    /// as part of the window's frame.
+    func testItStopsShortOfTheRightEdge() {
         let x = ActivityHeatmap.tooltipX(centredOn: 515, gridWidth: gridWidth)
 
-        XCTAssertEqual(x + width, gridWidth, accuracy: 0.01)
-        XCTAssertLessThanOrEqual(x + width, gridWidth)
+        XCTAssertEqual(gridWidth - (x + width), ActivityHeatmap.tooltipEdgeInset, accuracy: 0.01)
     }
 
-    func testItStopsAtTheLeftEdge() {
-        XCTAssertEqual(ActivityHeatmap.tooltipX(centredOn: 4, gridWidth: gridWidth), 0)
+    func testItStopsShortOfTheLeftEdge() {
+        XCTAssertEqual(ActivityHeatmap.tooltipX(centredOn: 4, gridWidth: gridWidth),
+                       ActivityHeatmap.tooltipEdgeInset)
     }
 
     /// A grid narrower than the card cannot satisfy both edges; it must
