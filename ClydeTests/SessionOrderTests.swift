@@ -100,8 +100,12 @@ final class SessionDisambiguationTests: XCTestCase {
 @MainActor
 final class AttentionBadgeMarkTests: XCTestCase {
 
-    func testTheMarkFitsInsideTheBadge() {
-        XCTAssertLessThan(AttentionBadgeMark.height, 12)
+    /// Air on every side, not a mark packed into its disc.
+    func testTheMarkHasRoomInsideTheBadge() {
+        let margin = (AttentionBadgeMark.badge - AttentionBadgeMark.height) / 2
+
+        XCTAssertGreaterThanOrEqual(margin, 3)
+        XCTAssertEqual(margin, margin.rounded(), "the mark centres on a half point")
     }
 
     /// Whole points, and an even total, so the mark centres on the
@@ -113,8 +117,7 @@ final class AttentionBadgeMarkTests: XCTestCase {
             XCTAssertEqual(value, value.rounded(), "\(value) is not a whole point")
         }
         XCTAssertEqual(AttentionBadgeMark.height.truncatingRemainder(dividingBy: 2), 0)
-        XCTAssertEqual((12 - AttentionBadgeMark.height) / 2,
-                       ((12 - AttentionBadgeMark.height) / 2).rounded())
+        XCTAssertEqual(AttentionBadgeMark.badge.truncatingRemainder(dividingBy: 2), 0)
     }
 
     /// It has to read as an exclamation mark: a tall bar over a small

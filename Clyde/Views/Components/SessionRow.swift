@@ -940,9 +940,13 @@ struct SessionStatusIndicator: View {
                 if session.needsAttention {
                     Circle()
                         .fill(SessionTheme.attentionColor)
-                        .frame(width: 12, height: 12)
+                        .frame(width: AttentionBadgeMark.badge,
+                               height: AttentionBadgeMark.badge)
                         .overlay(AttentionBadgeMark())
-                        .offset(x: 13, y: -13)
+                        // Offset so the disc's outer edge stays where a
+                        // smaller badge put it: it grew inward, into the
+                        // slot, rather than further out of the row.
+                        .offset(x: 12, y: -12)
                         .scaleEffect(PixelStatusIndicator.attentionScale(at: pulse))
                 }
             } else {
@@ -972,8 +976,12 @@ struct SessionStatusIndicator: View {
 /// made of the same pixels as everything else in this window.
 struct AttentionBadgeMark: View {
 
+    /// The disc the mark sits in. 14 rather than 12: at 12 the mark had
+    /// two points of air above and below and read as packed in.
+    static let badge: CGFloat = 14
+
     /// Whole points, and an even total, so the mark centres on the
-    /// pixel grid inside a 12-point circle rather than on a half point.
+    /// pixel grid inside the disc rather than on a half point.
     static let barWidth: CGFloat = 2
     static let barHeight: CGFloat = 5
     static let gap: CGFloat = 1

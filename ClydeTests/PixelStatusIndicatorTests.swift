@@ -276,13 +276,21 @@ final class PixelStatusIndicatorTests: XCTestCase {
         let compact = PixelStatusIndicator.metrics(slot: 24)
         let full = PixelStatusIndicator.metrics(slot: 34)
 
-        // Four 2x2 blocks in both: the gap between blocks is a whole
-        // cell, the gap inside one is the smallest gap there is.
+        // Four 2x2 blocks in both: the gap between blocks is a cell
+        // wide, trimmed to an even number of points so the mark can
+        // centre exactly; the gap inside a block is the smallest gap
+        // there is.
         for metrics in [compact, full] {
-            XCTAssertEqual(metrics.blockGap, metrics.cell)
+            XCTAssertGreaterThan(metrics.blockGap, metrics.innerGap)
+            XCTAssertLessThanOrEqual(metrics.blockGap, metrics.cell)
+            XCTAssertGreaterThanOrEqual(metrics.blockGap, metrics.cell - 1)
             XCTAssertEqual(metrics.innerGap, 1)
         }
-        XCTAssertEqual(compact.span / 24, full.span / 34, accuracy: 0.0001)
+        // The mark fills the same share of its slot in both. Not to the
+        // fourth decimal — whole points cannot land that precisely at
+        // two sizes — but closely enough that neither reads as the
+        // bigger mark.
+        XCTAssertEqual(compact.span / 24, full.span / 34, accuracy: 0.03)
     }
 
     /// The defect this shape replaced: fractional cells and gaps, which
@@ -327,13 +335,25 @@ final class PixelStatusIndicatorTests: XCTestCase {
                              "a hairline disappears on a non-retina display")
     }
 
+    /// Exactly centred, not nearly. The first version floored the
+    /// margin and left the full panel's grid half a point to one side,
+    /// on the theory that half a point is invisible. It was not.
+    func testTheMarkIsExactlyCentred() {
+        for slot in [CGFloat(24), 34] {
+            let leftover = slot - PixelStatusIndicator.metrics(slot: slot).span
+            XCTAssertEqual(leftover.truncatingRemainder(dividingBy: 2), 0,
+                           "slot \(slot) cannot have equal margins")
+            XCTAssertEqual(PixelStatusIndicator.origin(slot: slot), leftover / 2)
+        }
+    }
+
     /// And it leaves room to breathe inside the slot rather than
     /// filling it corner to corner.
     func testTheMarkSitsInsideItsSlot() {
         for slot in [CGFloat(24), 34] {
             let span = PixelStatusIndicator.metrics(slot: slot).span
-            XCTAssertGreaterThan(span, slot * 0.4)
-            XCTAssertLessThan(span, slot * 0.55)
+            XCTAssertGreaterThan(span, slot * 0.55)
+            XCTAssertLessThan(span, slot * 0.72)
         }
     }
 

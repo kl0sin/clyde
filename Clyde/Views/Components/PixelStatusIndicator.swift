@@ -181,16 +181,24 @@ struct PixelStatusIndicator: View {
     /// 24 points and the full panel's is 34; both round to whole points
     /// from the same rule, so the structure is identical and only the
     /// scale changes.
+    ///
+    /// The block gap is a cell wide, trimmed to an even number of
+    /// points. That trim is what makes the mark centre exactly: both
+    /// slots are an even number of points, so a mark of even width
+    /// leaves equal whole-point margins either side. The first version
+    /// rounded the margin down instead and left the full panel's grid
+    /// half a point off centre, on the theory that half a point is
+    /// invisible. It was not.
     static func metrics(slot: CGFloat) -> Metrics {
-        let cell = max(2, (slot * 0.088).rounded())
-        return Metrics(cell: cell, innerGap: 1, blockGap: cell)
+        let cell = max(2, (slot * 0.125).rounded())
+        let blockGap = cell.truncatingRemainder(dividingBy: 2) == 0 ? cell : cell - 1
+        return Metrics(cell: cell, innerGap: 1, blockGap: blockGap)
     }
 
-    /// Where the mark sits inside its slot. Floored rather than centred
-    /// exactly: half a point of asymmetry is invisible, half a point of
-    /// blur is not.
+    /// Where the mark sits inside its slot — exactly half of what is
+    /// left over, and a whole number of points by construction.
     static func origin(slot: CGFloat) -> CGFloat {
-        ((slot - metrics(slot: slot).span) / 2).rounded(.down)
+        (slot - metrics(slot: slot).span) / 2
     }
 
     // MARK: - The wave
