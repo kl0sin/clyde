@@ -28,9 +28,26 @@ struct ActivityHeatmap: View {
     /// the whole thing feel dead. This is drawn by us and appears at once.
     @State private var hovered: Date?
 
-    private static let cell: CGFloat = 11
+    /// The smallest a cell may be, and the largest. Between them the
+    /// grid takes whatever width it is given: at a fixed 11 points it
+    /// stopped a third of the way across the window and left the rest
+    /// of the row empty.
+    private static let minCell: CGFloat = 11
+    private static let maxCell: CGFloat = 20
     private static let gap: CGFloat = 3
     private static let gutter: CGFloat = 26
+
+    /// Width the grid has been given, measured once and kept.
+    @State private var availableWidth: CGFloat = 0
+
+    /// Whole points: a cell is a small square with a 2.5-point radius,
+    /// and a fractional one blurs its own corners.
+    private var cell: CGFloat {
+        guard availableWidth > 0 else { return Self.minCell }
+        let columns = CGFloat(weeks)
+        let free = availableWidth - Self.gutter - Self.gap * columns
+        return min(Self.maxCell, max(Self.minCell, (free / columns).rounded(.down)))
+    }
 
     /// Sequential ramp, validated for monotonic lightness against the
     /// window surface (#17171C): luminance rises 0.013 → 0.027 → 0.062 →
@@ -53,12 +70,25 @@ struct ActivityHeatmap: View {
     }
 
     var body: some View {
+        content
+            // Measured rather than assumed: the window is resizable, so
+            // the grid takes the width it is given on the day.
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { availableWidth = proxy.size.width }
+                        .onChange(of: proxy.size.width) { availableWidth = $0 }
+                }
+            )
+    }
+
+    private var content: some View {
         let grid = Self.days(endingOn: Date(), weeks: weeks)
         let columns = stride(from: 0, to: grid.count, by: 7).map { Array(grid[$0..<min($0 + 7, grid.count)]) }
         let lookup = byDay
         let peak = maxSeconds
 
-        VStack(alignment: .leading, spacing: Spacing.xxs) {
+        return VStack(alignment: .leading, spacing: Spacing.xxs) {
             // Month labels sit above the column where that month starts,
             // so a glance can place "three weeks ago" on the calendar.
             let monthLabels = Self.monthLabels(for: columns)
@@ -72,7 +102,7 @@ struct ActivityHeatmap: View {
                         .font(.system(size: 8, weight: .medium))
                         .foregroundStyle(TextColor.tertiary)
                         .fixedSize()
-                        .frame(width: Self.cell, alignment: .leading)
+                        .frame(width: cell, alignment: .leading)
                 }
             }
             .frame(height: 10, alignment: .bottom)
@@ -86,7 +116,7 @@ struct ActivityHeatmap: View {
                         Text(Self.weekdayLabel(row: row))
                             .font(.system(size: 8))
                             .foregroundStyle(TextColor.tertiary)
-                            .frame(width: Self.gutter, height: Self.cell, alignment: .trailing)
+                            .frame(width: Self.gutter, height: cell, alignment: .trailing)
                     }
                 }
                 .accessibilityHidden(true)
@@ -102,7 +132,7 @@ struct ActivityHeatmap: View {
                         }
                     }
 
-                    if let hovered, let position = Self.position(of: hovered, in: columns) {
+                    if let hovered, let position = Self.position(of: hovered, in: columns, cell: cell) {
                         tooltip(for: hovered, activity: lookup[hovered])
                             .offset(x: position.x - Self.tooltipWidth / 2,
                                     y: position.y - Self.tooltipHeight - Self.gap)
@@ -127,7 +157,7 @@ struct ActivityHeatmap: View {
 
         return RoundedRectangle(cornerRadius: 2.5, style: .continuous)
             .fill(isFuture ? Color(white: 0.10) : Self.ramp[level])
-            .frame(width: Self.cell, height: Self.cell)
+            .frame(width: cell, height: cell)
             .opacity(isFuture ? 0.5 : 1)
             // Today is outlined rather than recoloured: the fill has to keep
             // meaning intensity, or the scale stops being a scale.
@@ -160,7 +190,7 @@ struct ActivityHeatmap: View {
     /// Computed from the layout constants rather than measured: the grid is
     /// a fixed lattice, so geometry readers per cell would be 180 of them
     /// for a number we already know.
-    static func position(of day: Date, in columns: [[Date]]) -> CGPoint? {
+    static func position(of day: Date, in columns: [[Date]], cell: CGFloat) -> CGPoint? {
         for (column, week) in columns.enumerated() {
             if let row = week.firstIndex(of: day) {
                 return CGPoint(

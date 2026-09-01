@@ -134,13 +134,28 @@ final class HistoryStats {
             sqlite3_finalize(stmt)
         }
 
-        let projects = Set(worked.keys).union(turnsByProject.keys)
-        let result = projects.map { project -> ProjectRow in
-            ProjectRow(
-                project: project,
-                workingSeconds: worked[project] ?? 0,
-                turns: turnsByProject[project] ?? 0,
-                topTool: topTool(project: project, from: from, to: to)
+        // Fold worktrees into the repository they belong to. Rows
+        // recorded before this became the stored shape still carry the
+        // worktree's own path, so the merge happens on read as well as
+        // on write — otherwise a repo would stay split in two for as
+        // long as the history holds.
+        let rawPaths = Set(worked.keys).union(turnsByProject.keys)
+        var byRoot: [String: [String]] = [:]
+        for path in rawPaths {
+            byRoot[Session.projectRoot(from: path), default: []].append(path)
+        }
+
+        let result = byRoot.map { root, paths -> ProjectRow in
+            let ranked = paths.sorted { (worked[$0] ?? 0) > (worked[$1] ?? 0) }
+            let worktrees = ranked.compactMap { Session.worktreeName(from: $0) }
+            return ProjectRow(
+                project: root,
+                workingSeconds: paths.reduce(0) { $0 + (worked[$1] ?? 0) },
+                turns: paths.reduce(0) { $0 + (turnsByProject[$1] ?? 0) },
+                // The busiest path's own top tool: averaging tool counts
+                // across branches would invent a figure no branch had.
+                topTool: ranked.first.flatMap { topTool(project: $0, from: from, to: to) },
+                worktrees: worktrees
             )
         }
         return result.sorted { a, b in
@@ -217,7 +232,10 @@ final class HistoryStats {
     /// already count them, and interleaving them here buries the work.
     func trail(from: Date, to: Date, project: String? = nil, limit: Int = 200) -> [HistoryEvent] {
         var result: [HistoryEvent] = []
-        let filter = project == nil ? "" : "AND project = ?3 "
+        // A worktree's rows are the project's rows: the stored path is
+        // the repository now, but rows written before that still carry
+        // the worktree's path underneath it.
+        let filter = project == nil ? "" : "AND (project = ?3 OR project LIKE ?3 || '/.claude/worktrees/%') "
         let sql = """
             SELECT ts, event, session_id, project, tool, summary
             FROM events

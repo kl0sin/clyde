@@ -206,12 +206,30 @@ struct Session: Identifiable, Equatable {
     /// the same word twice while the project itself disappeared from
     /// the row.
     static func projectFolder(from path: String) -> String {
+        (projectRoot(from: path) as NSString).lastPathComponent
+    }
+
+    /// The repository a path belongs to, with any worktree stripped.
+    ///
+    /// Claude Code puts a worktree under `<repo>/.claude/worktrees/<name>`
+    /// and moves the session there, so the raw path makes a worktree look
+    /// like a project of its own — a second entry in the review window
+    /// for what is the same work on a different branch.
+    static func projectRoot(from path: String) -> String {
         let marker = "/.claude/worktrees/"
         if let range = path.range(of: marker) {
-            let repoRoot = String(path[path.startIndex..<range.lowerBound])
-            return (repoRoot as NSString).lastPathComponent
+            return String(path[path.startIndex..<range.lowerBound])
         }
-        return (path as NSString).lastPathComponent
+        return path
+    }
+
+    /// The worktree a path is in, if it is in one.
+    static func worktreeName(from path: String) -> String? {
+        let marker = "/.claude/worktrees/"
+        guard let range = path.range(of: marker) else { return nil }
+        let tail = path[range.upperBound...]
+        let name = tail.split(separator: "/").first.map(String.init)
+        return (name?.isEmpty ?? true) ? nil : name
     }
 
     var displayName: String {

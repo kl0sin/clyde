@@ -15,7 +15,9 @@ enum HistorySpool {
             ts: Date(timeIntervalSince1970: TimeInterval(ts)),
             event: event,
             sessionID: sessionID,
-            project: (json["cwd"] as? String) ?? "",
+            // The repository, not the worktree inside it: two branches
+            // of one repo are one project that happened on two branches.
+            project: Session.projectRoot(from: (json["cwd"] as? String) ?? ""),
             tool: json["tool"] as? String,
             summary: json["summary"] as? String,
             durationMs: json["dur"] as? Int

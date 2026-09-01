@@ -19,6 +19,13 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 - **A working session is drawn rather than dotted.** The coloured dot said which state a session was in and nothing about whether anything was happening. In its place is a grid of pixels with light crossing it on the diagonal — moving while a session works, holding still and filled when one needs an answer, and giving way to the session number when it is quiet. The state survives the colour being taken away, which a dot never managed, and it is the same mark at both sizes in both windows.
 - **Both windows are one design.** They had drifted into two: cards in one and rows in the other, different orders, different marks, different surfaces. Sessions are rows in both now, drawn on the same surface, ordered by the same rule.
 
+### Session review
+
+- **A branch is not a project.** Working in a git worktree put a second entry in the projects list — the same repository, listed again under the branch's directory, with the hours split between them. Worktrees now fold into the repository they came from, and the row names the branches the time was spent on. History recorded before this is folded on the way out, so the split does not persist for as long as the history does.
+- **The calendar uses the width it has.** Its cells were a fixed size, so the grid stopped a third of the way across the window and left the rest of the row empty. It now grows to fill whatever width the window is given.
+- **The report scrolls.** With more than a few projects the list ran off the bottom edge of the window and there was no way to reach the rest of it.
+- **Projects carry a mark.** A coloured square with the project's initial, in the same shape a session's row uses. The colour comes from the name, so a project keeps it across periods and you learn it — and it is drawn from a set that avoids the colours which already mean working, waiting and needs-you.
+
 ### Sessions Clyde reads right
 
 - **An interrupted session stops showing as working.** Pressing Ctrl+C while Claude is writing emits no hook event at all — it is indistinguishable from finishing — so the session stayed "working" until the next prompt, or indefinitely if you walked away. Clyde now stops believing a busy marker that nothing has touched for fifteen minutes while no tool is running and no agent is working. It goes quiet without claiming the session finished, because it did not.

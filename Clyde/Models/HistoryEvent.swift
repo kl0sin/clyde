@@ -48,10 +48,16 @@ struct PeriodTotals: Equatable {
 }
 
 struct ProjectRow: Equatable {
+    /// The repository's path, with any worktree stripped — so a branch
+    /// checked out in a worktree is this project on a branch, not a
+    /// project of its own.
     let project: String
     let workingSeconds: Int
     let turns: Int
     let topTool: String?
+    /// Worktrees this row's time was spent in, most-used first. Empty
+    /// when the work happened in the repository itself.
+    var worktrees: [String] = []
 }
 
 /// One local-time day's worth of activity, for the calendar grid.

@@ -82,22 +82,24 @@ final class ActivityHeatmapTests: XCTestCase {
         }
     }
 
-    /// The hover card is anchored from the layout constants rather than
-    /// measured per cell, so the arithmetic has to be right: a day in the
-    /// first column and top row sits at the grid origin plus the gutter,
-    /// and each further column and row steps by exactly one cell + gap.
+    /// The hover card is anchored from the layout arithmetic rather than
+    /// measured per cell, so it has to be right at whatever size the
+    /// grid ended up: each further column and row steps by exactly one
+    /// cell plus one gap.
     func testTooltipAnchorsToTheHoveredCell() {
         let days = ActivityHeatmap.days(endingOn: Date(), weeks: 4)
         let columns = stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
 
-        let first = ActivityHeatmap.position(of: columns[0][0], in: columns)
-        let nextColumn = ActivityHeatmap.position(of: columns[1][0], in: columns)
-        let nextRow = ActivityHeatmap.position(of: columns[0][1], in: columns)
+        for cell in [CGFloat(11), 16, 20] {
+            let first = ActivityHeatmap.position(of: columns[0][0], in: columns, cell: cell)
+            let nextColumn = ActivityHeatmap.position(of: columns[1][0], in: columns, cell: cell)
+            let nextRow = ActivityHeatmap.position(of: columns[0][1], in: columns, cell: cell)
 
-        XCTAssertNotNil(first)
-        XCTAssertEqual((nextColumn?.x ?? 0) - (first?.x ?? 0), 14, accuracy: 0.01)
-        XCTAssertEqual((nextRow?.y ?? 0) - (first?.y ?? 0), 14, accuracy: 0.01)
-        XCTAssertEqual(nextRow?.x, first?.x, "same column, same x")
+            XCTAssertNotNil(first)
+            XCTAssertEqual((nextColumn?.x ?? 0) - (first?.x ?? 0), cell + 3, accuracy: 0.01)
+            XCTAssertEqual((nextRow?.y ?? 0) - (first?.y ?? 0), cell + 3, accuracy: 0.01)
+            XCTAssertEqual(nextRow?.x, first?.x, "same column, same x")
+        }
     }
 
     /// A day outside the grid has no anchor, and asking for one must not
@@ -107,7 +109,7 @@ final class ActivityHeatmapTests: XCTestCase {
         let columns = stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
         let longAgo = Calendar.current.date(byAdding: .year, value: -1, to: Date())!
 
-        XCTAssertNil(ActivityHeatmap.position(of: Calendar.current.startOfDay(for: longAgo), in: columns))
+        XCTAssertNil(ActivityHeatmap.position(of: Calendar.current.startOfDay(for: longAgo), in: columns, cell: 11))
     }
 
     /// Today has to be in the grid — a calendar that stops yesterday looks

@@ -44,6 +44,21 @@ struct ReviewView: View {
     @State private var projectFilter: String?
 
     var body: some View {
+        // The window scrolls. It used to be a plain stack in a window
+        // with a minimum height, so a machine with more than a handful
+        // of projects had the list cut off at the bottom edge with no
+        // way to reach the rest.
+        ScrollView {
+            content
+        }
+        // A floor, not a size: the window sets what it opens at. Low
+        // enough that someone can pull it down to a corner of the screen
+        // and still scroll the whole report.
+        .frame(minWidth: 560, minHeight: 420)
+        .background(Color(nsColor: NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)))
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             header
 
@@ -123,12 +138,9 @@ struct ReviewView: View {
             }
 
             activitySection
-
-            Spacer(minLength: 0)
         }
         .padding(Spacing.lg)
-        .frame(minWidth: 560, minHeight: 760)
-        .background(Color(nsColor: NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)))
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: TaskKey(period: period, project: projectFilter)) {
             // Reload once immediately, then keep reloading on the same
             // 30s cadence as the ingest tick, for as long as the window
@@ -363,14 +375,30 @@ struct ReviewView: View {
     }
 
     private func projectRowBody(_ row: ProjectRow, isFiltered: Bool) -> some View {
-        HStack(spacing: Spacing.sm) {
+        let name = (row.project as NSString).lastPathComponent
+        return HStack(spacing: Spacing.sm) {
+            ProjectMark(name: name)
+
             VStack(alignment: .leading, spacing: 2) {
-                Text((row.project as NSString).lastPathComponent)
+                Text(name)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(TextColor.primary)
-                Text(row.topTool ?? "—")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(TextColor.tertiary)
+                HStack(spacing: 6) {
+                    Text(row.topTool ?? "—")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(TextColor.tertiary)
+                    // Branches are part of the project, not projects of
+                    // their own. Naming them here is what tells you the
+                    // hours were spread across two worktrees rather than
+                    // spent in one place.
+                    if !row.worktrees.isEmpty {
+                        Text(Self.worktreeLabel(row.worktrees))
+                            .font(.system(size: 10))
+                            .foregroundStyle(TextColor.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
             }
 
             Spacer(minLength: Spacing.xs)
@@ -527,6 +555,16 @@ struct ReviewView: View {
     }
 
     static let heatmapWeeks = 26
+
+    /// Names the branches when there are one or two, counts them past
+    /// that: three names of a length nobody controls will not fit.
+    static func worktreeLabel(_ worktrees: [String]) -> String {
+        switch worktrees.count {
+        case 0: return ""
+        case 1, 2: return "· " + worktrees.joined(separator: ", ")
+        default: return "· \(worktrees.count) worktrees"
+        }
+    }
 
     static func duration(_ seconds: Int) -> String {
         if seconds < 60 { return "\(seconds)s" }

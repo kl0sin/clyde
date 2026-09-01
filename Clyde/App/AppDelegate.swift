@@ -892,6 +892,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titleVisibility = .hidden
         window.backgroundColor = NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)
         window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
+        // The window opens at a size worth reading and can be pulled
+        // smaller from there. It used to take its height from the view's
+        // own minimum, so lowering that minimum — which is what let the
+        // content scroll instead of being clipped — silently shrank the
+        // window it opened at.
+        window.setContentSize(NSSize(width: 620, height: 860))
         window.center()
 
         // Unlike the settings window, the review window doesn't need to

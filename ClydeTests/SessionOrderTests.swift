@@ -212,3 +212,58 @@ final class RowInsetTests: XCTestCase {
         XCTAssertLessThanOrEqual(SessionSurface.separatorHeight, 0.5)
     }
 }
+
+/// Worktrees belong to the repository they were cut from. Claude Code
+/// puts one under `<repo>/.claude/worktrees/<name>` and moves the
+/// session there, which used to make a branch look like a project of
+/// its own in the review window.
+@MainActor
+final class ProjectRootTests: XCTestCase {
+
+    func testAPlainPathIsItsOwnRoot() {
+        XCTAssertEqual(Session.projectRoot(from: "/Users/me/_Projects/clyde"),
+                       "/Users/me/_Projects/clyde")
+        XCTAssertNil(Session.worktreeName(from: "/Users/me/_Projects/clyde"))
+    }
+
+    func testAWorktreeResolvesToItsRepository() {
+        let path = "/Users/me/_Projects/clyde/.claude/worktrees/panel-size"
+
+        XCTAssertEqual(Session.projectRoot(from: path), "/Users/me/_Projects/clyde")
+        XCTAssertEqual(Session.worktreeName(from: path), "panel-size")
+        XCTAssertEqual(Session.projectFolder(from: path), "clyde")
+    }
+
+    func testAPathInsideAWorktreeStillResolves() {
+        let path = "/Users/me/_Projects/clyde/.claude/worktrees/panel-size/Clyde/Views"
+
+        XCTAssertEqual(Session.projectRoot(from: path), "/Users/me/_Projects/clyde")
+        XCTAssertEqual(Session.worktreeName(from: path), "panel-size")
+    }
+
+    /// One or two branches are named; past that they are counted, since
+    /// three names of a length nobody controls will not fit on the row.
+    func testWorktreesAreNamedThenCounted() {
+        XCTAssertEqual(ReviewView.worktreeLabel([]), "")
+        XCTAssertEqual(ReviewView.worktreeLabel(["fix-a"]), "· fix-a")
+        XCTAssertEqual(ReviewView.worktreeLabel(["fix-a", "fix-b"]), "· fix-a, fix-b")
+        XCTAssertEqual(ReviewView.worktreeLabel(["a", "b", "c"]), "· 3 worktrees")
+    }
+
+    /// A project's colour has to survive a restart, and Swift seeds
+    /// string hashing per process — so `hashValue` would give a project
+    /// a new colour every launch.
+    func testAProjectKeepsItsColourAcrossLaunches() {
+        // Pinned rather than merely repeated: calling it twice in one
+        // process would pass with `hashValue` too, which is the thing
+        // this rules out.
+        XCTAssertEqual(ProjectMark.colourIndex(for: "clyde"), 10_879_409 % ProjectMark.palette.count)
+        XCTAssertEqual(ProjectMark.colourIndex(for: "tally-up"), 12_177_052 % ProjectMark.palette.count)
+    }
+
+    func testTheMarkTakesTheFirstLetterOrNumber() {
+        XCTAssertEqual(ProjectMark.initial(for: "tally-up"), "T")
+        XCTAssertEqual(ProjectMark.initial(for: "_scratch"), "S")
+        XCTAssertEqual(ProjectMark.initial(for: "42-things"), "4")
+    }
+}
