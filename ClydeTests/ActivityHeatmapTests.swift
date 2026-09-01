@@ -96,6 +96,10 @@ final class ActivityHeatmapTests: XCTestCase {
             let nextRow = ActivityHeatmap.position(of: columns[0][1], in: columns, cell: cell, gap: 3)
 
             XCTAssertNotNil(first)
+            // The first cell sits at the origin of the grid's own
+            // space, not offset by the weekday gutter beside it.
+            XCTAssertEqual(first?.x ?? 0, cell / 2, accuracy: 0.01)
+            XCTAssertEqual(first?.y ?? 0, 0, accuracy: 0.01)
             XCTAssertEqual((nextColumn?.x ?? 0) - (first?.x ?? 0), cell + 3, accuracy: 0.01)
             XCTAssertEqual((nextRow?.y ?? 0) - (first?.y ?? 0), cell + 3, accuracy: 0.01)
             XCTAssertEqual(nextRow?.x, first?.x, "same column, same x")

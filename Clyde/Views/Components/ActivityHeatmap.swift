@@ -93,6 +93,11 @@ struct ActivityHeatmap: View {
 
     var body: some View {
         content
+            // Full width first, then measure. The measurement used to
+            // be of the view's own size — which is computed from the
+            // measurement, so the grid grew itself a few points past
+            // the space it had and drew over the window's margin.
+            .frame(maxWidth: .infinity, alignment: .leading)
             // Measured rather than assumed: the window is resizable, so
             // the grid takes the width it is given on the day.
             .background(
@@ -157,7 +162,7 @@ struct ActivityHeatmap: View {
                     if let hovered, let position = Self.position(of: hovered, in: columns, cell: cell, gap: gap) {
                         tooltip(for: hovered, activity: lookup[hovered])
                             .offset(x: Self.tooltipX(centredOn: position.x,
-                                                     gridWidth: gridWidth(columns: columns.count)),
+                                                     gridWidth: visibleWidth(of: columns)),
                                     y: position.y - Self.tooltipHeight - gap)
                             .allowsHitTesting(false)
                     }
@@ -216,9 +221,27 @@ struct ActivityHeatmap: View {
     /// Computed from the layout constants rather than measured: the grid is
     /// a fixed lattice, so geometry readers per cell would be 180 of them
     /// for a number we already know.
-    /// How wide the whole grid is, gutter included.
-    private func gridWidth(columns: Int) -> CGFloat {
-        Self.gutter + gap + CGFloat(columns) * (cell + gap) - gap
+    /// How wide the cells are, from the first column's leading edge to
+    /// the last one's trailing edge.
+    ///
+    /// The weekday gutter is deliberately not in it: the card is drawn
+    /// inside the grid's own stack, which starts after that column, so
+    /// a width that counted the gutter let the card run about thirty
+    /// points past the right-hand edge — where it looked flush against
+    /// the window no matter what the margin was set to.
+    /// How wide the grid looks, which is not how wide it is.
+    ///
+    /// The last column is the current week, and the days of it that
+    /// have not happened yet are drawn at half opacity — near enough to
+    /// the background to read as nothing. Clamping the hover card to
+    /// the layout's right edge therefore let it hang past every cell a
+    /// person can see, which is what "stuck to the edge" was: the card
+    /// stopping eight points short of a column that is not there.
+    private func visibleWidth(of columns: [[Date]]) -> CGFloat {
+        let today = Calendar.current.startOfDay(for: Date())
+        let lastReal = columns.lastIndex { week in week.contains { $0 <= today } }
+        let count = (lastReal ?? columns.count - 1) + 1
+        return CGFloat(count) * (cell + gap) - gap
     }
 
     /// Where the hover card starts, kept inside the grid.
@@ -228,7 +251,11 @@ struct ActivityHeatmap: View {
     /// run past the window and get cut in half — which is where the
     /// figures are.
     /// How close the card may come to an edge before it stops.
-    static let tooltipEdgeInset: CGFloat = 8
+    ///
+    /// Eight was the first answer and it reads as touching: at this
+    /// size the card's own corner radius eats most of it, so the eye
+    /// sees the panel meeting the window's margin. Sixteen is a gap.
+    static let tooltipEdgeInset: CGFloat = 16
 
     static func tooltipX(centredOn x: CGFloat, gridWidth: CGFloat) -> CGFloat {
         let ideal = x - tooltipWidth / 2
@@ -246,8 +273,11 @@ struct ActivityHeatmap: View {
         for (column, week) in columns.enumerated() {
             if let row = week.firstIndex(of: day) {
                 let step = cell + gap
+                // In the grid's own coordinates: the gutter is a
+                // sibling column, not part of the space the card is
+                // laid out in.
                 return CGPoint(
-                    x: gutter + gap + CGFloat(column) * step + cell / 2,
+                    x: CGFloat(column) * step + cell / 2,
                     y: CGFloat(row) * step
                 )
             }
