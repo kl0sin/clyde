@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 43
+# clyde-hook-version: 44
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -48,7 +48,15 @@ STATE_DIR="$HOME/.clyde/state"
 PERMISSIONS_DIR="$HOME/.clyde/permissions"
 # How long a request stays answerable. Written into each request so a
 # reader can tell a live one from one whose moment has passed.
-DECISION_WINDOW_SECONDS=4
+# How long the hook waits for an answer from the panel before handing
+# the question back to the terminal.
+#
+# Four seconds, measured on the first real run, was not enough to notice
+# a row had changed, read the command on it and click — and reading the
+# command is the entire point. Ten is long enough to do that and short
+# enough that someone who is watching the terminal rather than the panel
+# does not sit in front of a blank pause wondering what happened.
+DECISION_WINDOW_SECONDS=10
 # A readiness file older than this means Clyde is gone — it refreshes it
 # while it runs — so the request is not worth waiting on.
 READY_MAX_AGE_SECONDS=120

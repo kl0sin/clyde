@@ -667,6 +667,26 @@ final class HookScriptTests: XCTestCase {
     // the thing ProcessMonitor reads on the other side.
 
     /// Convenience for the `~/.clyde/state/<sid>-<suffix>` path.
+    /// The window a person has to read a command and click. Four
+    /// seconds, measured on the first real run, was not enough to
+    /// notice the row, read it and answer — and reading it is the point
+    /// of answering from the panel at all.
+    func testTheDecisionWindowIsLongEnoughToRead() throws {
+        let seconds = try Self.decisionWindowSeconds()
+
+        XCTAssertGreaterThanOrEqual(seconds, 8, "too short to read a command and click")
+        XCTAssertLessThanOrEqual(seconds, 20, "a session should not stall this long on a panel nobody is watching")
+    }
+
+    /// Read from the script, so every test about the window agrees with
+    /// the script rather than with each other.
+    private static func decisionWindowSeconds() throws -> Int {
+        let script = try String(contentsOf: hookScriptURL, encoding: .utf8)
+        let line = script.split(separator: "\n")
+            .first { $0.hasPrefix("DECISION_WINDOW_SECONDS=") }
+        return line.flatMap { Int($0.split(separator: "=")[1]) } ?? 0
+    }
+
     // MARK: - Which directory a session is named after
 
     /// `CwdChanged` fires for a `cd` inside a tool call — a shell's
@@ -1611,7 +1631,13 @@ final class HookScriptTests: XCTestCase {
         let output = try runHookCapturingOutput(payload: permissionRequest(sid: "s"), home: home)
 
         XCTAssertTrue(output.contains("\"ask\""), output)
-        XCTAssertLessThan(Date().timeIntervalSince(started), 10, "the window must bound the wait")
+        // Bounded by the window the script declares, not by a number
+        // written here: this failed the moment the window was widened,
+        // which is the assertion doing its job and the constant doing
+        // the wrong one.
+        let window = try Self.decisionWindowSeconds()
+        XCTAssertLessThan(Date().timeIntervalSince(started), Double(window) + 4,
+                          "the window must bound the wait")
     }
 
     /// The whole point of the readiness file: a user who never turned
