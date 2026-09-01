@@ -103,6 +103,13 @@ struct PixelStatusIndicator: View {
     static let slotFillOpacity: Double = 0.16
     static let slotStrokeOpacity: Double = 0.45
 
+    /// The quiet slot — the one holding a session number. Both modes
+    /// take the full panel's greys: compact's were lighter to sit on
+    /// its card, but a session's slot should not change weight with the
+    /// window it is in.
+    static let quietSlotFill = Color(white: 0.11)
+    static let quietSlotStroke = Color(white: 0.18)
+
     /// How thick that border is, also derived from the slot. The two
     /// modes had 1.5 and 1.0 — which happen to be nearly proportional,
     /// so the difference never showed, but only by luck: nothing tied

@@ -284,11 +284,11 @@ struct CompactSessionRow: View {
             SteppedSquare(step: 24 * SteppedSquare.stepRatio)
                 .fill(isActive
                         ? accent.opacity(PixelStatusIndicator.slotFillOpacity)
-                        : Color.white.opacity(0.05))
+                        : PixelStatusIndicator.quietSlotFill)
             SteppedSquare(step: 24 * SteppedSquare.stepRatio)
                 .stroke(isActive
                             ? accent.opacity(PixelStatusIndicator.slotStrokeOpacity)
-                            : Color.white.opacity(0.07),
+                            : PixelStatusIndicator.quietSlotStroke,
                         lineWidth: isActive
                             ? PixelStatusIndicator.slotStrokeWidth(slot: 24)
                             : 1)

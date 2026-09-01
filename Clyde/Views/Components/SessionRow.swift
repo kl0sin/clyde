@@ -896,7 +896,7 @@ struct SessionStatusIndicator: View {
             SteppedSquare(step: 34 * SteppedSquare.stepRatio)
                 .fill(isActive
                         ? accent.opacity(PixelStatusIndicator.slotFillOpacity)
-                        : Color(white: 0.11))
+                        : PixelStatusIndicator.quietSlotFill)
                 .frame(width: 34, height: 34)
             SteppedSquare(step: 34 * SteppedSquare.stepRatio)
                 .stroke(
@@ -904,7 +904,7 @@ struct SessionStatusIndicator: View {
                         ? accent.opacity(session.needsAttention && attentionPulse
                                             ? PixelStatusIndicator.slotStrokeOpacity + 0.2
                                             : PixelStatusIndicator.slotStrokeOpacity)
-                        : Color(white: 0.18),
+                        : PixelStatusIndicator.quietSlotStroke,
                     lineWidth: isActive ? PixelStatusIndicator.slotStrokeWidth(slot: 34) : 1
                 )
                 .frame(width: 34, height: 34)
@@ -928,11 +928,7 @@ struct SessionStatusIndicator: View {
                     Circle()
                         .fill(SessionTheme.attentionColor)
                         .frame(width: 12, height: 12)
-                        .overlay(
-                            Text("!")
-                                .font(.system(size: 9, weight: .heavy, design: .rounded))
-                                .foregroundStyle(.white)
-                        )
+                        .overlay(AttentionBadgeMark())
                         .offset(x: 13, y: -13)
                         .scaleEffect(attentionPulse ? 1.1 : 0.92)
                 }
@@ -962,6 +958,43 @@ struct SessionStatusIndicator: View {
                 }
             }
         }
+        .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Attention badge
+
+/// The mark inside the attention badge, drawn rather than typed.
+///
+/// It was `Text("!")` centred in the circle, and it sat visibly high:
+/// a text view is centred by its layout box, which reserves room below
+/// the baseline for descenders that an exclamation mark does not have.
+/// The glyph therefore floats in the upper part of a box that is itself
+/// centred correctly — a fix by eye would have been an offset nobody
+/// could later justify.
+///
+/// Drawn as two rectangles it is centred by construction, and it is
+/// made of the same pixels as everything else in this window.
+struct AttentionBadgeMark: View {
+
+    /// Whole points, and an even total, so the mark centres on the
+    /// pixel grid inside a 12-point circle rather than on a half point.
+    static let barWidth: CGFloat = 2
+    static let barHeight: CGFloat = 5
+    static let gap: CGFloat = 1
+    static let dot: CGFloat = 2
+
+    static var height: CGFloat { barHeight + gap + dot }
+
+    var body: some View {
+        VStack(spacing: Self.gap) {
+            Rectangle()
+                .frame(width: Self.barWidth, height: Self.barHeight)
+            Rectangle()
+                .frame(width: Self.dot, height: Self.dot)
+        }
+        .foregroundStyle(.white)
+        .frame(height: Self.height)
         .accessibilityHidden(true)
     }
 }

@@ -93,3 +93,34 @@ final class SessionDisambiguationTests: XCTestCase {
         XCTAssertEqual(content.name, "clyde #2")
     }
 }
+
+/// The mark inside the attention badge. It used to be `Text("!")`,
+/// centred by a layout box that reserves room for a descender the glyph
+/// does not have — so it sat visibly high inside its circle.
+@MainActor
+final class AttentionBadgeMarkTests: XCTestCase {
+
+    func testTheMarkFitsInsideTheBadge() {
+        XCTAssertLessThan(AttentionBadgeMark.height, 12)
+    }
+
+    /// Whole points, and an even total, so the mark centres on the
+    /// pixel grid of a 12-point circle rather than on a half point —
+    /// which is how it would go soft, or land one pixel off.
+    func testTheMarkCentresOnWholePoints() {
+        for value in [AttentionBadgeMark.barWidth, AttentionBadgeMark.barHeight,
+                      AttentionBadgeMark.gap, AttentionBadgeMark.dot] {
+            XCTAssertEqual(value, value.rounded(), "\(value) is not a whole point")
+        }
+        XCTAssertEqual(AttentionBadgeMark.height.truncatingRemainder(dividingBy: 2), 0)
+        XCTAssertEqual((12 - AttentionBadgeMark.height) / 2,
+                       ((12 - AttentionBadgeMark.height) / 2).rounded())
+    }
+
+    /// It has to read as an exclamation mark: a tall bar over a small
+    /// separate dot, not two equal blocks.
+    func testItReadsAsAnExclamationMark() {
+        XCTAssertGreaterThan(AttentionBadgeMark.barHeight, AttentionBadgeMark.dot)
+        XCTAssertGreaterThan(AttentionBadgeMark.gap, 0)
+    }
+}
