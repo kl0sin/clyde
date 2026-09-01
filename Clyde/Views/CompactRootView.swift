@@ -74,23 +74,13 @@ struct CompactRootView: View {
 
     /// Which sessions make the cut, in the order they appear.
     ///
-    /// Needs-you first: it is the only state that requires something of
-    /// the user. Working next, because it is worth glancing at. Then
-    /// idle, most recent first — and those are the ones the cap drops,
-    /// never a session that is working or waiting on an answer.
+    /// The order itself is `SessionOrder`'s, shared with the full
+    /// panel. All this adds is the cap: what falls off the bottom is
+    /// always an idle session, never one working or waiting on an
+    /// answer, because those rank above it.
     static func visible(sessions: [Session], cap: Int) -> [Session] {
-        let live = sessions.filter { !$0.isGhost }
-        let ranked = live.sorted { lhs, rhs in
-            let l = rank(lhs), r = rank(rhs)
-            if l != r { return l < r }
-            return lhs.statusChangedAt > rhs.statusChangedAt
-        }
-        return Array(ranked.prefix(max(0, cap)))
-    }
-
-    private static func rank(_ session: Session) -> Int {
-        if session.needsAttention { return 0 }
-        return session.isWorking ? 1 : 2
+        let live = SessionOrder.ranked(sessions.filter { !$0.isGhost })
+        return Array(live.prefix(max(0, cap)))
     }
 
     private var rows: [Session] {

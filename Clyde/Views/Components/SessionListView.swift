@@ -23,13 +23,32 @@ struct SessionListView: View {
     /// insertion line shows in the right place.
     @State private var dropAbove: Bool = true
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(disambiguated, id: \.session.id) { item in
                     rowWithIndicator(item: item)
+                        // Arriving and leaving rather than appearing and
+                        // vanishing, and from the leading edge, so the eye
+                        // is told where a row came from.
+                        .transition(reduceMotion
+                            ? .opacity
+                            : .asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .leading)),
+                                removal: .opacity.combined(with: .scale(scale: 0.98))))
                 }
             }
+            // The full panel used to teleport: a session that started
+            // working jumped to its new place between two frames, and
+            // which row had moved was left to be inferred. Compact had
+            // this and the full panel did not, which made them look
+            // like two applications.
+            .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.82),
+                       value: sessions.map(\.id))
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.28),
+                       value: sessions.map(SessionOrder.rank))
             .padding(.vertical, 4)
             // A vertical ScrollView will happily let its content be
             // wider than itself, and a row whose second line is a tool

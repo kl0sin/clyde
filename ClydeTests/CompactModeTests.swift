@@ -67,12 +67,17 @@ final class CompactModeTests: XCTestCase {
         XCTAssertEqual(order.map(\.displayName), ["ask", "busy", "idle"])
     }
 
-    func testIdleSessionsAreOrderedByMostRecent() {
+    /// Inside a state the incoming order is kept untouched — which is
+    /// the user's own drag order, and the same order the full panel
+    /// shows. Compact used to re-sort idle rows by how recently they
+    /// went quiet, so the two windows listed the same sessions
+    /// differently.
+    func testSessionsOfTheSameStateKeepTheOrderTheyCameIn() {
         let order = CompactRootView.visible(
             sessions: [session("old", quietFor: 3600), session("recent", quietFor: 30)],
             cap: 5)
 
-        XCTAssertEqual(order.map(\.displayName), ["recent", "old"])
+        XCTAssertEqual(order.map(\.displayName), ["old", "recent"])
     }
 
     func testTheCapBoundsTheList() {

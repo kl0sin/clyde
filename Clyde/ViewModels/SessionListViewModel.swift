@@ -73,7 +73,11 @@ final class SessionListViewModel: ObservableObject {
         let orderedSet = Set(ordered.map(\.id))
         let tail = live.filter { !orderedSet.contains($0.id) }
 
-        let new = ordered + tail + ghosts
+        // State decides the group, the user's drag order decides the
+        // rest — and it is applied here rather than in each view, so
+        // every window that lists sessions lists them the same way and
+        // drag indices keep matching what is on screen.
+        let new = SessionOrder.ranked(ordered + tail) + ghosts
         if new != sessions {
             sessions = new
         }
