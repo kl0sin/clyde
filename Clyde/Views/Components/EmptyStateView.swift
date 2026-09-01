@@ -5,8 +5,8 @@ import SwiftUI
 struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: 12) {
-            ClydeAnimationView(state: .sleeping, pixelSize: 2.5)
-                .frame(width: 40, height: 40)
+            ClydeAnimationView(state: .sleeping, pixelSize: 3)
+                .frame(width: 48, height: 48)
 
             Text("No Claude sessions")
                 .font(.system(size: 13, weight: .medium))

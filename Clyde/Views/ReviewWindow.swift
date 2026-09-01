@@ -217,8 +217,11 @@ struct ReviewView: View {
     /// way the panel does.
     private var header: some View {
         HStack(spacing: Spacing.sm) {
-            ClydeAnimationView(state: .idle, pixelSize: 2.625)
-                .frame(width: 34, height: 34)
+            // Two points per sprite pixel. At 2.625 the sprite was
+            // drawn 42 points wide inside a 34-point frame — soft, and
+            // eight points larger than the box holding it.
+            ClydeAnimationView(state: .idle, pixelSize: 2)
+                .frame(width: 32, height: 32)
                 .padding(Spacing.xs)
                 .background(
                     // The same stepped frame the panel's sprites wear.
@@ -489,8 +492,8 @@ struct ReviewView: View {
     /// lines — rather than a bare sentence floating in the window.
     private var emptyState: some View {
         VStack(spacing: Spacing.sm) {
-            ClydeAnimationView(state: .sleeping, pixelSize: 2.5)
-                .frame(width: 40, height: 40)
+            ClydeAnimationView(state: .sleeping, pixelSize: 3)
+                .frame(width: 48, height: 48)
                 .accessibilityHidden(true)
             Text("Nothing recorded yet")
                 .font(.system(size: 13, weight: .medium))

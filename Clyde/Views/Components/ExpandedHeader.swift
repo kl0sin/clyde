@@ -37,8 +37,11 @@ struct ExpandedHeader: View {
                 SteppedSquare(step: 56 * SteppedSquare.stepRatio)
                     .stroke(accentColor.opacity(0.45), lineWidth: 0.75)
                     .frame(width: 56, height: 56)
-                ClydeAnimationView(state: clydeState, pixelSize: 2.625)
-                    .frame(width: 42, height: 42)
+                // Three points per sprite pixel. It was 2.625, which
+                // put a pixel-art sprite on eighth-of-a-point
+                // boundaries and softened every edge of it.
+                ClydeAnimationView(state: clydeState, pixelSize: 3)
+                    .frame(width: 48, height: 48)
             }
             .shadow(color: accentColor.opacity(0.30), radius: 14, y: 0)
 

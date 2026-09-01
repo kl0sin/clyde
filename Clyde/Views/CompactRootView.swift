@@ -154,6 +154,12 @@ struct CompactRootView: View {
                 Text("No sessions")
                     .font(.system(size: 11))
                     .foregroundStyle(TextColor.tertiary)
+                    // A row's inset, because it stands where a row
+                    // would. It lost this when the rows stopped being
+                    // inset cards and took their padding inside
+                    // themselves — leaving the one line in an empty
+                    // window flush against the window's edge.
+                    .padding(.leading, CompactSessionRow.leadingInset)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: CompactSessionRow.quietHeight)
             }

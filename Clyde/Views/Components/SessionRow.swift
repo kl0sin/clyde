@@ -835,10 +835,11 @@ private struct SubagentList: View {
             HStack(alignment: .top, spacing: 6) {
                 ClydeAnimationView(
                     state: agent.isIdle ? .idle : .busy,
-                    pixelSize: 0.75,
+                    pixelSize: ClydeAnimationView.barPixelSize,
                     ambientIdleEnabled: false
                 )
-                .frame(width: 12, height: 12)
+                .frame(width: ClydeAnimationView.barSize,
+                       height: ClydeAnimationView.barSize)
                 .padding(.top, 1)
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {

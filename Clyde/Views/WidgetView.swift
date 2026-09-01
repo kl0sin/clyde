@@ -9,9 +9,9 @@ struct WidgetView: View {
             HStack(spacing: 10) {
                 ClydeAnimationView(
                     state: viewModel.clydeState,
-                    pixelSize: 1.75
+                    pixelSize: 2
                 )
-                .frame(width: 28, height: 28)
+                .frame(width: 32, height: 32)
 
                 CompactStatusView(viewModel: viewModel)
             }
