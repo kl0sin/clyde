@@ -68,6 +68,12 @@ struct CompactSessionRow: View {
     /// language, and the two windows stopped looking like one app.
     static let gap: CGFloat = 0
 
+    /// The agent mark's geometry, out here so a test can hold it to the
+    /// same whole-point rule as every other mark in the app.
+    static let agentHead: CGFloat = 10
+    static let agentEye: CGFloat = 2
+    static let agentEyeGap: CGFloat = 2
+
     /// The slot, and the room around it.
     ///
     /// The leading inset equals the slot's own margin above and below,
@@ -196,7 +202,7 @@ struct CompactSessionRow: View {
                         MicroLabel(text: meta,
                                    color: isActive ? accent : TextColor.tertiary)
                         if let worktree = content.worktree { Chip(text: worktree, tinted: true) }
-                        if let agents = content.agentCount { Chip(text: "◉ \(agents)", tinted: false) }
+                        if let agents = content.agentCount { AgentChip(count: agents) }
                     }
                 }
             }
@@ -310,6 +316,59 @@ struct CompactSessionRow: View {
 }
 
 // MARK: - Pieces
+
+/// The agents a session has out, as a head and a number.
+///
+/// It was `◉ 1`, and at eight and a half points that character is a
+/// dot — it said "something", not "an agent". The mark is the smallest
+/// thing that still reads as one of Clyde's own: a head with two eyes,
+/// drawn on whole points so it stays square.
+private struct AgentChip: View {
+    let count: Int
+
+    /// Whole points at the size this is drawn: a 9-point head with
+    /// 2-point eyes, which is the smallest pair that reads as a face
+    /// rather than as noise.
+    static let head = CompactSessionRow.agentHead
+    static let eye = CompactSessionRow.agentEye
+    /// Two points between the eyes, not one. At one the pair rendered
+    /// as a single five-point bar — a face needs the gap more than it
+    /// needs the eyes.
+    static let eyeGap = CompactSessionRow.agentEyeGap
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Canvas { context, _ in
+                let ink = GraphicsContext.Shading.color(TextColor.secondary)
+                // Head: an outline rather than a fill, so the eyes read
+                // as holes in a face and not as two dots on a block.
+                context.stroke(
+                    Path(roundedRect: CGRect(x: 0.5, y: 0.5, width: Self.head - 1, height: Self.head - 1),
+                         cornerRadius: 2),
+                    with: ink, lineWidth: 1)
+                let pair = Self.eye * 2 + Self.eyeGap
+                let firstEye = (Self.head - pair) / 2
+                for x in [firstEye, firstEye + Self.eye + Self.eyeGap] {
+                    context.fill(
+                        Path(CGRect(x: x, y: 4, width: Self.eye, height: Self.eye)),
+                        with: ink)
+                }
+            }
+            .frame(width: Self.head, height: Self.head)
+
+            Text("\(count)")
+                .font(.system(size: 8.5, design: .monospaced))
+                .foregroundStyle(TextColor.secondary)
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.white.opacity(0.11))
+        )
+        .accessibilityHidden(true)
+    }
+}
 
 private struct Chip: View {
     let text: String

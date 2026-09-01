@@ -7,6 +7,7 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 ## [Unreleased]
 
 - **A session no longer announces it has finished when its agent hands work back.** Claude Code ends the parent's turn while its agents keep running, which clears the marker Clyde reads as "working" — so for the second or two between an agent returning and the parent picking the work back up there was no evidence of work at all. The session went green, played the "session finished" sound, and went back to working. It now stays working across that handover.
+- **A session's agents are marked by a face, not a dot.** The chip beside a working session read `◉ 1`, and at that size the character is a dot — it said "something", not "an agent". It is a small head with two eyes now, drawn on whole points like every other mark in the app.
 - **An agent's mark lines up with its name.** The sprite beside a subagent's row sat two and a half points below the line of text next to it.
 
 ## [0.9.0] — 2026-09-01
