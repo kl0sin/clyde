@@ -36,6 +36,7 @@
       </a>
       <nav aria-label="Primary">
         <a href="#showcase">Tour</a>
+        <a href="#permissions">Permissions</a>
         <a href="#review">Review</a>
         <a href="#features">Features</a>
         <a href="#how">How it works</a>
@@ -189,6 +190,32 @@
       </div>
     </section>
 
+    <!-- PERMISSIONS -->
+    <section class="review" id="permissions">
+      <div class="container">
+        <div class="section-header">
+          <p class="section-label">New in 0.9</p>
+          <h2>Say yes without going back to the terminal.</h2>
+          <p class="section-sub">Claude asks permission before it runs something. Answer it where you already are.</p>
+        </div>
+
+        <div class="review-layout">
+          <div class="review-copy">
+            <h3>The question opens on the session that asked it.</h3>
+            <p>The command is shown in full — wrapped, never shortened, because a truncated command invites approving something you did not read. Allow or Deny, and the session carries on. It works the same in the compact panel, which is the one you are most likely to have open.</p>
+            <ul class="review-bullets">
+              <li><strong>Miss it and nothing breaks.</strong> The window is a few seconds long. Let it pass and the terminal asks exactly as it always has.</li>
+              <li><strong>Clyde never decides on its own.</strong> No rules, no remembered answers, no "always allow". It relays your answer and nothing else.</li>
+              <li><strong>Off until you turn it on.</strong> The feature ships disabled; nothing waits on Clyde unless you asked it to.</li>
+            </ul>
+          </div>
+          <div class="review-image">
+            <img src="img/screenshots/permission.png" alt="Clyde's panel with a permission request open on a session: the tool name, the full command, and Allow and Deny buttons" loading="lazy" width="400" height="420">
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- SESSION REVIEW -->
     <section class="review" id="review">
       <div class="container">
@@ -228,7 +255,7 @@
           <div class="feature">
             <div class="feature-icon icon-bell"></div>
             <h3>Answer permission requests</h3>
-            <p>When Claude asks to run something, the question appears on its session for a few seconds and you can allow or deny it from the panel. Miss the moment and the terminal asks as usual — Clyde never decides on its own.</p>
+            <p>Allow or deny from the panel, on the session that asked. Miss the moment and the terminal asks as usual — Clyde never decides on its own.</p>
           </div>
 
           <div class="feature">
