@@ -294,8 +294,15 @@ struct SessionRow: View {
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.xs)
         .background(
-            RoundedRectangle(cornerRadius: Radius.medium)
-                .fill(rowBackground)
+            ZStack {
+                RoundedRectangle(cornerRadius: Radius.medium)
+                    .fill(rowBackground)
+                // The texture compact had and this window did not: the
+                // wash, the hatching, the lit top edge, the sweep. Same
+                // view, same numbers — the two surfaces cannot drift.
+                SessionSurface(state: surfaceState, accent: accent)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.medium))
+            }
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
@@ -391,17 +398,24 @@ struct SessionRow: View {
         !session.isGhost && (session.needsAttention || session.status == .busy)
     }
 
+    /// What the surface is drawing. A ghost is a finished session kept
+    /// around to be read, not a state to be lit.
+    private var surfaceState: PixelStatusIndicator.State {
+        session.isGhost ? .idle : PixelStatusIndicator.state(for: session)
+    }
+
+    private var accent: Color {
+        PixelStatusIndicator.color(for: surfaceState)
+    }
+
+    /// The flat part of the row's ground. The state's own colour now
+    /// arrives as a wash from `SessionSurface`, so this is left with
+    /// what it was always better at: the hover, and the flash.
     private var rowBackground: Color {
         if stateFlash {
             return SessionTheme.color(for: session.status).opacity(0.15)
         }
         if isHovered { return Color(white: 0.14) }
-        if isActive {
-            let tint: Color = session.needsAttention
-                ? SessionTheme.attentionColor
-                : SessionTheme.processingColor
-            return tint.opacity(0.07)
-        }
         return Color.clear
     }
 
@@ -943,10 +957,13 @@ struct SessionStatusIndicator: View {
                         .frame(width: AttentionBadgeMark.badge,
                                height: AttentionBadgeMark.badge)
                         .overlay(AttentionBadgeMark())
-                        // Offset so the disc's outer edge stays where a
-                        // smaller badge put it: it grew inward, into the
-                        // slot, rather than further out of the row.
-                        .offset(x: 12, y: -12)
+                        // On the slot's corner, overhanging it by a
+                        // quarter of its own width. Tucked inside, as
+                        // the first version had it, it read as a thing
+                        // sitting on the grid rather than a badge
+                        // attached to the slot.
+                        .offset(x: AttentionBadgeMark.offset(slot: 34),
+                                y: -AttentionBadgeMark.offset(slot: 34))
                         .scaleEffect(PixelStatusIndicator.attentionScale(at: pulse))
                 }
             } else {
@@ -979,6 +996,15 @@ struct AttentionBadgeMark: View {
     /// The disc the mark sits in. 14 rather than 12: at 12 the mark had
     /// two points of air above and below and read as packed in.
     static let badge: CGFloat = 14
+
+    /// How far from the slot's centre the disc sits, so that it
+    /// overhangs the corner rather than resting inside it.
+    static func offset(slot: CGFloat) -> CGFloat {
+        slot / 2 - badge / 2 + overhang
+    }
+
+    /// How far the disc reaches past the slot's edge.
+    static let overhang: CGFloat = 4
 
     /// Whole points, and an even total, so the mark centres on the
     /// pixel grid inside the disc rather than on a half point.

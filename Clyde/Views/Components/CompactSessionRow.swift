@@ -171,27 +171,19 @@ struct CompactSessionRow: View {
         }
         .padding(.horizontal, 11)
         .frame(height: Self.cardHeight)
-        .background(cardBackground(state: content.state, accent: accent))
+        .background(
+            SessionSurface(state: content.state,
+                           accent: accent,
+                           // Compact's cards float with gaps between
+                           // them, so a quiet one needs a surface of its
+                           // own to be a card at all. The full panel's
+                           // rows are continuous and take the panel's.
+                           showsBase: true)
+        )
         // The wash fades in when a session starts working instead of
         // being there the next frame — the difference between a light
         // coming on and a light having been on.
         .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: content.state)
-        .overlay(alignment: .top) {
-            // One hairline gradient is the whole difference between a
-            // rectangle and something raised.
-            LinearGradient(colors: [.clear, .white.opacity(0.14), .clear],
-                           startPoint: .leading, endPoint: .trailing)
-                .frame(height: 1)
-        }
-        .overlay(alignment: .bottom) {
-            // The sweep belongs to work, not to waiting. Held still for
-            // an attention card it stopped being light crossing the
-            // surface and became a coloured bottom border — and the
-            // whole point of that state is that it does not move.
-            if content.state == .working {
-                SweepLine(color: accent, animates: !reduceMotion)
-            }
-        }
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -209,39 +201,10 @@ struct CompactSessionRow: View {
 
     // MARK: - Surface
 
-    /// The state is the surface: a wash falling off from the leading
-    /// edge rather than a coloured outline, so a busy session reads as
-    /// warm instead of ringed. A rail down the left edge said the same
-    /// thing a third time, in the way every generated card on the web
-    /// currently says it, and was dropped.
-    @ViewBuilder
-    private func cardBackground(state: PixelStatusIndicator.State, accent: Color) -> some View {
-        ZStack {
-            Color.white.opacity(0.042)
-
-            if state != .idle {
-                RadialGradient(
-                    colors: [accent.opacity(state == .needsAttention ? 0.22 : 0.20), .clear],
-                    center: .leading,
-                    startRadius: 0,
-                    endRadius: 260
-                )
-                // The mascot is pixel art; this is that world at the
-                // scale of a surface. Fades out across the card so it
-                // stays at the threshold of visible.
-                DitherField()
-                    .mask(
-                        LinearGradient(colors: [.black.opacity(0.85), .clear],
-                                       startPoint: .leading, endPoint: .trailing)
-                    )
-            }
-        }
-    }
-
     private func borderColour(state: PixelStatusIndicator.State, accent: Color) -> Color {
         switch state {
         case .idle: return .white.opacity(isHovered ? 0.12 : 0.05)
-        case .working, .needsAttention: return accent.opacity(0.22)
+        case .working, .needsAttention: return SessionSurface.borderColour(state: state, accent: accent)
         }
     }
 
@@ -338,74 +301,6 @@ private struct Chip: View {
     }
 }
 
-/// One-pixel diagonal hatching. Drawn rather than tiled from an asset so
-/// it stays exactly one pixel at any scale factor.
-private struct DitherField: View {
-    var body: some View {
-        Canvas { context, size in
-            // Wider apart and a touch stronger than the mockup's CSS:
-            // one CSS pixel is half a point on this display, so the
-            // literal port came out invisible.
-            let spacing: CGFloat = 4
-            var offset = -size.height
-            let colour = GraphicsContext.Shading.color(.white.opacity(0.075))
-            while offset < size.width {
-                var line = Path()
-                line.move(to: CGPoint(x: offset, y: size.height))
-                line.addLine(to: CGPoint(x: offset + size.height, y: 0))
-                context.stroke(line, with: colour, lineWidth: 1)
-                offset += spacing
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-/// A lit segment crossing the bottom edge of an active card — the
-/// wave's cousin at the scale of the card. Clock-driven for the same
-/// reason the wave is: `.repeatForever` started in `onAppear` is
-/// unreliable for rows that have just appeared.
-private struct SweepLine: View {
-    let color: Color
-    let animates: Bool
-
-    private let period: Double = 2.4
-
-    var body: some View {
-        GeometryReader { proxy in
-            if animates {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                    let t = context.date.timeIntervalSinceReferenceDate
-                    let phase = (t.truncatingRemainder(dividingBy: period)) / period
-                    segment(width: proxy.size.width, phase: phase)
-                }
-            } else {
-                Rectangle()
-                    .fill(color.opacity(0.28))
-                    .frame(height: 1)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-            }
-        }
-        .frame(height: 1)
-        .allowsHitTesting(false)
-    }
-
-    private func segment(width: CGFloat, phase: Double) -> some View {
-        let segmentWidth = width * 0.28
-        let travel = width + segmentWidth
-        // At full strength this read as a coloured bottom border rather
-        // than as light crossing the card — the eye takes a saturated
-        // hairline as structure.
-        return LinearGradient(colors: [.clear, color.opacity(0.38), .clear],
-                              startPoint: .leading, endPoint: .trailing)
-            .frame(width: segmentWidth, height: 1)
-            .offset(x: -segmentWidth + travel * phase)
-            .frame(width: width, alignment: .leading)
-            .clipped()
-    }
-}
-
-/// One pixel beside a running duration, blinking once a second.
 private struct TickPixel: View {
     let color: Color
     let animates: Bool

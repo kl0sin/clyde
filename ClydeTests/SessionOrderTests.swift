@@ -127,3 +127,40 @@ final class AttentionBadgeMarkTests: XCTestCase {
         XCTAssertGreaterThan(AttentionBadgeMark.gap, 0)
     }
 }
+
+/// The surface a row is drawn on. It lived only in the compact card
+/// while the full panel used a flat tint, so the same state was a
+/// textured card in one window and a block of colour in the other.
+@MainActor
+final class SessionSurfaceTests: XCTestCase {
+
+    func testAQuietRowHasNoWash() {
+        XCTAssertEqual(SessionSurface.washOpacity(for: .idle), 0)
+    }
+
+    /// Toned down from what compact ran: at 0.20 the card read as
+    /// tinted rather than lit — a card the colour of the state instead
+    /// of a card the state is happening on.
+    func testTheWashIsLightNotPaint() {
+        XCTAssertLessThan(SessionSurface.washOpacity(for: .working), 0.16)
+        XCTAssertGreaterThan(SessionSurface.washOpacity(for: .working), 0.08)
+    }
+
+    /// A question is worth a shade more than work, and no more.
+    func testAttentionIsSlightlyStrongerThanWork() {
+        XCTAssertGreaterThan(SessionSurface.washOpacity(for: .needsAttention),
+                             SessionSurface.washOpacity(for: .working))
+        XCTAssertLessThan(SessionSurface.washOpacity(for: .needsAttention) -
+                          SessionSurface.washOpacity(for: .working), 0.05)
+    }
+
+    /// The badge hangs off the slot's corner rather than resting inside
+    /// it — tucked in, it read as something sitting on the grid.
+    func testTheBadgeOverhangsTheSlot() {
+        let slot: CGFloat = 34
+        let outerEdge = AttentionBadgeMark.offset(slot: slot) + AttentionBadgeMark.badge / 2
+
+        XCTAssertEqual(outerEdge - slot / 2, AttentionBadgeMark.overhang, accuracy: 0.001)
+        XCTAssertGreaterThan(AttentionBadgeMark.overhang, 0)
+    }
+}
