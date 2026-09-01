@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 42
+# clyde-hook-version: 43
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -18,12 +18,12 @@
 #   PermissionRequest   → events/<session_id>.json (attention flag)
 #   PermissionDenied    → clears event file (user denied permission)
 #   PreToolUse          → clears event file + refreshes busy mtime + writes -tool; Agent/Task also → merges the description into the subagent's -agents/ record (pending-<tool_use_id>.json if SubagentStart hasn't landed yet)
-#   (any event)         → state/<session_id>-worktree, derived from cwd
+#   (any event)         → state/<session_id>-worktree, derived from cwd; corrects -info's cwd when it disagrees
 #   UserPromptExpansion → state/<session_id>-command (slash command name for the row badge)
 #   PostToolBatch       → sweeps every tool_use_id in the batch from state/<session_id>-tools/
 #   PostToolUse         → removes its own state/<session_id>-tools/<tool_use_id>.json slot; Agent/Task also → removes an UNCLAIMED state/<session_id>-agents/pending-<tool_use_id>.json only
 #   PostToolUseFailure  → removes -tool marker; Agent/Task also → removes an UNCLAIMED pending- entry; IF is_interrupt=true also removes busy + every -agents/ record (an interrupted agent never emits SubagentStop)
-#   CwdChanged          → rewrites state/<session_id>-info with new cwd
+#   CwdChanged          → log only (its cwd is the shell's, not the session's)
 #   Elicitation         → events/<session_id>.json (MCP tool input request)
 #   ElicitationResult   → clears event file (MCP input answered)
 #   SubagentStart       → merges with PreToolUse's record into state/<session_id>-agents/<agent_id>.json (either event may arrive first)
@@ -654,6 +654,25 @@ print(v if v in ('allow', 'deny') else '')
     fi
 }
 
+# Returns -info with its `cwd` replaced, and nothing at all when the
+# file already agrees, is unreadable, or python3 is missing. Every other
+# field is carried over untouched.
+rewrite_info_cwd() {
+    command -v python3 >/dev/null 2>&1 || return 0
+    python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        info = json.load(f)
+except Exception:
+    sys.exit(0)
+if not isinstance(info, dict) or info.get('cwd') == sys.argv[2]:
+    sys.exit(0)
+info['cwd'] = sys.argv[2]
+print(json.dumps(info))
+" "$1" "$2" 2>/dev/null || printf ''
+}
+
 atomic_write() {
     local target=$1
     local body=$2
@@ -891,6 +910,24 @@ case "$HOOK_EVENT" in
         if [ -n "$SESSION_ID" ] && [ ! -f "$STATE_DIR/$KEY-info" ]; then
             atomic_write "$STATE_DIR/$KEY-info" \
                 "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$INFO_RUNTIME_FIELDS}"
+        elif [ -n "$SESSION_ID" ] && [ -n "$CWD" ] && [ "$HOOK_EVENT" != "CwdChanged" ]; then
+            # And correct it when it disagrees. Every event carries the
+            # session's own cwd, so this is self-correcting the same way
+            # the worktree badge below is: a session cannot stay named
+            # after a directory it is no longer in.
+            #
+            # CwdChanged is excluded because its cwd is a shell's, not
+            # the session's — but it still creates a missing -info
+            # above, since refusing to record a live session would
+            # leave it invisible until its next prompt.
+            #
+            # Only the cwd is replaced. SessionStart records `source`,
+            # and rewriting the whole object would erase the
+            # compact/resume distinction the activity timeline reads.
+            INFO_FIXED=$(rewrite_info_cwd "$STATE_DIR/$KEY-info" "$CWD")
+            if [ -n "$INFO_FIXED" ]; then
+                atomic_write "$STATE_DIR/$KEY-info" "$INFO_FIXED"
+            fi
         fi
         ;;
 esac
@@ -1175,12 +1212,12 @@ case "$HOOK_EVENT" in
         fi
         ;;
     CwdChanged)
-        # User changed directory mid-session. Rewrite -info with the
-        # new cwd so Clyde's project name display stays current.
-        if [ -f "$STATE_DIR/$KEY-info" ] && [ -n "$CWD" ]; then
-            atomic_write "$STATE_DIR/$KEY-info" \
-                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$INFO_RUNTIME_FIELDS}"
-        fi
+        # Deliberately nothing. This event fires for a `cd` inside a
+        # tool call — the shell's directory, not the session's — and
+        # rewriting -info from it renamed a session after whatever
+        # scratch directory a command last visited, permanently: every
+        # later event said otherwise and nothing read them. The cwd is
+        # corrected from ordinary events instead, in the block above.
         ;;
     Elicitation)
         # MCP tool is requesting user input (form/dialog). Treat the

@@ -667,6 +667,71 @@ final class HookScriptTests: XCTestCase {
     // the thing ProcessMonitor reads on the other side.
 
     /// Convenience for the `~/.clyde/state/<sid>-<suffix>` path.
+    // MARK: - Which directory a session is named after
+
+    /// `CwdChanged` fires for a `cd` inside a tool call — a shell's
+    /// directory, not the session's. Rewriting `-info` from it renamed
+    /// a session after whatever scratch directory a command last
+    /// visited, and left it there: every later event carried the real
+    /// cwd and nothing read them.
+    func testCwdChangedDoesNotRenameTheSession() throws {
+        let home = tempHome()
+        let sid = "cccccccc-1111-2222-3333-444444444444"
+        try seedInfo(in: home, sessionId: sid, cwd: "/Users/me/_Projects/clyde")
+
+        let payload = #"{"hook_event_name":"CwdChanged","session_id":"\#(sid)","cwd":"/private/tmp/scratchpad"}"#
+        XCTAssertEqual(try runHook(payload: payload, home: home), 0)
+
+        XCTAssertEqual(try infoCwd(in: home, sessionId: sid), "/Users/me/_Projects/clyde")
+    }
+
+    /// An ordinary event carries the session's own cwd, so a session
+    /// that really did move is corrected by the next thing it does.
+    func testAnOrdinaryEventCorrectsAStaleCwd() throws {
+        let home = tempHome()
+        let sid = "dddddddd-1111-2222-3333-444444444444"
+        try seedInfo(in: home, sessionId: sid, cwd: "/private/tmp/scratchpad")
+
+        let payload = #"{"hook_event_name":"UserPromptSubmit","session_id":"\#(sid)","cwd":"/Users/me/_Projects/clyde"}"#
+        XCTAssertEqual(try runHook(payload: payload, home: home), 0)
+
+        XCTAssertEqual(try infoCwd(in: home, sessionId: sid), "/Users/me/_Projects/clyde")
+    }
+
+    /// Correcting the cwd must not rewrite the rest of the file:
+    /// `source` is what tells the activity timeline whether a session
+    /// started fresh, resumed, or came back from a compact.
+    func testCorrectingTheCwdKeepsTheRestOfTheFile() throws {
+        let home = tempHome()
+        let sid = "eeeeeeee-1111-2222-3333-444444444444"
+        try seedInfo(in: home, sessionId: sid, cwd: "/somewhere/else", extra: #", "source": "resume""#)
+
+        let payload = #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/Users/me/_Projects/clyde","tool_name":"Bash"}"#
+        XCTAssertEqual(try runHook(payload: payload, home: home), 0)
+
+        let info = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: stateFile(in: home, sessionId: sid, suffix: "info"))
+        ) as? [String: Any]
+        XCTAssertEqual(info?["cwd"] as? String, "/Users/me/_Projects/clyde")
+        XCTAssertEqual(info?["source"] as? String, "resume")
+        XCTAssertEqual(info?["started_at"] as? Int, 1_788_000_000)
+    }
+
+    private func seedInfo(in home: URL, sessionId: String,
+                          cwd: String, extra: String = "") throws {
+        let dir = home.appendingPathComponent(".clyde/state")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let body = #"{"session_id": "\#(sessionId)", "pid": 999, "cwd": "\#(cwd)", "started_at": 1788000000\#(extra)}"#
+        try body.write(to: stateFile(in: home, sessionId: sessionId, suffix: "info"),
+                       atomically: true, encoding: .utf8)
+    }
+
+    private func infoCwd(in home: URL, sessionId: String) throws -> String? {
+        let data = try Data(contentsOf: stateFile(in: home, sessionId: sessionId, suffix: "info"))
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return json?["cwd"] as? String
+    }
+
     private func stateFile(in home: URL, sessionId: String, suffix: String) -> URL {
         home.appendingPathComponent(".clyde/state/\(sessionId)-\(suffix)")
     }
@@ -699,7 +764,12 @@ final class HookScriptTests: XCTestCase {
         XCTAssertEqual(info["source"] as? String, "compact")
     }
 
-    func testCwdChangedRewritesInfoCwd() throws {
+    /// This used to assert the opposite. `CwdChanged` fires for a `cd`
+    /// inside a tool call, so honouring it renamed a session after
+    /// whatever scratch directory a command last visited — and left it
+    /// there, because every later event carried the real cwd and
+    /// nothing read them.
+    func testCwdChangedDoesNotRewriteInfoCwd() throws {
         let home = tempHome()
         let sid = "ev-0003"
         try runHook(payload: #"{"hook_event_name":"SessionStart","session_id":"\#(sid)","cwd":"/repo","source":"startup"}"#, home: home)
@@ -707,7 +777,7 @@ final class HookScriptTests: XCTestCase {
         try runHook(payload: #"{"hook_event_name":"CwdChanged","session_id":"\#(sid)","cwd":"/repo/sub"}"#, home: home)
 
         let info = try json(at: stateFile(in: home, sessionId: sid, suffix: "info"))
-        XCTAssertEqual(info["cwd"] as? String, "/repo/sub")
+        XCTAssertEqual(info["cwd"] as? String, "/repo")
     }
 
     /// This used to assert the opposite — that CwdChanged must never create
