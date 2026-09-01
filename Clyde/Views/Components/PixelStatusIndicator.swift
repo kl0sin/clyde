@@ -25,9 +25,9 @@ struct PixelStatusIndicator: View {
     }
 
     let state: State
-    /// One pixel of the sprite.
-    var size: CGFloat = 3
-    var spacing: CGFloat = 1.3
+    /// The slot the mark is drawn inside. Every other dimension comes
+    /// from it.
+    let slot: CGFloat
 
     /// The grid is square, and four is the smallest width where a
     /// diagonal reads as a diagonal rather than as a corner.
@@ -111,35 +111,52 @@ struct PixelStatusIndicator: View {
 
     // MARK: - Geometry
 
-    /// Every dimension of the mark, derived from the slot it sits in.
+    /// Every dimension of the mark, in whole points.
+    ///
+    /// Whole points matter more than exact proportions here. The first
+    /// version derived fractional sizes from the slot — 2.11pt cells
+    /// with 1.32pt gaps — and on a display that draws one point as one
+    /// pixel the rasteriser rounded each cell differently: compact came
+    /// out with a cross through it and the full panel with one row
+    /// twice the weight of the others. Same numbers, two different
+    /// shapes, neither of them a grid.
     struct Metrics: Equatable {
-        let pixel: CGFloat
-        let spacing: CGFloat
-        var span: CGFloat { pixel * CGFloat(columns) + spacing * CGFloat(columns - 1) }
+        /// One pixel of the sprite.
+        let cell: CGFloat
+        /// Between the two cells of a block.
+        let innerGap: CGFloat
+        /// Between the blocks. One cell wide in both sizes — this is
+        /// what makes the mark read as four 2x2 blocks rather than as
+        /// sixteen evenly spaced dots.
+        let blockGap: CGFloat
+
+        var span: CGFloat { cell * 4 + innerGap * 2 + blockGap }
+
+        /// Where a row or column starts, from the mark's own corner.
+        func offset(_ index: Int) -> CGFloat {
+            switch index {
+            case 0: return 0
+            case 1: return cell + innerGap
+            case 2: return cell * 2 + innerGap + blockGap
+            default: return cell * 3 + innerGap * 2 + blockGap
+            }
+        }
     }
 
     /// One mark at two sizes rather than two marks. The compact slot is
-    /// 24 points and the full panel's is 34; deriving both from the slot
-    /// keeps the proportions identical, so the modes cannot drift apart
-    /// the way they did when each was tuned by hand.
-    /// The gap is a third of a pixel wide rather than a seventh: at 24
-    /// points the first draft's 0.9pt gaps antialiased away and the
-    /// grid read as four stripes. A pixel grid has to look like
-    /// separate pixels at the smaller of the two sizes, or it is not
-    /// the same mark in both.
+    /// 24 points and the full panel's is 34; both round to whole points
+    /// from the same rule, so the structure is identical and only the
+    /// scale changes.
     static func metrics(slot: CGFloat) -> Metrics {
-        Metrics(pixel: slot * 0.083, spacing: slot * 0.055)
+        let cell = max(2, (slot * 0.088).rounded())
+        return Metrics(cell: cell, innerGap: 1, blockGap: cell)
     }
 
-    init(state: State, size: CGFloat = 3, spacing: CGFloat = 1.3) {
-        self.state = state
-        self.size = size
-        self.spacing = spacing
-    }
-
-    init(state: State, slot: CGFloat) {
-        let metrics = Self.metrics(slot: slot)
-        self.init(state: state, size: metrics.pixel, spacing: metrics.spacing)
+    /// Where the mark sits inside its slot. Floored rather than centred
+    /// exactly: half a point of asymmetry is invisible, half a point of
+    /// blur is not.
+    static func origin(slot: CGFloat) -> CGFloat {
+        ((slot - metrics(slot: slot).span) / 2).rounded(.down)
     }
 
     // MARK: - The wave
@@ -209,22 +226,29 @@ struct PixelStatusIndicator: View {
     }
 
     private func grid(colour: Color, time: Double?) -> some View {
-        VStack(spacing: spacing) {
-            ForEach(0..<Self.columns, id: \.self) { row in
-                HStack(spacing: spacing) {
-                    ForEach(0..<Self.columns, id: \.self) { col in
-                        Rectangle()
-                            .fill(colour)
-                            .frame(width: size, height: size)
-                            .opacity(
-                                Self.opacity(row: row, col: col,
-                                             at: time ?? Self.stillFrame,
-                                             state: state)
-                            )
-                    }
+        let metrics = Self.metrics(slot: slot)
+        let origin = Self.origin(slot: slot)
+        let at = time ?? Self.stillFrame
+
+        // Drawn rather than laid out: a stack rounds each cell's frame
+        // on its own and the grid comes apart. Here every rectangle is
+        // placed on a whole point by construction.
+        return Canvas { context, _ in
+            for row in 0..<Self.columns {
+                for col in 0..<Self.columns {
+                    let rect = CGRect(x: origin + metrics.offset(col),
+                                      y: origin + metrics.offset(row),
+                                      width: metrics.cell,
+                                      height: metrics.cell)
+                    context.fill(
+                        Path(rect),
+                        with: .color(colour.opacity(
+                            Self.opacity(row: row, col: col, at: at, state: state)))
+                    )
                 }
             }
         }
+        .frame(width: slot, height: slot)
     }
 
 }

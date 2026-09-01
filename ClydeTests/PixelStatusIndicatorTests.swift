@@ -234,10 +234,45 @@ final class PixelStatusIndicatorTests: XCTestCase {
         let compact = PixelStatusIndicator.metrics(slot: 24)
         let full = PixelStatusIndicator.metrics(slot: 34)
 
-        XCTAssertEqual(compact.pixel / compact.spacing,
-                       full.pixel / full.spacing,
-                       accuracy: 0.0001)
+        // Four 2x2 blocks in both: the gap between blocks is a whole
+        // cell, the gap inside one is the smallest gap there is.
+        for metrics in [compact, full] {
+            XCTAssertEqual(metrics.blockGap, metrics.cell)
+            XCTAssertEqual(metrics.innerGap, 1)
+        }
         XCTAssertEqual(compact.span / 24, full.span / 34, accuracy: 0.0001)
+    }
+
+    /// The defect this shape replaced: fractional cells and gaps, which
+    /// the rasteriser rounded differently in each mode — a cross
+    /// through the compact mark and one double-weight row in the full
+    /// one. Whole points cannot round.
+    func testEveryDimensionIsAWholePoint() {
+        for slot in [CGFloat(24), 34] {
+            let metrics = PixelStatusIndicator.metrics(slot: slot)
+            for value in [metrics.cell, metrics.innerGap, metrics.blockGap,
+                          metrics.span, PixelStatusIndicator.origin(slot: slot)] {
+                XCTAssertEqual(value, value.rounded(), "\(value) is not a whole point")
+            }
+            for index in 0..<PixelStatusIndicator.columns {
+                let offset = metrics.offset(index)
+                XCTAssertEqual(offset, offset.rounded())
+            }
+        }
+    }
+
+    /// The blocks are 2x2: the step inside a block is smaller than the
+    /// step across to the next one.
+    func testTheCellsAreGroupedInBlocks() {
+        for slot in [CGFloat(24), 34] {
+            let metrics = PixelStatusIndicator.metrics(slot: slot)
+            let insideBlock = metrics.offset(1) - metrics.offset(0)
+            let acrossBlocks = metrics.offset(2) - metrics.offset(1)
+            let insideAgain = metrics.offset(3) - metrics.offset(2)
+
+            XCTAssertLessThan(insideBlock, acrossBlocks)
+            XCTAssertEqual(insideBlock, insideAgain, "the two blocks are not the same block")
+        }
     }
 
     /// The frame around it is one rule too — opacity and thickness

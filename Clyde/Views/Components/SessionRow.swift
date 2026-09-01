@@ -923,7 +923,6 @@ struct SessionStatusIndicator: View {
                     state: session.needsAttention ? .needsAttention : .working,
                     slot: 34
                 )
-                .frame(width: 34, height: 34)
 
                 if session.needsAttention {
                     Circle()
