@@ -370,25 +370,23 @@ enum HookInstaller {
             }
         }
 
+        // Both of these defer to ShortcutPermission so the pane a
+        // button opens is defined once. They drifting apart is a silent
+        // fault: the button still opens System Settings, just not at
+        // the permission it names.
         var bannerSecondaryActionURL: URL? {
             switch self {
-            case .accessibilityNotTrusted:
-                return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
-            case .inputMonitoringNotTrusted:
-                return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-            default:
-                return nil
+            case .accessibilityNotTrusted:   return ShortcutPermission.inputMonitoring.settingsURL
+            case .inputMonitoringNotTrusted: return ShortcutPermission.accessibility.settingsURL
+            default:                         return nil
             }
         }
 
         var bannerActionURL: URL? {
             switch self {
-            case .accessibilityNotTrusted:
-                return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-            case .inputMonitoringNotTrusted:
-                return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
-            default:
-                return nil
+            case .accessibilityNotTrusted:   return ShortcutPermission.accessibility.settingsURL
+            case .inputMonitoringNotTrusted: return ShortcutPermission.inputMonitoring.settingsURL
+            default:                         return nil
             }
         }
     }

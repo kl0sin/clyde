@@ -124,6 +124,7 @@ Worth noting where these came from. Five of the seven were found by the user wor
 - [ ] Cleat and the ten-second decision window: the hook now blocks for that long waiting for an answer, and inside a cleat session it blocks cleat's hook bridge. Whether the bridge tolerates it is unverified — this machine has no cleat to try it on. One run answers it !md #qa
 - [ ] Two agents of the same type still show as one row. Instrumented since hook v42, which logs an `agent-merge` line when the merge happens; nothing has recurred since, so there is no evidence to work from yet. Left waiting for the next occurrence rather than guessed at !md #hooks
 - [ ] Compact open beside real work for an hour: is the wave ignorable, does the reordering read, does the height behave as sessions come and go? The one question this release shipped without an answer to !md #ux #qa
+- [x] The Input Monitoring button opened a pane with no Clyde row in it — that pane lists only applications that have *asked*, and `IOHIDCheckAccess` is a query that registers nothing. Found by a user who deleted both entries and could re-grant only one; the shortcut had no way back on !hi #ux
 - [ ] Watch for anything else in a day of ordinary use before tagging !md #qa
 
 ## Phase: v0.9.x — Panel space

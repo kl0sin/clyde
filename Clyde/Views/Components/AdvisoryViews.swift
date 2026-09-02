@@ -126,53 +126,41 @@ struct AdvisoryDetail: View {
 struct ShortcutPermissionActions: View {
     var onOpen: () -> Void = {}
 
-    private struct Permission {
-        let title: String
-        let url: URL?
-        let granted: Bool
-    }
-
-    private var permissions: [Permission] {
-        [
-            Permission(title: "Accessibility",
-                       url: URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"),
-                       granted: HookInstaller.isAccessibilityTrusted()),
-            Permission(title: "Input Monitoring",
-                       url: URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"),
-                       granted: HookInstaller.isInputMonitoringTrusted())
-        ]
-    }
-
     var body: some View {
         HStack(spacing: Spacing.xxs) {
-            ForEach(permissions, id: \.title) { permission in
+            ForEach(ShortcutPermission.allCases, id: \.title) { permission in
+                let granted = permission.isGranted
                 Button {
-                    if let url = permission.url { NSWorkspace.shared.open(url) }
+                    // `reveal` rather than opening the URL: Input
+                    // Monitoring's pane lists only applications that
+                    // have asked, so the ask has to happen first or the
+                    // button leads somewhere with no Clyde in it.
+                    permission.reveal()
                     onOpen()
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: permission.granted ? "checkmark" : "arrow.up.forward.app")
+                        Image(systemName: granted ? "checkmark" : "arrow.up.forward.app")
                             .font(.system(size: 9, weight: .semibold))
                         Text(permission.title)
-                            .font(.system(size: 11, weight: permission.granted ? .regular : .medium))
+                            .font(.system(size: 11, weight: granted ? .regular : .medium))
                     }
                     // Granted reads as settled rather than as a second
                     // thing to do: the green the app already uses for a
                     // session that needs nothing.
-                    .foregroundStyle(permission.granted
+                    .foregroundStyle(granted
                                      ? SessionTheme.readyColor.opacity(0.9)
                                      : TextColor.primary)
                     .padding(.horizontal, Spacing.xs)
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: Radius.small)
-                            .fill(permission.granted
+                            .fill(granted
                                   ? SessionTheme.readyColor.opacity(0.14)
                                   : Color.white.opacity(0.12))
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(permission.granted
+                .accessibilityLabel(granted
                                     ? "\(permission.title) is granted"
                                     : "Open \(permission.title) settings")
             }
