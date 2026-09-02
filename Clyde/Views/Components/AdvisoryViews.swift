@@ -88,20 +88,19 @@ struct AdvisoryDetail: View {
                 .foregroundStyle(TextColor.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            // Both doors, when the issue has two. The shortcut needs
-            // two grants in two different panes, and telling someone
-            // about the second only after they have granted the first
-            // reads as the app moving the goalposts.
-            HStack(spacing: Spacing.xxs) {
-                if let url = issue.bannerActionURL, let title = issue.bannerActionTitle {
-                    advisoryButton(title, url: url, prominent: true)
-                }
-                if let url = issue.bannerSecondaryActionURL,
-                   let title = issue.bannerSecondaryActionTitle {
-                    advisoryButton(title, url: url, prominent: false)
-                }
+            // Both doors, and which of them is already open. The
+            // shortcut needs two grants in two different panes; telling
+            // someone about the second only after they have granted the
+            // first reads as the app moving the goalposts, and showing
+            // both without saying which is done makes the finished one
+            // look like work.
+            if issue.isShortcutPermission {
+                ShortcutPermissionActions(onOpen: onClose)
+                    .padding(.top, 2)
+            } else if let url = issue.bannerActionURL, let title = issue.bannerActionTitle {
+                advisoryButton(title, url: url, prominent: true)
+                    .padding(.top, 2)
             }
-            .padding(.top, 2)
         }
         .padding(Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -113,5 +112,70 @@ struct AdvisoryDetail: View {
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                 )
         )
+    }
+}
+
+/// The two permissions ⌃⌘C needs, each saying whether it is already
+/// granted.
+///
+/// The state is read at render time rather than stored: both checks are
+/// a single syscall, and the advisory is redrawn every fifteen seconds
+/// while it is up, which is what makes a tick appear shortly after the
+/// user grants one without them having to work out whether Clyde
+/// noticed.
+struct ShortcutPermissionActions: View {
+    var onOpen: () -> Void = {}
+
+    private struct Permission {
+        let title: String
+        let url: URL?
+        let granted: Bool
+    }
+
+    private var permissions: [Permission] {
+        [
+            Permission(title: "Accessibility",
+                       url: URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"),
+                       granted: HookInstaller.isAccessibilityTrusted()),
+            Permission(title: "Input Monitoring",
+                       url: URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"),
+                       granted: HookInstaller.isInputMonitoringTrusted())
+        ]
+    }
+
+    var body: some View {
+        HStack(spacing: Spacing.xxs) {
+            ForEach(permissions, id: \.title) { permission in
+                Button {
+                    if let url = permission.url { NSWorkspace.shared.open(url) }
+                    onOpen()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: permission.granted ? "checkmark" : "arrow.up.forward.app")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(permission.title)
+                            .font(.system(size: 11, weight: permission.granted ? .regular : .medium))
+                    }
+                    // Granted reads as settled rather than as a second
+                    // thing to do: the green the app already uses for a
+                    // session that needs nothing.
+                    .foregroundStyle(permission.granted
+                                     ? SessionTheme.readyColor.opacity(0.9)
+                                     : TextColor.primary)
+                    .padding(.horizontal, Spacing.xs)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.small)
+                            .fill(permission.granted
+                                  ? SessionTheme.readyColor.opacity(0.14)
+                                  : Color.white.opacity(0.12))
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(permission.granted
+                                    ? "\(permission.title) is granted"
+                                    : "Open \(permission.title) settings")
+            }
+        }
     }
 }

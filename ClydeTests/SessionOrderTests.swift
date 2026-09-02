@@ -406,3 +406,36 @@ final class ShortcutPermissionAdviceTests: XCTestCase {
         }
     }
 }
+
+/// Both permissions are shown at once, each saying whether it is
+/// already granted — so the one that is done reads as done rather than
+/// as a second thing to do.
+@MainActor
+final class ShortcutPermissionStateTests: XCTestCase {
+
+    func testTheTwoShortcutIssuesAreRecognised() {
+        XCTAssertTrue(HookInstaller.HealthIssue.accessibilityNotTrusted.isShortcutPermission)
+        XCTAssertTrue(HookInstaller.HealthIssue.inputMonitoringNotTrusted.isShortcutPermission)
+    }
+
+    /// And nothing else is: a broken hook install is fixed by Clyde, not
+    /// by a trip to System Settings.
+    func testOtherIssuesAreNot() {
+        XCTAssertFalse(HookInstaller.HealthIssue.cleatHooksCapDisabled.isShortcutPermission)
+    }
+
+    /// The state each button shows is read live, so granting one is
+    /// reflected without a restart. Guarded by the overrides the tests
+    /// use, which is the only way to assert it without real TCC state.
+    func testTheGrantedStateIsReadLive() {
+        HookInstaller.accessibilityTrustedOverride = true
+        HookInstaller.inputMonitoringTrustedOverride = false
+        defer {
+            HookInstaller.accessibilityTrustedOverride = nil
+            HookInstaller.inputMonitoringTrustedOverride = nil
+        }
+
+        XCTAssertTrue(HookInstaller.isAccessibilityTrusted())
+        XCTAssertFalse(HookInstaller.isInputMonitoringTrusted())
+    }
+}

@@ -226,16 +226,14 @@ private struct HookHealthBanner: View {
                 // right panes instead of routing through a Settings
                 // screen that cannot grant the permission. Two of them
                 // when the issue needs two grants, in two places.
-                HStack(spacing: 6) {
-                    if let actionTitle = issue.bannerActionTitle, let actionURL = issue.bannerActionURL {
-                        bannerButton(actionTitle, url: actionURL, prominent: true)
-                    }
-                    if let title = issue.bannerSecondaryActionTitle,
-                       let url = issue.bannerSecondaryActionURL {
-                        bannerButton(title, url: url, prominent: false)
-                    }
+                if issue.isShortcutPermission {
+                    ShortcutPermissionActions()
+                        .padding(.top, 2)
+                } else if let actionTitle = issue.bannerActionTitle,
+                          let actionURL = issue.bannerActionURL {
+                    bannerButton(actionTitle, url: actionURL, prominent: true)
+                        .padding(.top, 2)
                 }
-                .padding(.top, 2)
                 if showAffordance {
                     Text("Click to open Settings")
                         .font(.system(size: 9))

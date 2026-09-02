@@ -346,6 +346,16 @@ enum HookInstaller {
             }
         }
 
+        /// True for the two issues that are one permission short of a
+        /// working ⌃⌘C. Both are granted by the user in System
+        /// Settings, and both advisories talk about the same pair.
+        var isShortcutPermission: Bool {
+            switch self {
+            case .accessibilityNotTrusted, .inputMonitoringNotTrusted: return true
+            default: return false
+            }
+        }
+
         /// The other of the two panes the shortcut needs.
         ///
         /// Both grants are required and macOS puts them in different
