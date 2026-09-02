@@ -8,6 +8,26 @@ final class AppViewModel: ObservableObject {
     @Published var isCollapsed = true
     @Published var lastError: String?
     @Published var hookHealthIssue: HookInstaller.HealthIssue?
+
+    /// Re-checks a missing permission until it appears.
+    ///
+    /// Granting accessibility or input monitoring happens in System
+    /// Settings, which touches none of the files Clyde watches — so the
+    /// advisory sat there saying the permission was missing long after
+    /// it had been given, and the only way out was to quit and reopen.
+    /// Two syscalls every fifteen seconds, and only while one of those
+    /// two issues is on screen.
+    private var permissionRecheckTimer: Timer?
+    static let permissionRecheckInterval: TimeInterval = 15
+
+    /// Whether compact's advisory is opened out to its full text.
+    ///
+    /// It lives here rather than in the view because the compact window
+    /// computes its own height and refuses any size its content asks
+    /// for — so a panel that does not know the advisory is open renders
+    /// it into a window that never grew, and the text is cut off at the
+    /// bottom edge. Which is exactly what shipped.
+    @Published var compactAdvisoryExpanded = false
     /// Whether the history store opened. The panel's route into the review
     /// window is hidden when it did not, rather than offering a button that
     /// silently does nothing.
@@ -331,6 +351,17 @@ final class AppViewModel: ObservableObject {
         // and reports "everything fine" while settings.json points nowhere.
         HookInstaller.migrateLegacyHookIfNeeded()
         ensureHookHealthy()
+
+        // Coming back from System Settings is the moment a grant is
+        // most likely to have just happened.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.hookHealthIssue != nil else { return }
+                self.ensureHookHealthy()
+            }
+        }
         startHookSelfHealing()
         startCleatConfigWatching()
         startSettingsWatcher()
@@ -583,6 +614,31 @@ final class AppViewModel: ObservableObject {
     /// We never silently overwrite a working install. We only act when:
     ///  - the hook is missing AND the user hasn't explicitly opted out, or
     ///  - the install is corrupt / outdated / missing events (always repair).
+    /// Starts polling while a permission is missing, stops when it is
+    /// not. Anything else — a broken install, a disabled cleat
+    /// capability — is fixed by touching a file Clyde already watches.
+    @MainActor
+    private func updatePermissionRecheck(for issue: HookInstaller.HealthIssue?) {
+        let waitingOnUserGrant: Bool
+        switch issue {
+        case .accessibilityNotTrusted, .inputMonitoringNotTrusted: waitingOnUserGrant = true
+        default: waitingOnUserGrant = false
+        }
+
+        guard waitingOnUserGrant else {
+            permissionRecheckTimer?.invalidate()
+            permissionRecheckTimer = nil
+            return
+        }
+        guard permissionRecheckTimer == nil else { return }
+
+        permissionRecheckTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.permissionRecheckInterval, repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.ensureHookHealthy() }
+        }
+    }
+
     private func ensureHookHealthy() {
         let optedOut = UserDefaults.standard.bool(forKey: Self.hookOptOutKey)
         Task.detached(priority: .utility) {
@@ -652,7 +708,10 @@ final class AppViewModel: ObservableObject {
             }
 
             let finalIssue = resolvedIssue
-            await MainActor.run { self.hookHealthIssue = finalIssue }
+            await MainActor.run {
+                self.hookHealthIssue = finalIssue
+                self.updatePermissionRecheck(for: finalIssue)
+            }
         }
     }
 

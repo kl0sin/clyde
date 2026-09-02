@@ -318,3 +318,48 @@ final class AgentHandoverTests: XCTestCase {
     }
 }
 
+
+/// Compact computes its own height and the panel refuses any size its
+/// content asks for — so anything the height calculation does not know
+/// about is drawn into a window that never grew for it. The advisory
+/// was exactly that: opened out, its text and its button were cut off
+/// at the bottom edge.
+@MainActor
+final class CompactAdvisoryHeightTests: XCTestCase {
+
+    private func session(_ name: String) -> Session {
+        var s = Session(pid: 1, workingDirectory: "/repo", status: .idle)
+        s.customName = name
+        return s
+    }
+
+    func testAnOpenAdvisoryAddsHeight() {
+        let rows = [session("a"), session("b")]
+        let closed = CompactRootView.height(for: rows)
+        let open = CompactRootView.height(for: rows, advisory: .accessibilityNotTrusted)
+
+        XCTAssertGreaterThan(open, closed)
+    }
+
+    /// Enough for the title, the message and the button that fixes it —
+    /// the button is the point, and it was the part that got cut.
+    func testTheAdvisoryGetsRoomForItsButton() {
+        XCTAssertGreaterThan(CompactRootView.advisoryHeight(for: .accessibilityNotTrusted), 80)
+    }
+
+    /// A longer message takes more room, since the text wraps.
+    func testALongerMessageTakesMoreRoom() {
+        let short = CompactRootView.advisoryHeight(for: .accessibilityNotTrusted)
+        let long = CompactRootView.advisoryHeight(for: .inputMonitoringNotTrusted)
+
+        XCTAssertGreaterThanOrEqual(long, short)
+    }
+
+    /// And a missing permission is re-checked while the advisory is up:
+    /// granting it happens in System Settings, which touches none of the
+    /// files Clyde watches.
+    func testAMissingPermissionIsRecheckedOftenEnoughToNotice() {
+        XCTAssertLessThanOrEqual(AppViewModel.permissionRecheckInterval, 30)
+        XCTAssertGreaterThanOrEqual(AppViewModel.permissionRecheckInterval, 5)
+    }
+}

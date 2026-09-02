@@ -398,6 +398,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        // The advisory arrives after launch — the health check is
+        // asynchronous — so the height has to be recomputed when it
+        // does, not only when the user opens it out. Without this an
+        // advisory that was already open at launch rendered into a
+        // window sized before anyone knew it existed.
+        appViewModel.$hookHealthIssue
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, self.appViewModel.panelMode == .compact else { return }
+                self.applyPanelHeight(for: .compact)
+            }
+            .store(in: &cancellables)
+
+        appViewModel.$compactAdvisoryExpanded
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, self.appViewModel.panelMode == .compact else { return }
+                self.applyPanelHeight(for: .compact)
+            }
+            .store(in: &cancellables)
+
         appViewModel.$compactRowCap
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -495,7 +516,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let request = CompactRootView.expandedRequest(
                 from: appViewModel.permissionRequests,
                 visiblePIDs: Set(visible.map(\.pid)))
-            height = CompactRootView.height(for: visible, expanded: request)
+            let advisory = appViewModel.compactAdvisoryExpanded
+                && appViewModel.hookHealthIssue?.presentation == .chip
+                ? appViewModel.hookHealthIssue : nil
+            height = CompactRootView.height(for: visible, expanded: request, advisory: advisory)
         }
         guard expandedPanel.currentAllowedSize.height != height else { return }
         expandedPanel.applyHeight(height)

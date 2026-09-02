@@ -10,7 +10,7 @@ struct CompactRootView: View {
     @ObservedObject var appViewModel: AppViewModel
     @ObservedObject var sessionViewModel: SessionListViewModel
 
-    @SwiftUI.State private var showsAdvisory = false
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let gripHeight: CGFloat = 14
@@ -27,7 +27,8 @@ struct CompactRootView: View {
     /// line and an active one is two, so four quiet sessions and four
     /// busy ones are different windows.
     static func height(for sessions: [Session],
-                       expanded request: PermissionRequest? = nil) -> CGFloat {
+                       expanded request: PermissionRequest? = nil,
+                       advisory: HookInstaller.HealthIssue? = nil) -> CGFloat {
         let cards = sessions.reduce(CGFloat(0)) { $0 + CompactSessionRow.height(for: $1) }
         let gaps = CGFloat(max(0, sessions.count - 1)) * CompactSessionRow.gap
         let empty: CGFloat = sessions.isEmpty ? CompactSessionRow.quietHeight : 0
@@ -36,7 +37,18 @@ struct CompactRootView: View {
             + separatorHeight
             + cards + gaps + empty
             + (request.map(requestHeight) ?? 0)
+            + (advisory.map(advisoryHeight) ?? 0)
             + footerHeight
+    }
+
+    /// How much room the opened-out advisory needs, worked out before it
+    /// is drawn — the window's height is applied deliberately, so this
+    /// has to be an answer rather than a measurement after the fact.
+    static func advisoryHeight(for issue: HookInstaller.HealthIssue) -> CGFloat {
+        // Title, the message wrapped, the action button, and the
+        // padding around them.
+        let lines = ceil(CGFloat(issue.bannerMessage.count) / 46)
+        return 58 + lines * 14
     }
 
     /// The breathing room above the first row and below the last.
@@ -106,10 +118,10 @@ struct CompactRootView: View {
 
             cards
 
-            if showsAdvisory,
+            if appViewModel.compactAdvisoryExpanded,
                let advisory = appViewModel.hookHealthIssue,
                advisory.presentation == .chip {
-                AdvisoryDetail(issue: advisory) { showsAdvisory = false }
+                AdvisoryDetail(issue: advisory) { appViewModel.compactAdvisoryExpanded = false }
                     .padding(.horizontal, Spacing.sm)
                     .padding(.bottom, Spacing.xs)
             }
@@ -227,7 +239,7 @@ struct CompactRootView: View {
             // to stay open was the one place it went unsaid.
             if let advisory = appViewModel.hookHealthIssue,
                advisory.presentation == .chip {
-                AdvisoryChip(issue: advisory) { showsAdvisory.toggle() }
+                AdvisoryChip(issue: advisory) { appViewModel.compactAdvisoryExpanded.toggle() }
             }
 
             Button {

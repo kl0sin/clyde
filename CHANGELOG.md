@@ -6,6 +6,9 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **The shortcut advisory in compact is readable.** Opening it out cut the text and the button off at the window's bottom edge — compact computes its own height and the panel refuses any size its content asks for, and the advisory was not in that calculation. The window makes room for it now, so the part that says which permission is missing, and the button that opens the right pane, are both there.
+- **Granting the permission clears the warning.** Accessibility and input monitoring are granted in System Settings, which touches none of the files Clyde watches — so the "Global shortcut is off" advisory stayed up long after the permission had been given, and only a restart cleared it. Clyde re-checks every fifteen seconds while that advisory is showing, and again whenever you come back to it.
+
 - **A session no longer announces it has finished when its agent hands work back.** Claude Code ends the parent's turn while its agents keep running, which clears the marker Clyde reads as "working" — so for the second or two between an agent returning and the parent picking the work back up there was no evidence of work at all. The session went green, played the "session finished" sound, and went back to working. It now stays working across that handover.
 - **A session's agents are counted in words, and a container says so.** The chip beside a working session read `◉ 1` — at that size the character is a dot, and it said "something" rather than "an agent". It says `1 agent` now, in the same words the full panel uses. And a session running inside a Cleat container carries the `cleat` mark in compact too; it had only ever appeared in the full panel.
 - **An agent's mark lines up with its name.** The sprite beside a subagent's row sat two and a half points below the line of text next to it.
