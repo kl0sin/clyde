@@ -26,6 +26,24 @@ set -uo pipefail
 
 EXPECTED_PANEL="400x420"
 EXPECTED_WIDGET="130x46"
+
+# Compact's height is computed rather than declared, which is a
+# different risk from the one above and needs a different assertion.
+# There is no single right answer — the window is as tall as what it
+# shows — but the set of right answers is small and countable:
+#
+#   grip 14 + list padding 8 + separator 0.5 + rows*40 + footer 34
+#
+# so every legitimate height is 56.5 + 40n, rounded. A height outside
+# that set means the calculation is wrong, which is exactly the fault
+# that shipped twice in one day: an advisory missing from the sum, and
+# then an estimate for it eleven points short.
+#
+# An open permission request or advisory adds to the height and is not
+# in the set. Neither exists on a runner, which is where this runs.
+COMPACT_ROW=40
+COMPACT_CHROME=57          # 56.5, rounded the way the window reports it
+COMPACT_MAX_ROWS=10        # the row cap's ceiling
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 APP=""
@@ -49,17 +67,52 @@ fi
 # anything. Production callers never set it.
 GEOMETRY_CMD="${CLYDE_GEOMETRY_CMD:-swift $REPO_ROOT/scripts/dev/window-geometry.swift Clyde}"
 
-LAUNCHED=0
-if [ -n "$APP" ]; then
-    open "$APP" || { echo "could not launch $APP" >&2; exit 1; }
-    LAUNCHED=1
-    sleep 12   # the panel is built during launch, before it is ever shown
-fi
+# The mode is a stored preference, so the first measurement cannot
+# assume which one the app will open in — on a development machine it
+# opens in whatever was last used, and the check then measures compact
+# against the full panel's expectation and fails for no reason.
+BUNDLE_ID=""
+PREVIOUS_MODE=""
+restore_mode() {
+    [ -n "$BUNDLE_ID" ] || return 0
+    if [ -n "$PREVIOUS_MODE" ]; then
+        defaults write "$BUNDLE_ID" panelMode "$PREVIOUS_MODE"
+    else
+        defaults delete "$BUNDLE_ID" panelMode 2>/dev/null
+    fi
+}
 
-GEOMETRY=$($GEOMETRY_CMD 2>/dev/null)
-
-if [ "$LAUNCHED" = "1" ]; then
+# `open` on a running app only brings it forward, so a mode written to
+# the preference would never be read. Every launch here starts from no
+# running copy.
+launch_and_measure() {
+    local mode="$1"
+    # Kill before writing: a terminating copy flushes its own defaults
+    # and would overwrite the mode we are about to ask for.
     killall Clyde 2>/dev/null
+    while pgrep -f "Clyde.app/Contents/MacOS" >/dev/null; do sleep 0.2; done
+    [ -z "$BUNDLE_ID" ] || defaults write "$BUNDLE_ID" panelMode "$mode"
+    open "$APP" || { echo "could not launch $APP" >&2; exit 1; }
+    sleep 12   # the panel is built during launch, before it is ever shown
+    $GEOMETRY_CMD 2>/dev/null
+    killall Clyde 2>/dev/null
+}
+
+if [ -n "$APP" ]; then
+    # PlistBuddy rather than `defaults read`, which silently returns
+    # nothing for a relative bundle path — and an empty bundle id here
+    # means the mode is never set and both measurements are whatever the
+    # machine happened to be left in.
+    BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist" 2>/dev/null)
+    if [ -z "$BUNDLE_ID" ]; then
+        echo "::error::could not read CFBundleIdentifier from $APP — cannot choose the panel mode"
+        exit 1
+    fi
+    PREVIOUS_MODE=$(defaults read "$BUNDLE_ID" panelMode 2>/dev/null || echo "")
+    trap restore_mode EXIT
+    GEOMETRY=$(launch_and_measure full)
+else
+    GEOMETRY=$($GEOMETRY_CMD 2>/dev/null)
 fi
 
 if [ -z "$GEOMETRY" ]; then
@@ -85,9 +138,36 @@ if [ "$WIDGET" != "$EXPECTED_WIDGET" ]; then
     FAILED=1
 fi
 
+# --- compact, if we launched the app ourselves -----------------------
+# Only meaningful when this script controls the launch: it switches the
+# mode through the same default the scenario scripts use, which needs a
+# relaunch to take effect.
+if [ -n "$APP" ] && [ "$FAILED" = "0" ]; then
+        COMPACT_GEOMETRY=$(launch_and_measure compact)
+
+        COMPACT=$(printf '%s\n' "$COMPACT_GEOMETRY" | awk '{print $1}' | grep '^400x' | head -1)
+        COMPACT_H=${COMPACT#400x}
+        if [ -z "$COMPACT_H" ]; then
+            echo "::error::compact panel missing — measured nothing"
+            FAILED=1
+        else
+            MATCHED=0
+            for n in $(seq 1 $COMPACT_MAX_ROWS); do
+                [ "$COMPACT_H" = "$((COMPACT_CHROME + COMPACT_ROW * n))" ] && MATCHED=1 && break
+            done
+            if [ "$MATCHED" = "0" ]; then
+                echo "::error::compact panel is ${COMPACT_H}pt tall, which is not $COMPACT_CHROME + ${COMPACT_ROW}n for any row count"
+                echo "a height outside that set means something is drawn that the height calculation does not know about"
+                FAILED=1
+            else
+                echo "compact $COMPACT — a valid height for its rows"
+            fi
+        fi
+fi
+
 if [ "$FAILED" = "0" ]; then
-    echo "PASS — panel $PANEL, widget $WIDGET"
+    echo "PASS — panel $PANEL, widget $WIDGET, compact ${COMPACT:-not measured}"
 else
-    echo "a panel taller than the screen loses its Activity bar off the bottom edge"
+    echo "a window that is not the size it declares is one the user cannot fully see"
 fi
 exit $FAILED
