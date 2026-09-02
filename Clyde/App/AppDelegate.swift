@@ -398,6 +398,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        // Every health check is also the moment to ask whether the
+        // shortcut's monitor became installable. While a permission is
+        // missing that check runs every fifteen seconds, which is how
+        // the shortcut starts working shortly after the grant instead
+        // of at the next launch.
+        appViewModel.$hookHealthIssue
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in self?.reregisterHotKeyIfTrustArrived() }
+            }
+            .store(in: &cancellables)
+
         // The advisory arrives after launch — the health check is
         // asynchronous — so the height has to be recomputed when it
         // does, not only when the user opens it out. Without this an
@@ -1098,6 +1110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Toggles the expanded view from anywhere on the system.
     /// Uses NSEvent monitors (no entitlements needed). The local monitor
     /// covers the case when Clyde itself is the key window.
+    private var hotKeyTrust = HotKeyTrustWatcher()
+
     @MainActor private func registerGlobalHotKey() {
         let handler: (NSEvent) -> Void = { [weak self] event in
             guard let self else { return }
@@ -1130,6 +1144,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Ask before installing. Neither permission's pane creates a
+        // row on its own — the row exists because the application
+        // asked, and `addGlobalMonitorForEvents` asks for nothing, it
+        // just silently stops receiving events. Without these calls a
+        // user whose entry is missing or stale has nothing to switch on
+        // and no prompt offering to put one back. Both are silent once
+        // a decision exists, so they prompt on first run only, which is
+        // the moment the shortcut is being installed and needs them.
+        let trusted = HookInstaller.isAccessibilityTrusted()
+        if !trusted { ShortcutPermission.requestAccessibility() }
+        if !HookInstaller.isInputMonitoringTrusted() {
+            ShortcutPermission.requestInputMonitoring()
+        }
+
+        // A monitor installed without trust never starts working when
+        // the trust arrives — it has to be built again. Remember which
+        // it was, so the recheck below knows.
+        hotKeyTrust.recordInstall(trusted: trusted)
+        globalHotKeyMonitor.map(NSEvent.removeMonitor)
         globalHotKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: handler)
         // Whether the monitor exists and whether macOS trusts us are
         // different questions, and a dead shortcut looks identical
@@ -1142,10 +1175,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             accessibilityTrusted=\(HookInstaller.isAccessibilityTrusted()) \
             inputMonitoringTrusted=\(HookInstaller.isInputMonitoringTrusted())
             """)
+        localHotKeyMonitor.map(NSEvent.removeMonitor)
         localHotKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             handler(event)
             return event
         }
+    }
+
+    /// Rebuild the shortcut's monitor if the permission arrived after
+    /// it was installed.
+    ///
+    /// Granting accessibility in System Settings touches nothing Clyde
+    /// watches, and the monitor it already holds stays deaf. Until this
+    /// existed the cure was restarting the app — which the user has no
+    /// way to know, and which made a working permission look broken.
+    @MainActor func reregisterHotKeyIfTrustArrived() {
+        guard hotKeyTrust.needsReinstall(trustedNow: HookInstaller.isAccessibilityTrusted())
+        else { return }
+        ClydeLog.ui.info("Accessibility arrived after launch — rebuilding the shortcut monitor")
+        registerGlobalHotKey()
     }
 
     /// ⌃⌘C, matched on the physical key and the modifiers that carry

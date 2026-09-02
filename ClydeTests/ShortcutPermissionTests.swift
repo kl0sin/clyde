@@ -33,17 +33,18 @@ final class ShortcutPermissionTests: XCTestCase {
         XCTAssertEqual(events, ["request", "open"])
     }
 
-    func testAccessibilityDoesNotNeedAsking() {
-        // Its pane lets a user add an application that never asked, and
-        // Clyde is registered there the moment it queries trust — so a
-        // prompt here would be a modal with nothing behind it.
+    func testAccessibilityAsksTooRatherThanAssumingTheRowExists() {
+        // Believed for a while that this pane lists an application that
+        // never asked. It does not: a user who removes Clyde's row, or
+        // whose row is stale, finds nothing to switch on and gets no
+        // prompt offering to put one back.
         var events: [String] = []
 
         ShortcutPermission.accessibility.reveal(
             request: { events.append("request") },
             open: { _ in events.append("open") })
 
-        XCTAssertEqual(events, ["open"])
+        XCTAssertEqual(events, ["request", "open"])
     }
 
     func testTheUrlHandedToTheOpenerIsThePermissionsOwn() {
