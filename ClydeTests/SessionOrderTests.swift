@@ -363,3 +363,46 @@ final class CompactAdvisoryHeightTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(AppViewModel.permissionRecheckInterval, 5)
     }
 }
+
+/// The shortcut needs two separate grants in two separate panes of
+/// System Settings. Whichever one is missing, the advisory has to name
+/// both and open both — granting one and being told about the second
+/// afterwards reads as the app moving the goalposts.
+@MainActor
+final class ShortcutPermissionAdviceTests: XCTestCase {
+
+    private let both: [HookInstaller.HealthIssue] = [.accessibilityNotTrusted,
+                                                     .inputMonitoringNotTrusted]
+
+    func testBothIssuesOfferAWayToTheSettingsPane() {
+        for issue in both {
+            XCTAssertNotNil(issue.bannerActionTitle, "\(issue) has no button")
+            XCTAssertNotNil(issue.bannerActionURL, "\(issue) has no destination")
+        }
+    }
+
+    func testBothIssuesAlsoOfferTheOtherPane() {
+        for issue in both {
+            XCTAssertNotNil(issue.bannerSecondaryActionTitle)
+            XCTAssertNotNil(issue.bannerSecondaryActionURL)
+        }
+    }
+
+    /// The two buttons must not lead to the same place.
+    func testTheTwoButtonsGoToDifferentPanes() {
+        for issue in both {
+            XCTAssertNotEqual(issue.bannerActionURL, issue.bannerSecondaryActionURL)
+        }
+    }
+
+    /// And the message says there are two, rather than leaving the
+    /// second to be discovered after the first is granted.
+    func testTheMessageNamesBothPermissions() {
+        for issue in both {
+            let message = issue.bannerMessage.lowercased()
+            XCTAssertTrue(message.contains("two permissions"), issue.bannerMessage)
+            XCTAssertTrue(message.contains("accessibility"), issue.bannerMessage)
+            XCTAssertTrue(message.contains("input monitoring"), issue.bannerMessage)
+        }
+    }
+}

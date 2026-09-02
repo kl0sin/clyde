@@ -246,9 +246,9 @@ enum HookInstaller {
             case .cleatHooksCapDisabled:
                 return "Run this in your terminal so Clyde can track sandboxed sessions."
             case .accessibilityNotTrusted:
-                return "macOS hasn't granted Clyde accessibility access, so ⌃⌘C does nothing from other apps. Everything else works."
+                return "⌃⌘C needs two permissions from macOS, and accessibility is the one that's missing. Input monitoring is the other — grant both and the shortcut works. Everything else already does."
             case .inputMonitoringNotTrusted:
-                return "macOS hasn't granted Clyde input monitoring, so ⌃⌘C does nothing from other apps. It's a separate switch from accessibility. Everything else works."
+                return "⌃⌘C needs two permissions from macOS, and input monitoring is the one that's missing. It's a separate switch from accessibility, in its own pane. Everything else already works."
             }
         }
 
@@ -337,7 +337,37 @@ enum HookInstaller {
         var bannerActionTitle: String? {
             switch self {
             case .accessibilityNotTrusted: return "Open Accessibility"
+            // It had none. The message named the pane and left the user
+            // to find it: System Settings › Privacy & Security › Input
+            // Monitoring, which is nowhere near where they had just
+            // been.
+            case .inputMonitoringNotTrusted: return "Open Input Monitoring"
             default: return nil
+            }
+        }
+
+        /// The other of the two panes the shortcut needs.
+        ///
+        /// Both grants are required and macOS puts them in different
+        /// places, so whichever one is missing, the door to the other is
+        /// on screen. Granting one and being told about the second only
+        /// afterwards reads as the app moving the goalposts.
+        var bannerSecondaryActionTitle: String? {
+            switch self {
+            case .accessibilityNotTrusted: return "Input Monitoring"
+            case .inputMonitoringNotTrusted: return "Accessibility"
+            default: return nil
+            }
+        }
+
+        var bannerSecondaryActionURL: URL? {
+            switch self {
+            case .accessibilityNotTrusted:
+                return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+            case .inputMonitoringNotTrusted:
+                return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            default:
+                return nil
             }
         }
 

@@ -45,10 +45,22 @@ struct CompactRootView: View {
     /// is drawn — the window's height is applied deliberately, so this
     /// has to be an answer rather than a measurement after the fact.
     static func advisoryHeight(for issue: HookInstaller.HealthIssue) -> CGFloat {
-        // Title, the message wrapped, the action button, and the
-        // padding around them.
-        let lines = ceil(CGFloat(issue.bannerMessage.count) / 46)
-        return 58 + lines * 14
+        // Counted from the parts rather than guessed at: the first
+        // estimate was eleven points short and pushed the footer off
+        // the bottom of the window instead of the advisory.
+        //
+        //   card padding 12 above and below      24
+        //   title row                            16
+        //   two gaps of Spacing.xs               16
+        //   the buttons, with their own padding  22
+        //   the row's bottom inset                8
+        let chrome: CGFloat = 86
+        // The text wraps inside the card: 400 wide, less the row's
+        // inset either side and the card's own padding.
+        let width: CGFloat = 400 - Spacing.sm * 2 - Spacing.sm * 2
+        let charsPerLine = width / 5.6      // 11pt system text, measured
+        let lines = max(1, ceil(CGFloat(issue.bannerMessage.count) / charsPerLine))
+        return chrome + lines * 15
     }
 
     /// The breathing room above the first row and below the last.

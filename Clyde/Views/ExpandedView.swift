@@ -138,6 +138,24 @@ private struct HookHealthBanner: View {
     let onOpenSettings: () -> Void
     let onDismiss: () -> Void
 
+    @ViewBuilder
+    private func bannerButton(_ title: String, url: URL, prominent: Bool) -> some View {
+        Button(action: { NSWorkspace.shared.open(url) }) {
+            Text(title)
+                .font(.system(size: 10, weight: prominent ? .medium : .regular))
+                .foregroundStyle(prominent ? .white : Color(white: 0.75))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color(white: prominent ? 0.24 : 0.17))
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityHint("Opens System Settings")
+    }
+
     var body: some View {
         if issue.isActionable {
             Button(action: onOpenSettings) {
@@ -203,27 +221,21 @@ private struct HookHealthBanner: View {
                     CopyableCommandChip(command: command)
                         .padding(.top, 2)
                 }
-                if let actionTitle = issue.bannerActionTitle, let actionURL = issue.bannerActionURL {
-                    // The fix lives in System Settings, not in Clyde's,
-                    // so the advisory carries its own button straight to
-                    // the right pane instead of routing through a
-                    // Settings screen that cannot grant the permission.
-                    Button(action: { NSWorkspace.shared.open(actionURL) }) {
-                        Text(actionTitle)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                    .fill(Color(white: 0.24))
-                            )
+                // The fix lives in System Settings, not in Clyde's, so
+                // the advisory carries its own buttons straight to the
+                // right panes instead of routing through a Settings
+                // screen that cannot grant the permission. Two of them
+                // when the issue needs two grants, in two places.
+                HStack(spacing: 6) {
+                    if let actionTitle = issue.bannerActionTitle, let actionURL = issue.bannerActionURL {
+                        bannerButton(actionTitle, url: actionURL, prominent: true)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.top, 2)
-                    .accessibilityLabel(actionTitle)
-                    .accessibilityHint("Opens System Settings")
+                    if let title = issue.bannerSecondaryActionTitle,
+                       let url = issue.bannerSecondaryActionURL {
+                        bannerButton(title, url: url, prominent: false)
+                    }
                 }
+                .padding(.top, 2)
                 if showAffordance {
                     Text("Click to open Settings")
                         .font(.system(size: 9))

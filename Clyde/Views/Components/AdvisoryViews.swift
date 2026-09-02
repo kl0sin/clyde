@@ -47,6 +47,23 @@ struct AdvisoryDetail: View {
     let issue: HookInstaller.HealthIssue
     let onClose: () -> Void
 
+    @ViewBuilder
+    private func advisoryButton(_ title: String, url: URL, prominent: Bool) -> some View {
+        Button(title) {
+            NSWorkspace.shared.open(url)
+            onClose()
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: prominent ? .medium : .regular))
+        .foregroundStyle(prominent ? TextColor.primary : TextColor.secondary)
+        .padding(.horizontal, Spacing.xs)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.small)
+                .fill(Color.white.opacity(prominent ? 0.12 : 0.07))
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(spacing: Spacing.xxs) {
@@ -71,22 +88,20 @@ struct AdvisoryDetail: View {
                 .foregroundStyle(TextColor.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let url = issue.bannerActionURL, let title = issue.bannerActionTitle {
-                Button(title) {
-                    NSWorkspace.shared.open(url)
-                    onClose()
+            // Both doors, when the issue has two. The shortcut needs
+            // two grants in two different panes, and telling someone
+            // about the second only after they have granted the first
+            // reads as the app moving the goalposts.
+            HStack(spacing: Spacing.xxs) {
+                if let url = issue.bannerActionURL, let title = issue.bannerActionTitle {
+                    advisoryButton(title, url: url, prominent: true)
                 }
-                .buttonStyle(.plain)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(TextColor.primary)
-                .padding(.horizontal, Spacing.xs)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.small)
-                        .fill(Color.white.opacity(0.12))
-                )
-                .padding(.top, 2)
+                if let url = issue.bannerSecondaryActionURL,
+                   let title = issue.bannerSecondaryActionTitle {
+                    advisoryButton(title, url: url, prominent: false)
+                }
             }
+            .padding(.top, 2)
         }
         .padding(Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
