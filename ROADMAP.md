@@ -109,10 +109,17 @@ Scoped deliberately to permission decisions. Sending prompts from the panel was 
 
 ## Phase: v0.9.1 — First hours of v0.9.0
 
-Held deliberately: v0.9.0 shipped on 1 September and these are fixes found in the first hour of using it. Waiting a day of ordinary use before tagging, so anything else the release turns up travels with them rather than as a third tag in two days.
+Held deliberately: v0.9.0 shipped on 1 September and these are the things using it turned up. Waiting a day of ordinary use before tagging, so whatever else the release surfaces travels with them rather than as a third tag in two days.
+
+Worth noting where these came from. Five of the seven were found by the user working in the app — one of them on a second machine running the release rather than a development build — and none by the suite, which stayed green throughout. The two that a test would plausibly have caught are the ones about arithmetic: a height that did not count what it was sizing, and an estimate eleven points short.
 
 - [x] A session announced it had finished in the middle of working. Claude Code ends the parent's turn while its agents keep running, which clears the busy marker — so the second or two between an agent returning and the parent picking the work back up had no evidence of work at all, and the session went green and rang the bell. It stays working across that handover now !hi
 - [x] A subagent's mark sat two and a half points above the name beside it, from the sprite growing 12 → 16 points while the row still aligned both to the top. Fixed with an alignment guide rather than a nudge !lo #ux
+- [x] A session's agents were counted by the character `◉`, which at that size is a dot. Two attempts at drawing a mark followed, and both were inventions for something the full panel already says in words — the chip says `1 agent` now, in the panel's own voice !lo #ux
+- [x] Compact shipped without the cleat mark: a session running in a container looked like every other session there, while the full panel had carried that badge for releases. Found by asking whether the day's work had remembered cleat at all — it had not !md #ux
+- [x] The shortcut advisory in compact was cut off at the window's bottom edge, text and button both. Compact computes its own height and the panel refuses any size its content asks for; the advisory was never in that calculation, and the first fix for it was eleven points short and pushed the footer off instead !hi #ux
+- [x] The "Global shortcut is off" advisory never cleared. Accessibility and input monitoring are granted in System Settings, which touches none of the files Clyde watches, so the check that produced the advisory never ran again — a restart was the only way out. Re-checked every fifteen seconds while it is up, and on becoming active !hi
+- [x] ⌃⌘C needs two permissions and the advisory named only the missing one, so granting it produced a second warning about something nobody had mentioned. The input-monitoring advisory had no button at all — its URL was there, its title returned nil. Both advisories now name both permissions, carry a button to each, and tick the one already granted !hi #ux
 - [ ] Compact open beside real work for an hour: is the wave ignorable, does the reordering read, does the height behave as sessions come and go? The one question this release shipped without an answer to !md #ux #qa
 - [ ] Watch for anything else in a day of ordinary use before tagging !md #qa
 
