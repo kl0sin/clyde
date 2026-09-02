@@ -1144,7 +1144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Ask before installing. Neither permission's pane creates a
+        // Ask before installing. The pane does not create a
         // row on its own — the row exists because the application
         // asked, and `addGlobalMonitorForEvents` asks for nothing, it
         // just silently stops receiving events. Without these calls a
@@ -1154,9 +1154,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the moment the shortcut is being installed and needs them.
         let trusted = HookInstaller.isAccessibilityTrusted()
         if !trusted { ShortcutPermission.requestAccessibility() }
-        if !HookInstaller.isInputMonitoringTrusted() {
-            ShortcutPermission.requestInputMonitoring()
-        }
 
         // A monitor installed without trust never starts working when
         // the trust arrives — it has to be built again. Remember which

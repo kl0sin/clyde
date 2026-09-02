@@ -350,9 +350,9 @@ final class CompactAdvisoryHeightTests: XCTestCase {
     /// A longer message takes more room, since the text wraps.
     func testALongerMessageTakesMoreRoom() {
         let short = CompactRootView.advisoryHeight(for: .accessibilityNotTrusted)
-        let long = CompactRootView.advisoryHeight(for: .inputMonitoringNotTrusted)
+        let long = CompactRootView.advisoryHeight(for: .autoRepairFailed(reason: String(repeating: "x", count: 200)))
 
-        XCTAssertGreaterThanOrEqual(long, short)
+        XCTAssertGreaterThan(long, short)
     }
 
     /// And a missing permission is re-checked while the advisory is up:
@@ -364,46 +364,27 @@ final class CompactAdvisoryHeightTests: XCTestCase {
     }
 }
 
-/// The shortcut needs two separate grants in two separate panes of
-/// System Settings. Whichever one is missing, the advisory has to name
-/// both and open both — granting one and being told about the second
-/// afterwards reads as the app moving the goalposts.
+/// The shortcut needs one grant: accessibility. Input monitoring was
+/// required here for a while on the evidence of two machines where
+/// accessibility was trusted and ⌃⌘C was dead — which the monitor never
+/// being rebuilt after the grant explains just as well. Proved with the
+/// log: the shortcut fires with input monitoring explicitly denied.
 @MainActor
 final class ShortcutPermissionAdviceTests: XCTestCase {
 
-    private let both: [HookInstaller.HealthIssue] = [.accessibilityNotTrusted,
-                                                     .inputMonitoringNotTrusted]
-
-    func testBothIssuesOfferAWayToTheSettingsPane() {
-        for issue in both {
-            XCTAssertNotNil(issue.bannerActionTitle, "\(issue) has no button")
-            XCTAssertNotNil(issue.bannerActionURL, "\(issue) has no destination")
-        }
+    func testTheIssueOffersAWayToTheSettingsPane() {
+        let issue = HookInstaller.HealthIssue.accessibilityNotTrusted
+        XCTAssertNotNil(issue.bannerActionTitle)
+        XCTAssertEqual(issue.bannerActionURL, ShortcutPermission.accessibility.settingsURL)
     }
 
-    func testBothIssuesAlsoOfferTheOtherPane() {
-        for issue in both {
-            XCTAssertNotNil(issue.bannerSecondaryActionTitle)
-            XCTAssertNotNil(issue.bannerSecondaryActionURL)
-        }
-    }
-
-    /// The two buttons must not lead to the same place.
-    func testTheTwoButtonsGoToDifferentPanes() {
-        for issue in both {
-            XCTAssertNotEqual(issue.bannerActionURL, issue.bannerSecondaryActionURL)
-        }
-    }
-
-    /// And the message says there are two, rather than leaving the
-    /// second to be discovered after the first is granted.
-    func testTheMessageNamesBothPermissions() {
-        for issue in both {
-            let message = issue.bannerMessage.lowercased()
-            XCTAssertTrue(message.contains("two permissions"), issue.bannerMessage)
-            XCTAssertTrue(message.contains("accessibility"), issue.bannerMessage)
-            XCTAssertTrue(message.contains("input monitoring"), issue.bannerMessage)
-        }
+    func testTheMessageNamesTheOnePermissionAndPromisesNoRestart() {
+        let message = HookInstaller.HealthIssue.accessibilityNotTrusted.bannerMessage.lowercased()
+        XCTAssertTrue(message.contains("accessibility"), message)
+        XCTAssertFalse(message.contains("input monitoring"), message)
+        // The restart used to be the real cure and nobody said so;
+        // now there is none, and the message may as well say it.
+        XCTAssertTrue(message.contains("no restart"), message)
     }
 }
 
@@ -413,9 +394,8 @@ final class ShortcutPermissionAdviceTests: XCTestCase {
 @MainActor
 final class ShortcutPermissionStateTests: XCTestCase {
 
-    func testTheTwoShortcutIssuesAreRecognised() {
+    func testTheShortcutIssueIsRecognised() {
         XCTAssertTrue(HookInstaller.HealthIssue.accessibilityNotTrusted.isShortcutPermission)
-        XCTAssertTrue(HookInstaller.HealthIssue.inputMonitoringNotTrusted.isShortcutPermission)
     }
 
     /// And nothing else is: a broken hook install is fixed by Clyde, not

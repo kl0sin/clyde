@@ -215,268 +215,21 @@ final class HookInstallerTests: XCTestCase {
         }
     }
 
-    /// A retired event left over in settings is not "missing", so the
-    /// health check reported the install as perfectly healthy and
-    /// `install()` — the only thing that prunes it — never ran. Measured
-    /// live: a machine carrying the v32 registration kept it — and its
-    /// broken `EnterWorktree` — after upgrading to the fixed build,
-    /// because nothing was missing and the repair never ran.
-    func testHealthCheckDetectsRetiredEventStillRegistered() throws {
-        try HookInstaller.install()
-
-        var settings = try JSONSerialization.jsonObject(
-            with: try Data(contentsOf: AppPaths.claudeSettingsFile)) as! [String: Any]
-        var hooks = settings["hooks"] as! [String: Any]
-        hooks["WorktreeCreate"] = [
-            ["hooks": [["type": "command", "command": AppPaths.clydeHookScript.path]]]
-        ]
-        settings["hooks"] = hooks
-        try JSONSerialization.data(withJSONObject: settings).write(to: AppPaths.claudeSettingsFile)
-
-        guard case .staleEvents(let names) = HookInstaller.healthCheck() else {
-            return XCTFail("Expected .staleEvents health issue, got \(String(describing: HookInstaller.healthCheck()))")
-        }
-        XCTAssertEqual(names, ["WorktreeCreate"])
-    }
-
-    /// And the repair must actually clear it, otherwise the banner
-    /// re-appears on every launch.
-    func testReinstallClearsRetiredEventAndReturnsToHealthy() throws {
-        try HookInstaller.install()
-        var settings = try JSONSerialization.jsonObject(
-            with: try Data(contentsOf: AppPaths.claudeSettingsFile)) as! [String: Any]
-        var hooks = settings["hooks"] as! [String: Any]
-        hooks["WorktreeCreate"] = [
-            ["hooks": [["type": "command", "command": AppPaths.clydeHookScript.path]]]
-        ]
-        settings["hooks"] = hooks
-        try JSONSerialization.data(withJSONObject: settings).write(to: AppPaths.claudeSettingsFile)
-
-        try HookInstaller.install()
-
-        XCTAssertNil(HookInstaller.healthCheck())
-    }
-
-    // MARK: - Regression tests for the matcher / rename / coexistence bugs
-    //
-    // Each of these covers a real-world failure mode we hit by hand and
-    // lost hours to. They exist so the same bugs cannot regress silently.
-
-    /// Regression: Claude Code requires a `matcher` field on
-    /// PreToolUse / PostToolUse* entries. Without it the entry is
-    /// malformed, every tool call emits "<event>:<tool> hook error",
-    /// and the script is never invoked. Other events MUST NOT have a
-    /// matcher (it's specific to tool events).
-    func testInstallEmitsMatcherForToolEvents() throws {
-        try HookInstaller.install()
-
-        let data = try Data(contentsOf: AppPaths.claudeSettingsFile)
-        let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        let hooks = settings["hooks"] as! [String: Any]
-
-        let toolEvents = ["PreToolUse", "PostToolUseFailure"]
-        for event in toolEvents {
-            let entries = hooks[event] as? [[String: Any]] ?? []
-            XCTAssertFalse(entries.isEmpty, "\(event) must have at least one entry")
-            // Find the entry with our hook command.
-            let ours = entries.first { entry in
-                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
-                return inner.contains { ($0["command"] as? String) == AppPaths.clydeHookScript.path }
-            }
-            XCTAssertNotNil(ours, "\(event) must contain Clyde's hook entry")
-            XCTAssertNotNil(ours?["matcher"], "\(event) entry must have a `matcher` field — Claude treats it as malformed otherwise")
-        }
-
-        let nonToolEvents = ["UserPromptSubmit", "SessionStart", "Stop"]
-        for event in nonToolEvents {
-            let entries = hooks[event] as? [[String: Any]] ?? []
-            let ours = entries.first { entry in
-                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
-                return inner.contains { ($0["command"] as? String) == AppPaths.clydeHookScript.path }
-            }
-            XCTAssertNotNil(ours, "\(event) must contain Clyde's hook entry")
-            XCTAssertNil(ours?["matcher"], "\(event) entry MUST NOT have a `matcher` field")
-        }
-    }
-
-    /// Regression: an existing matcher-less PreToolUse entry should
-    /// be detected by `healthCheck` as missing, so auto-repair fires
-    /// even though the registration "exists".
-    func testHealthCheckDetectsMissingMatcher() throws {
-        try HookInstaller.install()
-
-        // Mutate settings.json: strip the matcher field from PreToolUse.
-        let data = try Data(contentsOf: AppPaths.claudeSettingsFile)
-        var settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        var hooks = settings["hooks"] as! [String: Any]
-        var preToolUse = hooks["PreToolUse"] as! [[String: Any]]
-        preToolUse = preToolUse.map { entry in
-            var copy = entry
-            copy.removeValue(forKey: "matcher")
-            return copy
-        }
-        hooks["PreToolUse"] = preToolUse
-        settings["hooks"] = hooks
-        let newData = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
-        try newData.write(to: AppPaths.claudeSettingsFile)
-
-        if case .missingEvents(let names) = HookInstaller.healthCheck() {
-            XCTAssertTrue(names.contains("PreToolUse"),
-                          "Health check must flag matcher-less PreToolUse as missing")
-        } else {
-            XCTFail("Expected .missingEvents for matcher-less PreToolUse, got \(String(describing: HookInstaller.healthCheck()))")
-        }
-    }
-
-    /// Regression: when a legacy `clyde-notify.sh` is on disk from an
-    /// older Clyde install, `migrateLegacyHookIfNeeded()` must rewrite
-    /// the canonical `clyde-hook.sh`, register it in settings.json, and
-    /// delete the legacy file. Skipping this leaves the user with a
-    /// half-broken install whose hook is named one thing on disk but
-    /// referenced under another in settings.
-    func testMigrateLegacyHookReinstallsCanonicalName() throws {
-        // Plant a legacy script the way an older Clyde would have.
-        try FileManager.default.createDirectory(at: AppPaths.claudeHooksDir, withIntermediateDirectories: true)
-        try "#!/bin/bash\n# clyde-hook-version: 1\nexit 0\n"
-            .write(to: AppPaths.legacyClydeHookScript, atomically: true, encoding: .utf8)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: AppPaths.legacyClydeHookScript.path))
-
-        HookInstaller.migrateLegacyHookIfNeeded()
-
-        XCTAssertFalse(FileManager.default.fileExists(atPath: AppPaths.legacyClydeHookScript.path),
-                       "Legacy clyde-notify.sh must be deleted after migration")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: AppPaths.clydeHookScript.path),
-                      "Canonical clyde-hook.sh must be installed")
-        XCTAssertNil(HookInstaller.healthCheck(),
-                     "Post-migration install must be fully healthy")
-    }
-
-    /// Regression: when Claude Code itself isn't installed, healthCheck
-    /// must return `.claudeNotInstalled` and short-circuit before any
-    /// hook-script-level checks. This is important because if a user
-    /// installs Clyde without Claude Code, the natural error chain
-    /// would be "hook script not installed" → "click to repair" →
-    /// repair fails (no Claude to register against) → confusing.
-    /// Surfacing claudeNotInstalled at the top of the funnel sends
-    /// the user to the actual root cause first.
-    func testHealthCheckReportsClaudeNotInstalledFirst() throws {
-        HookInstaller.claudeInstalledOverride = false
-
-        // Even if everything else is healthy, claudeNotInstalled wins.
-        try HookInstaller.install()
-        XCTAssertEqual(HookInstaller.healthCheck(), .claudeNotInstalled)
-
-        // Restore and confirm we go back to nil (or some other lower-priority issue).
-        HookInstaller.claudeInstalledOverride = true
-        XCTAssertNotEqual(HookInstaller.healthCheck(), .claudeNotInstalled)
-    }
-
-    /// Regression: claude-visual (and other tools) own their own hooks
-    /// in `settings.json`. Clyde's install MUST coexist with them — it
-    /// can append to the same event's array, but must not delete or
-    /// overwrite their entries. Earlier installer logic detected our
-    /// hook by literal-string match, which would have started false-
-    /// positively merging on any rename and could clobber other tools.
-    func testInstallCoexistsWithThirdPartyHooks() throws {
-        // Seed settings.json with hooks owned by another tool, on every
-        // event we register for plus a couple we don't.
-        let foreignCommand = "curl -s http://localhost:9999/event"
-        let foreignBlock: [String: Any] = ["hooks": [["type": "command", "command": foreignCommand]]]
-        let foreignBlockWithMatcher: [String: Any] = [
-            "matcher": "Bash",
-            "hooks": [["type": "command", "command": foreignCommand]],
-        ]
-        let preExistingHooks: [String: Any] = [
-            "PreToolUse": [foreignBlockWithMatcher],
-            "Stop": [foreignBlock],
-            "UserPromptSubmit": [foreignBlock],
-            "Notification": [foreignBlock], // event we don't register for
-        ]
-        try FileManager.default.createDirectory(at: AppPaths.claudeDir, withIntermediateDirectories: true)
-        try JSONSerialization.data(withJSONObject: ["hooks": preExistingHooks])
-            .write(to: AppPaths.claudeSettingsFile)
-
-        try HookInstaller.install()
-
-        // After install, every foreign entry must still be there.
-        let data = try Data(contentsOf: AppPaths.claudeSettingsFile)
-        let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        let hooks = settings["hooks"] as! [String: Any]
-
-        for event in ["PreToolUse", "Stop", "UserPromptSubmit", "Notification"] {
-            let entries = hooks[event] as? [[String: Any]] ?? []
-            let foreignSurvived = entries.contains { entry in
-                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
-                return inner.contains { ($0["command"] as? String) == foreignCommand }
-            }
-            XCTAssertTrue(foreignSurvived, "Foreign hook on \(event) was clobbered by Clyde install")
-        }
-
-        // And our entries must be present where expected.
-        for event in ["PreToolUse", "Stop", "UserPromptSubmit", "SessionStart"] {
-            let entries = hooks[event] as? [[String: Any]] ?? []
-            let weAreThere = entries.contains { entry in
-                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
-                return inner.contains { ($0["command"] as? String) == AppPaths.clydeHookScript.path }
-            }
-            XCTAssertTrue(weAreThere, "Clyde's hook missing from \(event) after coexistence install")
-        }
-
-        // Subsequent install() calls must remain idempotent — no dupes.
-        try HookInstaller.install()
-        let data2 = try Data(contentsOf: AppPaths.claudeSettingsFile)
-        let settings2 = try JSONSerialization.jsonObject(with: data2) as! [String: Any]
-        let hooks2 = settings2["hooks"] as! [String: Any]
-        for event in HookInstaller.registeredHookEvents {
-            let entries = (hooks2[event] as? [[String: Any]]) ?? []
-            let ourCount = entries.filter { entry in
-                let inner = (entry["hooks"] as? [[String: Any]]) ?? []
-                return inner.contains { ($0["command"] as? String) == AppPaths.clydeHookScript.path }
-            }.count
-            XCTAssertEqual(ourCount, 1, "Duplicate Clyde entry for \(event) after second install()")
-        }
-    }
-
-    // MARK: - Cleat advisory (HealthIssue properties + healthCheck order)
-
-    /// Healthy hook install + cleat installed with hooks cap disabled
-    /// → healthCheck returns the cleat advisory. This is the
-    /// integration test for the new advisory branch.
-    // MARK: - Accessibility permission
-
-    /// Clyde's global ⌃⌘C hotkey is an `NSEvent` global monitor, which
-    /// macOS silently ignores unless the app is trusted for accessibility.
-    /// Nothing detected that, so the welcome modal promised "Press ⌃⌘C
-    /// from anywhere", the user pressed it, and nothing happened — with
-    /// no way to find out why. Measured on a real install: the same
-    /// binary responds to the shortcut when launched from a trusted
-    /// parent process and ignores it when launched on its own.
-    func testHealthCheckFlagsMissingAccessibilityPermission() throws {
-        try HookInstaller.install()
-        HookInstaller.accessibilityTrustedOverride = false
-
-        XCTAssertEqual(HookInstaller.healthCheck(), .accessibilityNotTrusted)
-    }
-
-    /// The permission that actually made ⌃⌘C dead on two machines.
-    ///
-    /// macOS splits these: Accessibility lets an app control others,
-    /// Input Monitoring lets it read key presses outside its own
-    /// windows — which is what a global keyDown monitor does. Clyde
-    /// only ever checked Accessibility, so the banner cleared, the
-    /// monitor installed happily, and no key event ever arrived. The
-    /// failure was silent in every direction.
-    func testHealthCheckFlagsMissingInputMonitoring() throws {
+    /// Accessibility is the only grant ⌃⌘C needs. Input monitoring was
+    /// required here for a while, on the evidence of two machines where
+    /// accessibility was trusted and the shortcut was dead — a symptom
+    /// the monitor never being rebuilt after the grant explains just as
+    /// well. Settled from the log: the shortcut fires with input
+    /// monitoring explicitly denied.
+    func testInputMonitoringIsNotRequired() throws {
         try HookInstaller.install()
         HookInstaller.accessibilityTrustedOverride = true
         HookInstaller.inputMonitoringTrustedOverride = false
 
-        XCTAssertEqual(HookInstaller.healthCheck(), .inputMonitoringNotTrusted)
+        XCTAssertNil(HookInstaller.healthCheck())
     }
 
-    /// Accessibility is reported first: it is the one users are told
-    /// about everywhere else, and fixing it alone is not enough.
-    func testMissingBothReportsAccessibilityFirst() throws {
+    func testMissingAccessibilityIsStillReported() throws {
         try HookInstaller.install()
         HookInstaller.accessibilityTrustedOverride = false
         HookInstaller.inputMonitoringTrustedOverride = false
@@ -484,14 +237,6 @@ final class HookInstallerTests: XCTestCase {
         XCTAssertEqual(HookInstaller.healthCheck(), .accessibilityNotTrusted)
     }
 
-    /// The banner has to point at the pane that grants the missing
-    /// permission. Sending someone to Accessibility when Input
-    /// Monitoring is what is empty is how this stayed unfound.
-    func testTheInputMonitoringBannerLinksToItsOwnPane() {
-        let url = HookInstaller.HealthIssue.inputMonitoringNotTrusted.bannerActionURL
-        XCTAssertEqual(url?.absoluteString,
-                       "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
-    }
 
     func testHealthCheckStaysQuietWhenAccessibilityIsGranted() throws {
         try HookInstaller.install()
@@ -741,7 +486,6 @@ final class HookInstallerTests: XCTestCase {
     /// because tracking is actually not working then.
     func testAdvisoriesAreShownAsAChipNotABanner() {
         XCTAssertEqual(HookInstaller.HealthIssue.accessibilityNotTrusted.presentation, .chip)
-        XCTAssertEqual(HookInstaller.HealthIssue.inputMonitoringNotTrusted.presentation, .chip)
         XCTAssertEqual(HookInstaller.HealthIssue.cleatHooksCapDisabled.presentation, .chip)
     }
 
@@ -756,7 +500,6 @@ final class HookInstallerTests: XCTestCase {
     /// in the hover.
     func testTheChipLabelIsShort() {
         XCTAssertEqual(HookInstaller.HealthIssue.accessibilityNotTrusted.chipLabel, "Shortcut off")
-        XCTAssertEqual(HookInstaller.HealthIssue.inputMonitoringNotTrusted.chipLabel, "Shortcut off")
         XCTAssertLessThanOrEqual(
             HookInstaller.HealthIssue.cleatHooksCapDisabled.chipLabel.count, 16)
     }

@@ -171,7 +171,6 @@ enum HookInstaller {
         case autoRepairFailed(reason: String)   // we tried to fix it and write threw
         case cleatHooksCapDisabled              // cleat installed but its hooks cap is off
         case accessibilityNotTrusted            // macOS hasn't granted accessibility, so ⌃⌘C is dead
-        case inputMonitoringNotTrusted          // reading keys outside our own windows is a separate grant
 
         /// Where an issue asks for the user's attention.
         ///
@@ -188,7 +187,7 @@ enum HookInstaller {
 
         var presentation: Presentation {
             switch self {
-            case .accessibilityNotTrusted, .inputMonitoringNotTrusted, .cleatHooksCapDisabled:
+            case .accessibilityNotTrusted, .cleatHooksCapDisabled:
                 return .chip
             default:
                 return .banner
@@ -198,7 +197,7 @@ enum HookInstaller {
         /// A couple of words. Everything else lives in the hover.
         var chipLabel: String {
             switch self {
-            case .accessibilityNotTrusted, .inputMonitoringNotTrusted:
+            case .accessibilityNotTrusted:
                 return "Shortcut off"
             case .cleatHooksCapDisabled:
                 return "Cleat hooks off"
@@ -216,7 +215,7 @@ enum HookInstaller {
             switch self {
             case .cleatHooksCapDisabled:
                 return "Cleat hook bridge is off"
-            case .accessibilityNotTrusted, .inputMonitoringNotTrusted:
+            case .accessibilityNotTrusted:
                 return "Global shortcut is off"
             default:
                 return nil
@@ -246,9 +245,7 @@ enum HookInstaller {
             case .cleatHooksCapDisabled:
                 return "Run this in your terminal so Clyde can track sandboxed sessions."
             case .accessibilityNotTrusted:
-                return "⌃⌘C needs two permissions from macOS, and accessibility is the one that's missing. Input monitoring is the other — grant both and the shortcut works. Everything else already does."
-            case .inputMonitoringNotTrusted:
-                return "⌃⌘C needs two permissions from macOS, and input monitoring is the one that's missing. It's a separate switch from accessibility, in its own pane. Everything else already works."
+                return "⌃⌘C needs accessibility permission from macOS. Grant it and the shortcut starts working — no restart. Everything else already does."
             }
         }
 
@@ -279,7 +276,7 @@ enum HookInstaller {
         /// anywhere useful).
         var isActionable: Bool {
             switch self {
-            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .inputMonitoringNotTrusted:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted:
                 return false
             case .claudeNotInstalled,
                  .notInstalled,
@@ -302,7 +299,7 @@ enum HookInstaller {
         /// rediscovers Settings — stay non-dismissable.
         var isDismissable: Bool {
             switch self {
-            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .inputMonitoringNotTrusted:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted:
                 return true
             default:
                 return false
@@ -322,8 +319,6 @@ enum HookInstaller {
                 return "cleatHooksCapDisabled"
             case .accessibilityNotTrusted:
                 return "accessibilityNotTrusted"
-            case .inputMonitoringNotTrusted:
-                return "inputMonitoringNotTrusted"
             default:
                 return nil
             }
@@ -337,55 +332,28 @@ enum HookInstaller {
         var bannerActionTitle: String? {
             switch self {
             case .accessibilityNotTrusted: return "Open Accessibility"
-            // It had none. The message named the pane and left the user
-            // to find it: System Settings › Privacy & Security › Input
-            // Monitoring, which is nowhere near where they had just
-            // been.
-            case .inputMonitoringNotTrusted: return "Open Input Monitoring"
             default: return nil
             }
         }
 
-        /// True for the two issues that are one permission short of a
-        /// working ⌃⌘C. Both are granted by the user in System
-        /// Settings, and both advisories talk about the same pair.
+        /// True for the issue that is one permission short of a
+        /// working ⌃⌘C — granted by the user in System Settings, so
+        /// the advisory carries a door straight to the right pane
+        /// rather than routing through Clyde's own settings.
         var isShortcutPermission: Bool {
             switch self {
-            case .accessibilityNotTrusted, .inputMonitoringNotTrusted: return true
+            case .accessibilityNotTrusted: return true
             default: return false
             }
         }
 
-        /// The other of the two panes the shortcut needs.
-        ///
-        /// Both grants are required and macOS puts them in different
-        /// places, so whichever one is missing, the door to the other is
-        /// on screen. Granting one and being told about the second only
-        /// afterwards reads as the app moving the goalposts.
-        var bannerSecondaryActionTitle: String? {
-            switch self {
-            case .accessibilityNotTrusted: return "Input Monitoring"
-            case .inputMonitoringNotTrusted: return "Accessibility"
-            default: return nil
-            }
-        }
-
-        // Both of these defer to ShortcutPermission so the pane a
-        // button opens is defined once. They drifting apart is a silent
-        // fault: the button still opens System Settings, just not at
-        // the permission it names.
-        var bannerSecondaryActionURL: URL? {
-            switch self {
-            case .accessibilityNotTrusted:   return ShortcutPermission.inputMonitoring.settingsURL
-            case .inputMonitoringNotTrusted: return ShortcutPermission.accessibility.settingsURL
-            default:                         return nil
-            }
-        }
-
+        // Defers to ShortcutPermission so the pane a button opens is
+        // defined once. The two drifting apart is a silent fault: the
+        // button still opens System Settings, just not at the
+        // permission it names.
         var bannerActionURL: URL? {
             switch self {
             case .accessibilityNotTrusted:   return ShortcutPermission.accessibility.settingsURL
-            case .inputMonitoringNotTrusted: return ShortcutPermission.inputMonitoring.settingsURL
             default:                         return nil
             }
         }
@@ -546,13 +514,6 @@ enum HookInstaller {
         if !isAccessibilityTrusted() {
             return .accessibilityNotTrusted
         }
-        // The other half of the same shortcut. Reported second because
-        // fixing accessibility alone does not bring ⌃⌘C back, and a
-        // user told about both at once fixes neither.
-        if !isInputMonitoringTrusted() {
-            return .inputMonitoringNotTrusted
-        }
-
         return nil
     }
 

@@ -621,7 +621,7 @@ final class AppViewModel: ObservableObject {
     private func updatePermissionRecheck(for issue: HookInstaller.HealthIssue?) {
         let waitingOnUserGrant: Bool
         switch issue {
-        case .accessibilityNotTrusted, .inputMonitoringNotTrusted: waitingOnUserGrant = true
+        case .accessibilityNotTrusted: waitingOnUserGrant = true
         default: waitingOnUserGrant = false
         }
 
@@ -680,7 +680,7 @@ final class AppViewModel: ObservableObject {
                 shouldAutoInstall = true
             case .autoRepairFailed:
                 shouldAutoInstall = false
-            case .accessibilityNotTrusted, .inputMonitoringNotTrusted:
+            case .accessibilityNotTrusted:
                 // Only macOS can grant these; the banner links straight
                 // to the right System Settings pane for whichever one is
                 // missing. Reinstalling the hook would do nothing.

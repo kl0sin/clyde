@@ -1,24 +1,26 @@
 import Foundation
 import AppKit
 import ApplicationServices
-import IOKit.hid
 
-/// The two grants the global ⌃⌘C shortcut needs, and how to send the
-/// user to each one.
+/// The grant the global ⌃⌘C shortcut needs, and how to send the user
+/// to it.
 ///
-/// Input Monitoring's pane lists only applications that have asked for
-/// the permission. `IOHIDCheckAccess`, which is how Clyde reads the
-/// state, is a query and registers nothing — so a user who had removed
-/// Clyde's entry found the button opening a pane with no Clyde row and
-/// no way to create one. Asking first is what puts it there.
+/// The pane lists only applications that have asked for the permission,
+/// and checking trust — which is all Clyde used to do — registers
+/// nothing. A user whose row was missing or stale opened the pane to
+/// find no Clyde in it and no way to add one. Asking is what puts it
+/// there.
+///
+/// Input monitoring lived here too for a while, on the evidence of two
+/// machines where accessibility was trusted and the shortcut was dead.
+/// The real cause was a monitor that is never rebuilt after the grant;
+/// with that fixed, ⌃⌘C fires with input monitoring explicitly denied.
 enum ShortcutPermission: CaseIterable, Equatable {
     case accessibility
-    case inputMonitoring
 
     var title: String {
         switch self {
-        case .accessibility:   return "Accessibility"
-        case .inputMonitoring: return "Input Monitoring"
+        case .accessibility: return "Accessibility"
         }
     }
 
@@ -26,15 +28,12 @@ enum ShortcutPermission: CaseIterable, Equatable {
         switch self {
         case .accessibility:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        case .inputMonitoring:
-            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
         }
     }
 
     var isGranted: Bool {
         switch self {
-        case .accessibility:   return HookInstaller.isAccessibilityTrusted()
-        case .inputMonitoring: return HookInstaller.isInputMonitoringTrusted()
+        case .accessibility: return HookInstaller.isAccessibilityTrusted()
         }
     }
 
@@ -56,10 +55,7 @@ enum ShortcutPermission: CaseIterable, Equatable {
 
     /// Ask macOS for this permission, prompt and all.
     func requestAccess() {
-        switch self {
-        case .accessibility:   Self.requestAccessibility()
-        case .inputMonitoring: Self.requestInputMonitoring()
-        }
+        Self.requestAccessibility()
     }
 
     /// Asks macOS for accessibility, with its prompt.
@@ -74,23 +70,5 @@ enum ShortcutPermission: CaseIterable, Equatable {
         let trusted = AXIsProcessTrustedWithOptions(options as CFDictionary)
         ClydeLog.ui.info("Accessibility request: trusted=\(trusted)")
         return trusted
-    }
-
-    /// Registers Clyde with TCC for listening to keys, which is what
-    /// makes the row appear in System Settings. Returns immediately;
-    /// macOS shows its own prompt when it decides to.
-    @discardableResult
-    static func requestInputMonitoring() -> Bool {
-        let before = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
-        let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-        let after = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
-        // Logged because the failure this exists to fix is invisible:
-        // the call returns, nothing prompts, and no row appears. The
-        // three values together say which of those happened.
-        ClydeLog.ui.info("""
-            Input monitoring request: before=\(before.rawValue) \
-            granted=\(granted) after=\(after.rawValue)
-            """)
-        return granted
     }
 }
