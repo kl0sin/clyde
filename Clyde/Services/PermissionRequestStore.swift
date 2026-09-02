@@ -14,7 +14,19 @@ final class PermissionRequestStore: ObservableObject {
     /// the hook has given up and the terminal is asking.
     @Published private(set) var pending: [PermissionRequest] = []
 
+    /// When a question last reached Clyde, or nil if none ever has.
+    ///
+    /// The switch being on is not evidence the feature works: a Claude
+    /// Code that never sends `PermissionRequest` is indistinguishable
+    /// from a quiet afternoon. This is the difference, and it has to
+    /// outlive the process to be worth showing.
+    @Published private(set) var lastRequestSeenAt: Date?
+
     private let directory: URL
+    private let defaults: UserDefaults
+    /// Ids already counted, so a question waiting through several scans
+    /// records the moment it arrived rather than the moment we looked.
+    private var countedRequestIds: Set<String> = []
     /// Whether the user has turned panel answering on. Read on every
     /// scan rather than captured, so flipping the switch takes effect
     /// without a restart.
@@ -25,13 +37,18 @@ final class PermissionRequestStore: ObservableObject {
     /// The default: Clyde does not answer permission requests until the
     /// user says so. Off means the hook never waits for anything.
     static let settingKey = "answerPermissionsInPanel"
+    static let lastRequestSeenKey = "lastPermissionRequestSeenAt"
 
     init(directory: URL = AppPaths.permissionsDir,
          isEnabled: @escaping () -> Bool = {
              UserDefaults.standard.bool(forKey: PermissionRequestStore.settingKey)
-         }) {
+         },
+         defaults: UserDefaults = .standard) {
         self.directory = directory
         self.isEnabled = isEnabled
+        self.defaults = defaults
+        let stored = defaults.double(forKey: Self.lastRequestSeenKey)
+        self.lastRequestSeenAt = stored > 0 ? Date(timeIntervalSince1970: stored) : nil
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -95,9 +112,23 @@ final class PermissionRequestStore: ObservableObject {
             .compactMap { PermissionRequest(fileURL: $0) }
             .filter(\.isLive)
             .sorted { $0.expiresAt > $1.expiresAt }
+        for request in requests where !countedRequestIds.contains(request.id) {
+            countedRequestIds.insert(request.id)
+            recordRequestArrived()
+        }
+        // Ids of questions that can no longer be pending are not worth
+        // carrying; a request id never recurs.
+        countedRequestIds.formIntersection(requests.map(\.id))
+
         if requests != pending {
             pending = requests
         }
+    }
+
+    private func recordRequestArrived() {
+        let now = Date()
+        lastRequestSeenAt = now
+        defaults.set(now.timeIntervalSince1970, forKey: Self.lastRequestSeenKey)
     }
 
     /// Answer one request. The waiting hook picks the file up, deletes

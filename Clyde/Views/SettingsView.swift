@@ -154,7 +154,8 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: Spacing.lg) {
                 switch selectedTab {
                 case .general:
-                    GeneralSettingsTab(appViewModel: appViewModel)
+                    GeneralSettingsTab(appViewModel: appViewModel,
+                                       permissionStore: appViewModel.permissionStore)
                 case .notifications:
                     NotificationsSettingsTab(notificationService: notificationService)
                 case .push:
@@ -186,6 +187,9 @@ struct SettingsView: View {
 
 struct GeneralSettingsTab: View {
     @ObservedObject var appViewModel: AppViewModel
+    /// Observed so the line below the switch changes the moment a
+    /// question arrives, rather than the next time the window opens.
+    @ObservedObject var permissionStore: PermissionRequestStore
     @AppStorage("pollingInterval") private var pollingInterval: Double = AppConstants.defaultPollingInterval
     @State private var replayQueued: Bool = false
     // Login-at-launch state. We bind the toggle to a local @State
@@ -231,19 +235,23 @@ struct GeneralSettingsTab: View {
         }
 
         SettingsSection(title: "Permission requests") {
-            Toggle(isOn: $appViewModel.answerPermissionsInPanel) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Answer from the panel")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white)
-                    Text("When Claude asks permission to run something, the question appears on its session for a few seconds and you can answer it here. Miss it and the terminal asks as usual — Clyde never decides on its own.")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color(white: 0.45))
-                        .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Toggle(isOn: $appViewModel.answerPermissionsInPanel) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Answer from the panel")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white)
+                        Text("When Claude asks permission to run something, the question appears on its session for a few seconds and you can answer it here. Miss it and the terminal asks as usual — Clyde never decides on its own.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.45))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .toggleStyle(.switch)
+                .accessibilityHint("Lets you allow or deny a permission request without switching to the terminal")
+
+                PermissionAnsweringStatusLine(status: permissionAnsweringStatus)
             }
-            .toggleStyle(.switch)
-            .accessibilityHint("Lets you allow or deny a permission request without switching to the terminal")
         }
 
         SettingsSection(title: "Startup") {
@@ -1481,4 +1489,50 @@ extension Notification.Name {
     static let clydeCopyDiagnostics = Notification.Name("clydeCopyDiagnostics")
     static let clydeOpenReview = Notification.Name("clydeOpenReview")
     static let clydeRebuildHistory = Notification.Name("clydeRebuildHistory")
+}
+
+
+// MARK: - Permission answering status
+
+private extension GeneralSettingsTab {
+    var permissionAnsweringStatus: PermissionAnsweringStatus {
+        PermissionAnsweringStatus.resolve(enabled: appViewModel.answerPermissionsInPanel,
+                                          hookIssue: appViewModel.hookHealthIssue,
+                                          lastSeen: permissionStore.lastRequestSeenAt)
+    }
+}
+
+/// One line saying what the switch above is actually doing.
+struct PermissionAnsweringStatusLine: View {
+    let status: PermissionAnsweringStatus
+
+    private var icon: String {
+        switch status {
+        case .off:      return "moon.zzz"
+        case .blocked:  return "exclamationmark.triangle.fill"
+        case .waiting:  return "clock"
+        case .working:  return "checkmark.circle.fill"
+        }
+    }
+
+    private var tint: Color {
+        switch status {
+        case .off:      return Color(white: 0.45)
+        case .blocked:  return SessionTheme.attentionColor
+        case .waiting:  return Color(white: 0.55)
+        case .working:  return SessionTheme.readyColor.opacity(0.9)
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(status.message)
+                .font(.system(size: 10))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(tint)
+        .accessibilityElement(children: .combine)
+    }
 }

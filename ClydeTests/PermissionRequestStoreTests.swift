@@ -11,6 +11,15 @@ import XCTest
 @MainActor
 final class PermissionRequestStoreTests: XCTestCase {
 
+    /// A defaults store of its own, so a test never reads or writes the
+    /// running app's record of when a question last arrived.
+    private func scratchDefaults() -> UserDefaults {
+        let suite = "clyde-permission-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { UserDefaults().removePersistentDomain(forName: suite) }
+        return defaults
+    }
+
     private func tempDir() -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("clyde-permissions-\(UUID().uuidString)")
@@ -38,6 +47,75 @@ final class PermissionRequestStoreTests: XCTestCase {
         let url = dir.appendingPathComponent("\(id).request")
         try JSONSerialization.data(withJSONObject: body).write(to: url)
         return url
+    }
+
+    // MARK: - Has this ever worked?
+
+    // The switch being on says nothing about whether questions actually
+    // arrive: a Claude Code too old to send PermissionRequest looks
+    // exactly like a Clyde that is simply quiet. The only honest
+    // difference is whether one has ever come through.
+
+    func testNoRequestSeenYetIsRemembered() throws {
+        let defaults = scratchDefaults()
+        let store = PermissionRequestStore(directory: tempDir(),
+                                           isEnabled: { true },
+                                           defaults: defaults)
+
+        store.scan()
+
+        XCTAssertNil(store.lastRequestSeenAt)
+    }
+
+    func testSeeingARequestRecordsWhenItArrived() throws {
+        let dir = tempDir()
+        let defaults = scratchDefaults()
+        let store = PermissionRequestStore(directory: dir,
+                                           isEnabled: { true },
+                                           defaults: defaults)
+        try writeRequest(in: dir, id: "r1")
+
+        store.scan()
+
+        let seen = try XCTUnwrap(store.lastRequestSeenAt)
+        XCTAssertEqual(seen.timeIntervalSinceNow, 0, accuracy: 5)
+    }
+
+    func testTheRecordSurvivesARestart() throws {
+        let dir = tempDir()
+        let defaults = scratchDefaults()
+        let first = PermissionRequestStore(directory: dir,
+                                           isEnabled: { true },
+                                           defaults: defaults)
+        try writeRequest(in: dir, id: "r1")
+        first.scan()
+        let seen = try XCTUnwrap(first.lastRequestSeenAt)
+
+        // A new Clyde, an empty directory — the question is long gone,
+        // but the fact that one arrived is what the setting screen
+        // needs, and it has to outlive the process to be worth showing.
+        let second = PermissionRequestStore(directory: tempDir(),
+                                            isEnabled: { true },
+                                            defaults: defaults)
+
+        XCTAssertEqual(second.lastRequestSeenAt?.timeIntervalSince1970 ?? 0,
+                       seen.timeIntervalSince1970,
+                       accuracy: 1)
+    }
+
+    func testTheSameRequestPendingAcrossScansDoesNotKeepMovingTheRecord() throws {
+        let dir = tempDir()
+        let defaults = scratchDefaults()
+        let store = PermissionRequestStore(directory: dir,
+                                           isEnabled: { true },
+                                           defaults: defaults)
+        try writeRequest(in: dir, id: "r1", expiresIn: 30)
+
+        store.scan()
+        let first = try XCTUnwrap(store.lastRequestSeenAt)
+        store.scan()
+
+        XCTAssertEqual(store.lastRequestSeenAt, first)
     }
 
     func testAWrittenRequestBecomesPending() throws {
