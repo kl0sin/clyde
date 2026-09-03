@@ -6,6 +6,10 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-09-03
+
+A fix release, and most of it is the global shortcut. ⌃⌘C could sit there with its permission granted and do nothing, because Clyde only listened for keys with the access it had at launch — granting the permission afterwards changed nothing until you restarted the app, and nothing said so. Clyde also never asked macOS for that permission, which is what puts its row in System Settings, so anyone whose entry was missing had a switch to find that was not there. Both are fixed, and the shortcut turns out to need one permission rather than the two Clyde was asking for. The rest is compact: an advisory cut off at the window's edge, an agent handover that announced itself as a finished session, and a few marks that did not line up.
+
 - **The global shortcut starts working the moment you grant the permission.** ⌃⌘C was dead after granting accessibility, and stayed dead: the keyboard monitor binds its access when it is installed, so one created before macOS trusted Clyde never receives anything afterwards. The permission read as granted, the shortcut did nothing, and only restarting Clyde helped — which nobody should have to guess. Clyde notices the grant within about fifteen seconds and rebuilds the monitor.
 - **Clyde asks macOS for the permission instead of assuming its row exists.** The Accessibility pane lists only applications that have asked, and Clyde only ever checked, which registers nothing. Anyone whose entry was missing or stale — after removing it, or after an update — found the pane with no Clyde in it and no way to add one. Clyde now asks, which is what puts the row there.
 - **The shortcut needs one permission, not two.** Clyde asked for input monitoring as well, on the evidence of two machines where accessibility was granted and ⌃⌘C was still dead. That symptom was the monitor never being rebuilt, above. The shortcut works with input monitoring switched off, so the second advisory — and the trip to a second pane — are gone.
