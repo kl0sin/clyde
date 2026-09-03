@@ -15,8 +15,8 @@
 # place — keep their format intact.
 
 cask "clyde" do
-  version "0.9.0"
-  sha256 "cc65e5b7cdea0cd2364d66797ffc7d1dbf7b3c6ab15a94a2425c7d3a45bfa973"
+  version "0.9.1"
+  sha256 "d4919c942869bbcf9834f7d8db607f07943b414e89be0a483bf4d3e7030b387a"
 
   url "https://github.com/kl0sin/clyde/releases/download/v#{version}/Clyde-#{version}.dmg"
   name "Clyde"
