@@ -718,6 +718,53 @@ final class HookScriptTests: XCTestCase {
         XCTAssertEqual(try infoCwd(in: home, sessionId: sid), "/Users/me/_Projects/clyde")
     }
 
+    /// Going deeper into the project is not leaving it.
+    ///
+    /// Reported from a real session: a session in `tally-up` briefly
+    /// showed as `app`, because Claude was working in
+    /// `tally-up/apps/api/src/app` and every event carried that as its
+    /// cwd. The session had not moved anywhere — the name is taken from
+    /// the last path component, so a descent renamed it.
+    func testDescendingIntoASubdirectoryDoesNotRenameTheSession() throws {
+        let home = tempHome()
+        let sid = "ffffffff-1111-2222-3333-444444444444"
+        try seedInfo(in: home, sessionId: sid, cwd: "/Users/me/_Projects/tally-up")
+
+        let payload = #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/Users/me/_Projects/tally-up/apps/api/src/app","tool_name":"Bash"}"#
+        XCTAssertEqual(try runHook(payload: payload, home: home), 0)
+
+        XCTAssertEqual(try infoCwd(in: home, sessionId: sid),
+                       "/Users/me/_Projects/tally-up")
+    }
+
+    /// A sibling directory is a different project, and correcting for
+    /// it is the reason this rewriting exists at all.
+    func testMovingToASiblingProjectStillCorrectsTheName() throws {
+        let home = tempHome()
+        let sid = "ffffffff-2222-2222-3333-444444444444"
+        try seedInfo(in: home, sessionId: sid, cwd: "/Users/me/_Projects/tally-up")
+
+        let payload = #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/Users/me/_Projects/clyde","tool_name":"Bash"}"#
+        XCTAssertEqual(try runHook(payload: payload, home: home), 0)
+
+        XCTAssertEqual(try infoCwd(in: home, sessionId: sid), "/Users/me/_Projects/clyde")
+    }
+
+    /// And a name that merely starts with the same characters is a
+    /// different project too — the check is on path components, not on
+    /// a string prefix.
+    func testANeighbourWithASharedPrefixIsNotASubdirectory() throws {
+        let home = tempHome()
+        let sid = "ffffffff-3333-2222-3333-444444444444"
+        try seedInfo(in: home, sessionId: sid, cwd: "/Users/me/_Projects/tally-up")
+
+        let payload = #"{"hook_event_name":"PreToolUse","session_id":"\#(sid)","cwd":"/Users/me/_Projects/tally-up-legacy","tool_name":"Bash"}"#
+        XCTAssertEqual(try runHook(payload: payload, home: home), 0)
+
+        XCTAssertEqual(try infoCwd(in: home, sessionId: sid),
+                       "/Users/me/_Projects/tally-up-legacy")
+    }
+
     /// Correcting the cwd must not rewrite the rest of the file:
     /// `source` is what tells the activity timeline whether a session
     /// started fresh, resumed, or came back from a compact.

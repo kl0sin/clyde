@@ -6,6 +6,7 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **A session keeps its project's name while Claude works in a subdirectory.** A session in `tally-up` would flicker to `app` whenever Claude was working in `tally-up/apps/api/src/app`: every hook event carries the current directory, the session is named after its last path component, and Clyde took each one as a move. Going deeper into a project is no longer treated as leaving it — a session that genuinely moves elsewhere is still renamed.
 ## [0.9.1] — 2026-09-03
 
 A fix release, and most of it is the global shortcut. ⌃⌘C could sit there with its permission granted and do nothing, because Clyde only listened for keys with the access it had at launch — granting the permission afterwards changed nothing until you restarted the app, and nothing said so. Clyde also never asked macOS for that permission, which is what puts its row in System Settings, so anyone whose entry was missing had a switch to find that was not there. Both are fixed, and the shortcut turns out to need one permission rather than the two Clyde was asking for. The rest is compact: an advisory cut off at the window's edge, an agent handover that announced itself as a finished session, and a few marks that did not line up.

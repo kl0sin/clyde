@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 44
+# clyde-hook-version: 45
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -674,9 +674,20 @@ try:
         info = json.load(f)
 except Exception:
     sys.exit(0)
-if not isinstance(info, dict) or info.get('cwd') == sys.argv[2]:
+if not isinstance(info, dict):
     sys.exit(0)
-info['cwd'] = sys.argv[2]
+old, new = info.get('cwd'), sys.argv[2]
+if old == new:
+    sys.exit(0)
+# Going deeper into the project is not leaving it. Claude working in
+# tally-up/apps/api/src/app carries that as its cwd on every event, and
+# the session is named after the last path component — so a descent
+# renamed a session to 'app'. Compared on path components, never as a
+# string prefix, or tally-up-legacy would count as inside tally-up.
+if isinstance(old, str) and old:
+    if (new + '/').startswith(old.rstrip('/') + '/'):
+        sys.exit(0)
+info['cwd'] = new
 print(json.dumps(info))
 " "$1" "$2" 2>/dev/null || printf ''
 }
