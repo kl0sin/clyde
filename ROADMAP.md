@@ -128,6 +128,7 @@ Worth noting where these came from. Five of the seven were found by the user wor
 
 ## Phase: v0.9.2 — After v0.9.1
 
+- [x] A permission request for the question tool showed raw JSON — no command and no path, so it fell through to the whole-input dump and the question itself was unreadable. The row shows the question now !md #ux
 - [x] A session flickered to the name of whatever subdirectory Claude was working in — `tally-up` reading as `app` while Claude was in `apps/api/src/app`. Every hook event carries the current directory and the correction treated a descent as a move; it compares path components now and ignores going deeper. Hook v45 !md #hooks
 - [ ] Cleat and the ten-second decision window: the hook now blocks for that long waiting for an answer, and inside a cleat session it blocks cleat's hook bridge. Whether the bridge tolerates it is unverified — this machine has no cleat to try it on. One run answers it !md #qa
 - [ ] Two agents of the same type still show as one row. Instrumented since hook v42, which logs an `agent-merge` line when the merge happens; nothing has recurred since, so there is no evidence to work from yet. Left waiting for the next occurrence rather than guessed at !md #hooks

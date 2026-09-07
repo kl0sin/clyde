@@ -6,6 +6,7 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **A question asked from the panel reads as a question.** When Claude asked something through its question tool, the row showed the raw request — eighteen lines of JSON with the question buried among option descriptions and formatting flags. The row now shows what is being asked, and names every question when a call carries more than one.
 - **A session keeps its project's name while Claude works in a subdirectory.** A session in `tally-up` would flicker to `app` whenever Claude was working in `tally-up/apps/api/src/app`: every hook event carries the current directory, the session is named after its last path component, and Clyde took each one as a move. Going deeper into a project is no longer treated as leaving it — a session that genuinely moves elsewhere is still renamed.
 ## [0.9.1] — 2026-09-03
 

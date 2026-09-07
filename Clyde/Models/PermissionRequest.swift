@@ -45,12 +45,35 @@ struct PermissionRequest: Identifiable, Equatable {
         if let path = input["file_path"] as? String { return path }
         if let path = input["path"] as? String { return path }
         if let url = input["url"] as? String { return url }
+        if let questions = questionText(from: input) { return questions }
         guard !input.isEmpty else { return "no arguments" }
         // An unfamiliar tool — most likely from an MCP server — still
         // gets shown truthfully rather than described.
         let data = try? JSONSerialization.data(withJSONObject: input,
                                                options: [.sortedKeys, .withoutEscapingSlashes])
         return data.flatMap { String(data: $0, encoding: .utf8) } ?? "no arguments"
+    }
+
+    /// What `AskUserQuestion` is actually asking.
+    ///
+    /// It carries no command and no path, so it used to fall through to
+    /// the whole-input dump — eighteen lines of JSON with the question
+    /// buried among option descriptions and `multiSelect` flags. The
+    /// question itself is the only part a person needs to decide.
+    ///
+    /// Every question in the call is named, never just the first: the
+    /// approval covers all of them.
+    private static func questionText(from input: [String: Any]) -> String? {
+        guard let questions = input["questions"] as? [[String: Any]] else { return nil }
+        let texts = questions.compactMap { question -> String? in
+            // The header is a chip's label — a fallback, not the
+            // preference, because on its own it does not say what is
+            // being asked.
+            if let text = question["question"] as? String, !text.isEmpty { return text }
+            if let header = question["header"] as? String, !header.isEmpty { return header }
+            return nil
+        }
+        return texts.isEmpty ? nil : texts.joined(separator: " · ")
     }
 }
 

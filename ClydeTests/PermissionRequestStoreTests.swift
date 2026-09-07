@@ -244,6 +244,55 @@ final class PermissionRequestStoreTests: XCTestCase {
         XCTAssertEqual(PermissionRequest.summary(tool: "Bash", input: ["command": long]), long)
     }
 
+    // MARK: - A question shown as a question
+
+    // `AskUserQuestion` carries no command and no path, so it fell
+    // through to the whole-input dump: a row of raw JSON, eighteen
+    // lines of it, with the actual question buried among option
+    // descriptions and `multiSelect` flags. Nobody can answer that.
+
+    func testAQuestionShowsItsQuestion() {
+        let input: [String: Any] = ["questions": [[
+            "question": "Where should the mapping be remembered?",
+            "header": "Mapping memory",
+            "multiSelect": false,
+            "options": [["label": "Per account", "description": "Saved against the account"],
+                        ["label": "Per import", "description": "Asked every time"]]
+        ]]]
+
+        XCTAssertEqual(PermissionRequest.summary(tool: "AskUserQuestion", input: input),
+                       "Where should the mapping be remembered?")
+    }
+
+    /// The header is the fallback, not the preference: it is a label
+    /// for a chip, and on its own it does not say what is being asked.
+    func testAQuestionWithoutItsTextFallsBackToTheHeader() {
+        let input: [String: Any] = ["questions": [["header": "Mapping memory"]]]
+
+        XCTAssertEqual(PermissionRequest.summary(tool: "AskUserQuestion", input: input),
+                       "Mapping memory")
+    }
+
+    /// Several questions in one call are all named. Truncating to the
+    /// first would hide what the approval covers.
+    func testEveryQuestionInTheCallIsNamed() {
+        let input: [String: Any] = ["questions": [
+            ["question": "Which database?"],
+            ["question": "Which region?"]
+        ]]
+
+        XCTAssertEqual(PermissionRequest.summary(tool: "AskUserQuestion", input: input),
+                       "Which database? · Which region?")
+    }
+
+    /// A shape we do not recognise is still shown truthfully rather
+    /// than described — the same rule as any unfamiliar tool.
+    func testAQuestionWithNothingReadableFallsBackToTheInput() {
+        let summary = PermissionRequest.summary(tool: "AskUserQuestion",
+                                                input: ["questions": [["odd": 1]]])
+        XCTAssertTrue(summary.contains("odd"), summary)
+    }
+
     /// An unfamiliar tool still has to show something truthful.
     func testAnUnknownToolFallsBackToItsWholeInput() {
         let summary = PermissionRequest.summary(tool: "Mcp__weird", input: ["a": 1, "b": "two"])
