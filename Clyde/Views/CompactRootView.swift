@@ -58,9 +58,27 @@ struct CompactRootView: View {
         // The text wraps inside the card: 400 wide, less the row's
         // inset either side and the card's own padding.
         let width: CGFloat = 400 - Spacing.sm * 2 - Spacing.sm * 2
-        let charsPerLine = width / 5.6      // 11pt system text, measured
-        let lines = max(1, ceil(CGFloat(issue.bannerMessage.count) / charsPerLine))
-        return chrome + lines * 15
+        return chrome + measuredTextHeight(issue.bannerMessage, width: width)
+    }
+
+    /// How tall the advisory's body actually renders.
+    ///
+    /// Was a character count divided by an average glyph width, which
+    /// ignores that words do not fill a line evenly: a wrapped
+    /// paragraph always takes more lines than the division says. That
+    /// worked while the message was three lines and failed as soon as
+    /// it grew — and the thing pushed off the bottom is the button that
+    /// fixes the permission. TextKit wraps it the way the label does.
+    static func measuredTextHeight(_ text: String, width: CGFloat) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: 11)
+        let measured = NSAttributedString(string: text, attributes: [.font: font])
+            .boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
+                          options: [.usesLineFragmentOrigin, .usesFontLeading])
+            .height
+        // A line of slack. SwiftUI's own layout is not TextKit's to the
+        // point, and being one line tall is free while being one line
+        // short costs the user the button.
+        return ceil(measured) + 15
     }
 
     /// The breathing room above the first row and below the last.

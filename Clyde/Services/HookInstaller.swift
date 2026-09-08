@@ -245,7 +245,7 @@ enum HookInstaller {
             case .cleatHooksCapDisabled:
                 return "Run this in your terminal so Clyde can track sandboxed sessions."
             case .accessibilityNotTrusted:
-                return "⌃⌘C needs accessibility permission from macOS. Grant it and the shortcut starts working — no restart. Everything else already does."
+                return "⌃⌘C needs accessibility permission from macOS. Grant it and the shortcut starts working — no restart. If Clyde is already listed there, macOS is holding an entry from an older copy: remove it with − and add Clyde again. Everything else already works."
             }
         }
 

@@ -347,6 +347,19 @@ final class CompactAdvisoryHeightTests: XCTestCase {
         XCTAssertGreaterThan(CompactRootView.advisoryHeight(for: .accessibilityNotTrusted), 80)
     }
 
+    /// The height has to come from measuring the text, not from
+    /// dividing its character count. Words do not fill a line evenly,
+    /// so a wrapped paragraph always takes more lines than the
+    /// division suggests — and the advisory that gets cut off is the
+    /// one telling the user how to fix a permission.
+    func testTheHeightAccountsForWordWrapping() {
+        let issue = HookInstaller.HealthIssue.accessibilityNotTrusted
+        let width: CGFloat = 400 - Spacing.sm * 4
+        let naive = 86 + max(1, (CGFloat(issue.bannerMessage.count) / (width / 5.6)).rounded(.up)) * 15
+
+        XCTAssertGreaterThan(CompactRootView.advisoryHeight(for: issue), naive)
+    }
+
     /// A longer message takes more room, since the text wraps.
     func testALongerMessageTakesMoreRoom() {
         let short = CompactRootView.advisoryHeight(for: .accessibilityNotTrusted)
@@ -376,6 +389,17 @@ final class ShortcutPermissionAdviceTests: XCTestCase {
         let issue = HookInstaller.HealthIssue.accessibilityNotTrusted
         XCTAssertNotNil(issue.bannerActionTitle)
         XCTAssertEqual(issue.bannerActionURL, ShortcutPermission.accessibility.settingsURL)
+    }
+
+    /// A row left over from an earlier version reads as granted in
+    /// System Settings while macOS denies it, and nothing the app can
+    /// do will fix that — TCC entries are not ours to remove. It cost a
+    /// user two sessions before the cure was found by hand, so the
+    /// advisory has to name it.
+    func testTheMessageNamesTheStaleEntryCure() {
+        let message = HookInstaller.HealthIssue.accessibilityNotTrusted.bannerMessage.lowercased()
+        XCTAssertTrue(message.contains("already"), message)
+        XCTAssertTrue(message.contains("remove"), message)
     }
 
     func testTheMessageNamesTheOnePermissionAndPromisesNoRestart() {

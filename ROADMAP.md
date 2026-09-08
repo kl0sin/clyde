@@ -128,12 +128,13 @@ Worth noting where these came from. Five of the seven were found by the user wor
 
 ## Phase: v0.9.2 — After v0.9.1
 
+- [x] The compact advisory's height was a character count divided by an average glyph width, which ignores word wrapping — the third bug in that one calculation. It measures the text with TextKit now, which retires the whole class !md #ux
 - [x] A permission request for the question tool showed raw JSON — no command and no path, so it fell through to the whole-input dump and the question itself was unreadable. The row shows the question now !md #ux
 - [x] A session flickered to the name of whatever subdirectory Claude was working in — `tally-up` reading as `app` while Claude was in `apps/api/src/app`. Every hook event carries the current directory and the correction treated a descent as a move; it compares path components now and ignores going deeper. Hook v45 !md #hooks
 - [ ] Cleat and the ten-second decision window: the hook now blocks for that long waiting for an answer, and inside a cleat session it blocks cleat's hook bridge. Whether the bridge tolerates it is unverified — this machine has no cleat to try it on. One run answers it !md #qa
 - [ ] Two agents of the same type still show as one row. Instrumented since hook v42, which logs an `agent-merge` line when the merge happens; nothing has recurred since, so there is no evidence to work from yet. Left waiting for the next occurrence rather than guessed at !md #hooks
 - [ ] The dev bundle is ad-hoc signed, so every rebuild is a new identity to TCC: grants vanish, stale rows pile up in System Settings, and a permission can read as denied with no row to switch on. Cost most of an afternoon of live testing before it was recognised. Signing it with the Developer ID would make permission behaviour measurable !md #qa
-- [ ] Does a Sparkle update invalidate the accessibility grant? The released build's Developer ID identity should be stable across updates, so it should not — but nobody has checked, and the failure mode is a shortcut that silently dies on upgrade with the permission still showing as granted. Worth one deliberate update test on the released build !md #qa
+- [x] Not Sparkle. Both releases carry an identical designated requirement, so TCC has no reason to drop the grant on update — what the second laptop held was a stale entry from an older copy, which reads as granted while `AXIsProcessTrusted()` denies it. The app cannot remove a TCC entry, so the advisory names the cure instead: remove the row with − and add Clyde again !hi #ux
 
 ## Phase: v0.9.x — Panel space
 

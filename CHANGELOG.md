@@ -6,6 +6,8 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+- **The accessibility advisory says what to do when Clyde is already on the list.** macOS can hold an entry from an older copy of an app: System Settings shows the permission as granted while the app is denied it, the shortcut stays dead, and nothing an app can do will clear it — those entries are not the app's to remove. The advisory now names the cure, which is to remove Clyde's row with − and add it again.
+- **The compact advisory is as tall as its text.** Its height came from dividing the message's character count by an average glyph width, which ignores that words do not fill a line evenly — so a longer message wrapped to more lines than the window made room for, and the button that fixes the permission went off the bottom edge. The text is measured now.
 - **A question asked from the panel reads as a question.** When Claude asked something through its question tool, the row showed the raw request — eighteen lines of JSON with the question buried among option descriptions and formatting flags. The row now shows what is being asked, and names every question when a call carries more than one.
 - **A session keeps its project's name while Claude works in a subdirectory.** A session in `tally-up` would flicker to `app` whenever Claude was working in `tally-up/apps/api/src/app`: every hook event carries the current directory, the session is named after its last path component, and Clyde took each one as a move. Going deeper into a project is no longer treated as leaving it — a session that genuinely moves elsewhere is still renamed.
 ## [0.9.1] — 2026-09-03
