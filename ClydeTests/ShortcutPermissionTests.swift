@@ -39,4 +39,30 @@ final class ShortcutPermissionTests: XCTestCase {
 
         XCTAssertEqual(opened, ShortcutPermission.accessibility.settingsURL)
     }
+
+    /// The system prompt exists to create the row in System Settings.
+    /// Once it has been asked for, asking again puts a second modal on
+    /// screen — which lands *behind* the System Settings window the
+    /// first one just opened, and the user is left clicking a button
+    /// that appears to do nothing.
+    func testTheSystemPromptIsAskedForOnlyOnce() {
+        ShortcutPermission.resetAskedForTests()
+        var asks = 0
+
+        ShortcutPermission.accessibility.reveal(request: { asks += 1 }, open: { _ in })
+        ShortcutPermission.accessibility.reveal(request: { asks += 1 }, open: { _ in })
+
+        XCTAssertEqual(asks, 1)
+    }
+
+    /// The pane still opens every time — that is what the button is for.
+    func testThePaneOpensEveryTime() {
+        ShortcutPermission.resetAskedForTests()
+        var opens = 0
+
+        ShortcutPermission.accessibility.reveal(request: {}, open: { _ in opens += 1 })
+        ShortcutPermission.accessibility.reveal(request: {}, open: { _ in opens += 1 })
+
+        XCTAssertEqual(opens, 2)
+    }
 }

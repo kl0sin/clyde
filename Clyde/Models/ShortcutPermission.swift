@@ -45,13 +45,26 @@ enum ShortcutPermission: CaseIterable, Equatable {
                 open: (URL?) -> Void = { url in
                     if let url { NSWorkspace.shared.open(url) }
                 }) {
-        // Ask before opening, for both. Neither pane creates a row on
-        // its own: the row exists because the application asked, and a
-        // user sent to a list that does not contain Clyde has nothing
-        // to switch on.
-        (request ?? requestAccess)()
+        // Ask once. The pane does not create a row on its own — the
+        // row exists because the application asked — but asking again
+        // puts a second system modal on screen, behind the System
+        // Settings window the first one just opened. From the user's
+        // side the button then does nothing at all.
+        if !Self.hasAsked {
+            Self.hasAsked = true
+            (request ?? requestAccess)()
+        }
         open(settingsURL)
     }
+
+    /// Whether the system prompt has been put up in this run.
+    nonisolated(unsafe) private static var hasAsked = false
+
+    /// Marks the prompt as asked for, so the launch path and the button
+    /// do not both raise one.
+    static func noteAsked() { hasAsked = true }
+
+    static func resetAskedForTests() { hasAsked = false }
 
     /// Ask macOS for this permission, prompt and all.
     func requestAccess() {

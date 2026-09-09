@@ -1158,7 +1158,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // a decision exists, so they prompt on first run only, which is
         // the moment the shortcut is being installed and needs them.
         let trusted = HookInstaller.isAccessibilityTrusted()
-        if !trusted { ShortcutPermission.requestAccessibility() }
+        if !trusted {
+            // The launch prompt counts as the one ask, so the advisory's
+            // button afterwards only opens the pane.
+            ShortcutPermission.noteAsked()
+            ShortcutPermission.requestAccessibility()
+        }
 
         // A monitor installed without trust never starts working when
         // the trust arrives — it has to be built again. Remember which
