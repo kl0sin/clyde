@@ -126,7 +126,7 @@ Worth noting where these came from. Five of the seven were found by the user wor
 - [x] Input monitoring was never required. Settled from the log rather than by argument: ⌃⌘C fires with that permission explicitly denied. The evidence behind the requirement — two machines trusted for accessibility with a dead shortcut — was the monitor never being rebuilt after the grant. The second advisory, the second pane and the IOHID code are gone !hi #qa
 - [x] A day of ordinary use before tagging turned up the shortcut faults — a permission granted to a monitor that never rebuilt, and a permission Clyde never asked for. Both shipped in v0.9.1; neither was findable by testing !md #qa
 
-## Phase: v0.9.2 — After v0.9.1
+## Phase: v0.9.2 — After v0.9.1 (shipped 2026-09-09)
 
 - [x] Clyde never checked where it was running from. macOS keys permissions per copy, and a copy opened from a disk image is translocated to a folder it then discards — the grant is lost as it is made, which is what the second laptop had. Offers to move itself at launch, but only for the doomed cases (translocated, disk image); an ordinary stray copy gets the panel advisory rather than a modal in front of a menu-bar app !hi #ux
 - [x] The compact advisory's height was a character count divided by an average glyph width, which ignores word wrapping — the third bug in that one calculation. It measures the text with TextKit now, which retires the whole class !md #ux
