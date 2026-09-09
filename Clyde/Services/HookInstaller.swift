@@ -170,7 +170,8 @@ enum HookInstaller {
         case staleEvents([String])              // retired events still registered in settings.json
         case autoRepairFailed(reason: String)   // we tried to fix it and write threw
         case cleatHooksCapDisabled              // cleat installed but its hooks cap is off
-        case accessibilityNotTrusted            // macOS hasn't granted accessibility, so ⌃⌘C is dead
+        case accessibilityNotTrusted
+        case strayCopy(AppLocation)         // permission cannot stick where this copy lives            // macOS hasn't granted accessibility, so ⌃⌘C is dead
 
         /// Where an issue asks for the user's attention.
         ///
@@ -187,7 +188,7 @@ enum HookInstaller {
 
         var presentation: Presentation {
             switch self {
-            case .accessibilityNotTrusted, .cleatHooksCapDisabled:
+            case .accessibilityNotTrusted, .strayCopy, .cleatHooksCapDisabled:
                 return .chip
             default:
                 return .banner
@@ -197,7 +198,7 @@ enum HookInstaller {
         /// A couple of words. Everything else lives in the hover.
         var chipLabel: String {
             switch self {
-            case .accessibilityNotTrusted:
+            case .accessibilityNotTrusted, .strayCopy:
                 return "Shortcut off"
             case .cleatHooksCapDisabled:
                 return "Cleat hooks off"
@@ -217,6 +218,8 @@ enum HookInstaller {
                 return "Cleat hook bridge is off"
             case .accessibilityNotTrusted:
                 return "Global shortcut is off"
+            case .strayCopy:
+                return "Clyde is running from the wrong place"
             default:
                 return nil
             }
@@ -244,6 +247,8 @@ enum HookInstaller {
                 return "Auto-repair failed: \(reason). Open Settings and reinstall manually."
             case .cleatHooksCapDisabled:
                 return "Run this in your terminal so Clyde can track sandboxed sessions."
+            case .strayCopy(let location):
+                return (location.advice ?? "") + " macOS keeps a separate permission for every copy of an app, which is why granting it here does not take."
             case .accessibilityNotTrusted:
                 return "⌃⌘C needs accessibility permission from macOS. Grant it and the shortcut starts working — no restart. If Clyde is already listed there, macOS is holding an entry from an older copy: remove it with − and add Clyde again. Everything else already works."
             }
@@ -276,7 +281,7 @@ enum HookInstaller {
         /// anywhere useful).
         var isActionable: Bool {
             switch self {
-            case .cleatHooksCapDisabled, .accessibilityNotTrusted:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .strayCopy:
                 return false
             case .claudeNotInstalled,
                  .notInstalled,
@@ -299,7 +304,7 @@ enum HookInstaller {
         /// rediscovers Settings — stay non-dismissable.
         var isDismissable: Bool {
             switch self {
-            case .cleatHooksCapDisabled, .accessibilityNotTrusted:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .strayCopy:
                 return true
             default:
                 return false
@@ -512,7 +517,12 @@ enum HookInstaller {
         // global hotkey is dead. Last so a genuinely broken install is
         // never buried under a convenience advisory.
         if !isAccessibilityTrusted() {
-            return .accessibilityNotTrusted
+            // Where the app is running from is only worth raising when
+            // it is the reason granting will not help. A copy outside
+            // Applications with a working permission needs no lecture.
+            let location = AppLocation.current
+            return location.canKeepPermissions ? .accessibilityNotTrusted
+                                               : .strayCopy(location)
         }
         return nil
     }

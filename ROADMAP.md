@@ -128,6 +128,7 @@ Worth noting where these came from. Five of the seven were found by the user wor
 
 ## Phase: v0.9.2 — After v0.9.1
 
+- [x] Clyde never checked where it was running from. macOS keys permissions per copy, and a copy opened from a disk image is translocated to a folder it then discards — the grant is lost as it is made, which is what the second laptop had. Offers to move itself at launch, but only for the doomed cases (translocated, disk image); an ordinary stray copy gets the panel advisory rather than a modal in front of a menu-bar app !hi #ux
 - [x] The compact advisory's height was a character count divided by an average glyph width, which ignores word wrapping — the third bug in that one calculation. It measures the text with TextKit now, which retires the whole class !md #ux
 - [x] A permission request for the question tool showed raw JSON — no command and no path, so it fell through to the whole-input dump and the question itself was unreadable. The row shows the question now !md #ux
 - [x] A session flickered to the name of whatever subdirectory Claude was working in — `tally-up` reading as `app` while Claude was in `apps/api/src/app`. Every hook event carries the current directory and the correction treated a descent as a move; it compares path components now and ignores going deeper. Hook v45 !md #hooks

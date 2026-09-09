@@ -680,6 +680,10 @@ final class AppViewModel: ObservableObject {
                 shouldAutoInstall = true
             case .autoRepairFailed:
                 shouldAutoInstall = false
+            case .strayCopy:
+                // Nothing to install: the copy is in the wrong place,
+                // and only the user can move it.
+                shouldAutoInstall = false
             case .accessibilityNotTrusted:
                 // Only macOS can grant these; the banner links straight
                 // to the right System Settings pane for whichever one is

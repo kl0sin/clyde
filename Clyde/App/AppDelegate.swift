@@ -272,6 +272,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         expandedPanel.alphaValue = 0
         // Don't orderFront yet — it stays hidden until the user opens it.
 
+        // Before anything asks macOS for a permission. A grant made
+        // from a stray copy belongs to that copy, and the user is left
+        // with a permission that reads as given and does nothing.
+        MoveToApplications.offerIfNeeded()
+
         setupMenuBarIcon()
         appViewModel.start()
         registerGlobalHotKey()
