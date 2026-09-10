@@ -26,3 +26,7 @@ build/
 *.certSigningRequest
 sparkle-private-key
 *.keychain-db
+
+# Local git worktrees (feature isolation)
+.worktrees/
+.superpowers/
