@@ -6,6 +6,10 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+### Added
+
+- Claude usage limits in the panel: how much of the 5-hour session and the 7-day week is used and when each resets, as a Limits band above Activity in the full panel and a session meter in the compact footer. Blue from 80%, red when a window is spent, dimmed when the numbers are more than half an hour old with no session to refresh them. One notification when the session window passes 80%, one when a spent window resets. Off by default: Clyde reads the numbers from a Claude Code status line wrapper, and a configured status line hides most of the terminal footer's keyboard hints. Any status line you already had keeps running behind it and is put back when the setting is turned off. Pro and Max plans only — Claude Code reports the windows for nothing else.
+
 ## [0.9.2] — 2026-09-09
 
 v0.9.1 made the ⌃⌘C shortcut start working the moment you grant its permission. This release is about the cases where granting it still does not help. macOS can be holding an entry from an older copy of Clyde — the list shows the permission as granted while the app is denied it, and no app can clear that itself, so the advisory now names the cure. And macOS keeps a separate permission for every copy of an app: one opened straight from a disk image is moved somewhere temporary, so a permission granted to it is lost as it is given. Clyde spots that at launch and offers to move itself somewhere the permission can survive. Two smaller things came along: a session no longer takes the name of whatever subdirectory Claude happens to be working in, and a question asked from the panel reads as a question rather than as the request behind it.

@@ -145,7 +145,8 @@ Worth noting where these came from. Five of the seven were found by the user wor
 
 ## Phase: v0.10.0 — Usage limits
 
-- [ ] Show the two subscription windows Claude Code meters — the 5-hour session and the 7-day week — as a Limits band above Activity in the full panel and a session-only meter in the compact footer, fed by a status-line wrapper Clyde installs beside its hook and never from the rate-limited OAuth endpoint. Opt-in, because a configured status line changes what the terminal shows. Spec: `docs/superpowers/specs/2026-09-10-usage-limits-design.md` !hi #ux #hooks
+- [x] Limits band above Activity and a session meter in compact's footer, fed by a status-line wrapper installed behind the user's own status line and restored on uninstall. Opt-in, offered once by chip. Two notifications: 80% of the session window, and its reset after exhaustion. Spec: `docs/superpowers/specs/2026-09-10-usage-limits-design.md` !hi #ux #hooks
+- [ ] Live for a working day on a Max plan before release: do the numbers track `/usage`, does the 80% notification land once and not on every turn, what does the terminal look like to someone who had no status line before. The last of those decides whether the toggle stays off by default !hi #qa
 
 ## Phase: v0.3.0+ — UX polish, content & reach
 

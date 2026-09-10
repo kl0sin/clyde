@@ -256,3 +256,22 @@ Tool/plan line transitions are crossfades, not slides. Status pill does not puls
 3. **Reduce-motion**
    - Enable System Settings → Accessibility → Display → Reduce motion.
    - Repeat scenario 1: the block should fade in/out without sliding; expand/collapse changes height instantly with a 120 ms opacity crossfade.
+
+---
+
+## Scenario 9 — Usage limits status line
+
+**Goal:** the status-line wrapper installs behind an existing status line, snapshots arrive, and turning the feature off restores the terminal exactly.
+
+**Setup:** note whether `~/.claude/settings.json` has a `statusLine` key and what its `command` is. If it has none, add a throwaway one so the passthrough path is exercised: `{"statusLine": {"type": "command", "command": "echo mine"}}`.
+
+**Steps:**
+1. `swift run Clyde`, open Settings › General, switch on "Show Claude usage limits".
+2. Check `~/.claude/settings.json`: `statusLine.command` is `~/.claude/hooks/clyde-statusline.sh`; `~/.clyde/usage/passthrough` contains the previous command.
+3. Open a `claude` session on a Pro or Max login and send one prompt.
+4. Check the terminal: the status line still shows what the previous command printed (`mine`).
+5. Check `~/.clyde/usage/statusline.json`: it exists and contains `rate_limits`.
+6. In Clyde, open the full panel: the Limits band sits above Activity with both meters. Click it: two rows and an "Updated … from the … session" line. Switch to compact: a `5h` meter beside Expand.
+7. Switch the setting off. `~/.claude/settings.json` has the previous `statusLine` back (or none if there was none); the wrapper script and `~/.clyde/usage/` are gone; the band and the meter are gone.
+
+**Expect:** no "status line" error in the Claude Code TUI at any point; every wrapper invocation exits 0 (`~/.clyde/logs/statusline.log` stays empty).
