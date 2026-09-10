@@ -196,4 +196,15 @@ final class CompactModeTests: XCTestCase {
         XCTAssertNil(CompactRootView.expandedRequest(from: [hidden], visiblePIDs: [1, 2]))
     }
 
+    // MARK: - Footer meter
+
+    /// The same crowding rule that turns the pills into dots takes the
+    /// meter's label; the bar and the figure stay.
+    func testFooterMeterKeepsItsLabelUntilCrowded() {
+        XCTAssertEqual(CompactRootView.footerMeterLabel(countsShown: 2, advisory: false), "5h")
+        XCTAssertNil(CompactRootView.footerMeterLabel(countsShown: 3, advisory: false))
+        XCTAssertNil(CompactRootView.footerMeterLabel(countsShown: 2, advisory: true))
+        XCTAssertEqual(CompactRootView.footerMeterLabel(countsShown: 1, advisory: true), "5h")
+    }
+
 }

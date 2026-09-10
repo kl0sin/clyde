@@ -272,6 +272,27 @@ struct CompactRootView: View {
                 AdvisoryChip(issue: advisory) { appViewModel.compactAdvisoryExpanded.toggle() }
             }
 
+            // Only the session window: it is the one that changes within
+            // a sitting and ends a task mid-turn. The week is a hover and
+            // a mode away. Two labelled meters here came to 440 points.
+            if let window = appViewModel.usageLimits?.fiveHour {
+                Rectangle()
+                    .fill(Rule.band)
+                    .frame(width: Rule.thickness, height: 14)
+                UsageMeter(
+                    label: Self.footerMeterLabel(
+                        countsShown: counts.count,
+                        advisory: appViewModel.hookHealthIssue?.presentation == .chip),
+                    window: window,
+                    level: UsageLimits.level(for: window, rateLimited: appViewModel.hasRateLimitedSession),
+                    stale: appViewModel.usageIsStale,
+                    barWidth: 28
+                )
+                .help(appViewModel.usageLimits?.sevenDay.map {
+                    "Week \(UsageLimits.percentText(for: $0, level: UsageLimits.level(for: $0, rateLimited: false))) used"
+                } ?? "Session window")
+            }
+
             Button {
                 appViewModel.panelMode = .full
             } label: {
@@ -314,6 +335,13 @@ struct CompactRootView: View {
     private var isCrowded: Bool {
         let advisory = appViewModel.hookHealthIssue?.presentation == .chip
         return counts.count > 2 || (advisory && counts.count > 1)
+    }
+
+    /// What the footer's meter is allowed to say. The words go under the
+    /// same crowding the pills give theirs up under.
+    static func footerMeterLabel(countsShown: Int, advisory: Bool) -> String? {
+        let crowded = countsShown > 2 || (advisory && countsShown > 1)
+        return crowded ? nil : "5h"
     }
 
     private var counts: [Count] {
