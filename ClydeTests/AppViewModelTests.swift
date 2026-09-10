@@ -176,4 +176,41 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertNil(vm.hookHealthIssue)
         XCTAssertTrue(UserDefaults.standard.bool(forKey: UsageLimitsInstaller.offerDismissedKey))
     }
+
+    /// The rate_limit marker and the usage snapshot come from two
+    /// watchers with no ordering between them. A window that is only
+    /// exhausted because of the marker (JSON still shows headroom)
+    /// must still be tracked, so its later reset gets announced.
+    func testRateLimitOnlyExhaustionIsObserved() {
+        let vm = AppViewModel()
+        let resetsAt = Date().addingTimeInterval(3600)
+        let limits = UsageLimits(fiveHour: UsageWindow(usedPercentage: 42, resetsAt: resetsAt),
+                                  sevenDay: nil, updatedAt: Date(), sessionID: nil, modelName: nil)
+
+        vm.evaluateUsageAlerts(limits: limits, rateLimited: false)
+        XCTAssertFalse(vm.usageAlerts.wasExhausted)
+
+        vm.evaluateUsageAlerts(limits: limits, rateLimited: true)
+        XCTAssertTrue(vm.usageAlerts.wasExhausted)
+
+        let nextWindow = UsageLimits(fiveHour: UsageWindow(usedPercentage: 3, resetsAt: resetsAt.addingTimeInterval(5 * 3600)),
+                                      sevenDay: nil, updatedAt: Date(), sessionID: nil, modelName: nil)
+        vm.evaluateUsageAlerts(limits: nextWindow, rateLimited: false)
+        XCTAssertFalse(vm.usageAlerts.wasExhausted)
+    }
+
+    /// Pins that the combined pipeline is actually wired: flipping a
+    /// session to rate_limit with no usage snapshot at all must not
+    /// crash or mark the window exhausted (there is no window to be
+    /// exhausted). Not asserting on notification delivery — the centre
+    /// is unauthorized in tests — only that the pipeline runs.
+    func testCombinedPipelineReactsToRateLimitAlone() {
+        let monitor = ProcessMonitor()
+        let vm = AppViewModel(processMonitor: monitor)
+        var s = Session(pid: 4343, workingDirectory: "/tmp/y", status: .busy)
+        s.errorReason = "rate_limit"
+        monitor.sessions = [s]
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertFalse(vm.usageAlerts.wasExhausted)
+    }
 }

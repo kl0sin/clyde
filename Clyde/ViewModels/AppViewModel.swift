@@ -50,7 +50,7 @@ final class AppViewModel: ObservableObject {
     let pushService: PushService
 
     let usageStore = UsageLimitsStore()
-    private var usageAlerts = UsageLimitsAlerts()
+    private(set) var usageAlerts = UsageLimitsAlerts()
 
     /// The two subscription windows, or nil when there is nothing to
     /// show: feature off, no snapshot yet, or a plan that has none.
@@ -347,27 +347,48 @@ final class AppViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    /// Runs the alert state machine over the current pair of inputs and
+    /// sends whatever it earns. Internal so the pairing of the two
+    /// signals can be tested without a notification centre.
+    func evaluateUsageAlerts(limits: UsageLimits?, rateLimited: Bool) {
+        for alert in usageAlerts.alerts(for: limits, rateLimited: rateLimited) {
+            switch alert {
+            case .sessionNearLimit(let resetsAt):
+                let window = limits?.fiveHour ?? UsageWindow(usedPercentage: 0, resetsAt: resetsAt)
+                let level = UsageLimits.level(for: window, rateLimited: rateLimited)
+                let when = UsageLimits.resetText(for: window, now: Date(), level: level)
+                notificationService.sendUsageNotification(
+                    identifier: "usage-session-\(Int(resetsAt.timeIntervalSince1970))",
+                    body: level == .exhausted
+                        ? "Claude session window is used up — \(when)"
+                        : "Claude session window is nearly used up — \(when)")
+            case .sessionBackAfterReset:
+                notificationService.sendUsageNotification(
+                    identifier: "usage-session-reset",
+                    body: "Claude session window has reset — you can continue")
+            }
+        }
+    }
+
     private func startUsageStore() {
         usageStore.start()
         usageStore.$limits
             .receive(on: RunLoop.main)
-            .sink { [weak self] limits in
-                guard let self else { return }
-                self.usageLimits = limits
-                for alert in self.usageAlerts.alerts(for: limits, rateLimited: self.hasRateLimitedSession) {
-                    switch alert {
-                    case .sessionNearLimit(let resetsAt):
-                        let window = UsageWindow(usedPercentage: 0, resetsAt: resetsAt)
-                        let when = UsageLimits.resetText(for: window, now: Date(), level: .normal)
-                        self.notificationService.sendUsageNotification(
-                            identifier: "usage-session-\(Int(resetsAt.timeIntervalSince1970))",
-                            body: "Claude session window is nearly used up — \(when)")
-                    case .sessionBackAfterReset:
-                        self.notificationService.sendUsageNotification(
-                            identifier: "usage-session-reset",
-                            body: "Claude session window has reset — you can continue")
-                    }
-                }
+            .sink { [weak self] limits in self?.usageLimits = limits }
+            .store(in: &cancellables)
+
+        // The two facts that decide an alert arrive from two watchers
+        // with no ordering between them — the snapshot and the
+        // session's rate_limit marker. Pairing them means the marker
+        // landing second still gets evaluated, instead of a stale
+        // "you can continue" standing uncorrected.
+        let rateLimited = processMonitor.$sessions
+            .map { sessions in sessions.contains { !$0.isGhost && $0.errorReason == "rate_limit" } }
+            .removeDuplicates()
+        Publishers.CombineLatest(usageStore.$limits, rateLimited)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] limits, rateLimited in
+                self?.evaluateUsageAlerts(limits: limits, rateLimited: rateLimited)
             }
             .store(in: &cancellables)
     }
