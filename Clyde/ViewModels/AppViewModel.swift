@@ -59,6 +59,10 @@ final class AppViewModel: ObservableObject {
     /// The install error from the last toggle, for Settings to show.
     @Published private(set) var usageInstallError: String?
 
+    /// The status-line wrapper's own health, cached the way
+    /// `hookHealthIssue` is so Settings never hits the disk to render.
+    @Published private(set) var usageHealthIssue: UsageLimitsInstaller.Issue?
+
     /// Off by default. On installs the status line wrapper; off
     /// uninstalls it and puts the user's own status line back.
     @Published var showUsageLimits: Bool = UserDefaults.standard
@@ -445,6 +449,7 @@ final class AppViewModel: ObservableObject {
         attentionMonitor.start()
         startPermissionStore()
         startUsageStore()
+        refreshUsageHealth()
         // One-shot legacy migration must run BEFORE the first health check,
         // otherwise the check sees the old `clyde-notify.sh` file in place
         // and reports "everything fine" while settings.json points nowhere.
@@ -749,6 +754,7 @@ final class AppViewModel: ObservableObject {
                 await MainActor.run {
                     self.dismissedBannerIdentities.removeAll()
                     self.hookHealthIssue = nil
+                    self.refreshUsageHealth()
                 }
                 return
             }
@@ -817,6 +823,7 @@ final class AppViewModel: ObservableObject {
             await MainActor.run {
                 self.hookHealthIssue = finalIssue
                 self.updatePermissionRecheck(for: finalIssue)
+                self.refreshUsageHealth()
             }
         }
     }
@@ -858,6 +865,14 @@ final class AppViewModel: ObservableObject {
         if let issue = hookHealthIssue {
             ClydeLog.hooks.info("Hook health issue: \(issue.bannerMessage, privacy: .public)")
         }
+        refreshUsageHealth()
+    }
+
+    /// Re-runs the usage-limits installer's health check and caches the
+    /// result, so Settings can read it without touching disk on every
+    /// render.
+    private func refreshUsageHealth() {
+        usageHealthIssue = showUsageLimits ? UsageLimitsInstaller.healthCheck() : nil
     }
 
     /// Persist the user's choice to remove the hook so we don't re-install

@@ -1523,7 +1523,7 @@ private extension GeneralSettingsTab {
 
     var usageLimitsStatus: UsageLimitsStatus {
         UsageLimitsStatus.resolve(enabled: appViewModel.showUsageLimits,
-                                  issue: appViewModel.showUsageLimits ? UsageLimitsInstaller.healthCheck() : nil,
+                                  issue: appViewModel.usageHealthIssue,
                                   installError: appViewModel.usageInstallError,
                                   lastSnapshot: appViewModel.usageLimits?.updatedAt)
     }

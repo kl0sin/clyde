@@ -213,4 +213,37 @@ final class AppViewModelTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
         XCTAssertFalse(vm.usageAlerts.wasExhausted)
     }
+
+    /// `usageHealthIssue` must come from a cache `refreshHookHealth()`
+    /// populates, not a disk read Settings triggers on every render —
+    /// see HookInstallerTests.setUp for the AppPaths.homeOverride
+    /// pattern this mirrors.
+    func testUsageHealthIsCachedOnRefresh() throws {
+        let tempHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-usagehealth-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
+        AppPaths.homeOverride = tempHome
+        HookInstaller.claudeInstalledOverride = true
+        // Set the defaults key before constructing the view model so
+        // `showUsageLimits` starts true from its property initializer —
+        // that path doesn't run `didSet`, so no install is triggered
+        // and the "nothing installed yet" assertion below is honest.
+        UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
+        defer {
+            AppPaths.homeOverride = nil
+            HookInstaller.claudeInstalledOverride = nil
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
+            try? FileManager.default.removeItem(at: tempHome)
+        }
+
+        let vm = AppViewModel()
+        XCTAssertTrue(vm.showUsageLimits)
+
+        vm.refreshHookHealth()
+        XCTAssertEqual(vm.usageHealthIssue, .notInstalled)
+
+        try UsageLimitsInstaller.install()
+        vm.refreshHookHealth()
+        XCTAssertNil(vm.usageHealthIssue)
+    }
 }
