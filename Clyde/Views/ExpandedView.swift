@@ -94,7 +94,7 @@ struct ExpandedView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { showsAdvisory = false }
 
-            AdvisoryDetail(issue: advisory) { showsAdvisory = false }
+            AdvisoryDetail(issue: advisory, onDismiss: { appViewModel.dismissCurrentBanner() }) { showsAdvisory = false }
                 .frame(width: 250)
                 .padding(.trailing, Spacing.sm)
                 .padding(.bottom, 34)

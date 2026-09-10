@@ -529,4 +529,9 @@ final class HookInstallerTests: XCTestCase {
         XCTAssertEqual(issue.chipLabel, "Limits")
     }
 
+    func testOfferIsNotAFault() {
+        XCTAssertFalse(HookInstaller.HealthIssue.usageLimitsAvailable.isFault)
+        XCTAssertTrue(HookInstaller.HealthIssue.notInstalled.isFault)
+    }
+
 }

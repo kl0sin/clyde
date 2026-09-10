@@ -1275,7 +1275,7 @@ struct ClaudeHooksRow: View {
             }
             .padding(.vertical, 4)
 
-            if let issue = appViewModel.hookHealthIssue, isInstalled {
+            if let issue = appViewModel.hookHealthIssue, issue.isFault, isInstalled {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")

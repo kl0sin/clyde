@@ -25,7 +25,7 @@ enum PermissionAnsweringStatus: Equatable {
         // problem: off is off, and reporting a fault there would be
         // noise about a feature they declined.
         guard enabled else { return .off }
-        if hookIssue != nil { return .blocked }
+        if let hookIssue, hookIssue.isFault { return .blocked }
         guard let lastSeen else { return .waiting }
         return .working(lastSeen)
     }

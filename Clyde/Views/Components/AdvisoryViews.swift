@@ -45,6 +45,10 @@ struct AdvisoryChip: View {
 /// app's own radius, spacing and colours rather than a system popover's.
 struct AdvisoryDetail: View {
     let issue: HookInstaller.HealthIssue
+    /// Called when the user explicitly declines the advisory — as
+    /// opposed to just closing the card. Only the offer's "Not now"
+    /// button wires this; every other advisory leaves it nil.
+    var onDismiss: (() -> Void)? = nil
     let onClose: () -> Void
 
     @ViewBuilder
@@ -98,19 +102,35 @@ struct AdvisoryDetail: View {
                 ShortcutPermissionActions(onOpen: onClose)
                     .padding(.top, 2)
             } else if issue.opensSettings {
-                Button("Open Settings") {
-                    NotificationCenter.default.post(name: .clydeOpenSettings, object: nil)
-                    onClose()
+                HStack(spacing: Spacing.xxs) {
+                    Button("Open Settings") {
+                        NotificationCenter.default.post(name: .clydeOpenSettings, object: nil)
+                        onClose()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(TextColor.primary)
+                    .padding(.horizontal, Spacing.xs)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.small)
+                            .fill(Color.white.opacity(0.12))
+                    )
+
+                    Button("Not now") {
+                        onDismiss?()
+                        onClose()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(TextColor.secondary)
+                    .padding(.horizontal, Spacing.xs)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.small)
+                            .fill(Color.white.opacity(0.07))
+                    )
                 }
-                .buttonStyle(.plain)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(TextColor.primary)
-                .padding(.horizontal, Spacing.xs)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.small)
-                        .fill(Color.white.opacity(0.12))
-                )
                 .padding(.top, 2)
             } else if let url = issue.bannerActionURL, let title = issue.bannerActionTitle {
                 advisoryButton(title, url: url, prominent: true)

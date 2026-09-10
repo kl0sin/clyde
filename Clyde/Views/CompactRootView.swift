@@ -151,7 +151,7 @@ struct CompactRootView: View {
             if appViewModel.compactAdvisoryExpanded,
                let advisory = appViewModel.hookHealthIssue,
                advisory.presentation == .chip {
-                AdvisoryDetail(issue: advisory) { appViewModel.compactAdvisoryExpanded = false }
+                AdvisoryDetail(issue: advisory, onDismiss: { appViewModel.dismissCurrentBanner() }) { appViewModel.compactAdvisoryExpanded = false }
                     .padding(.horizontal, Spacing.sm)
                     .padding(.bottom, Spacing.xs)
             }

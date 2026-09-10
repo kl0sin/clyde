@@ -51,4 +51,13 @@ final class PermissionAnsweringStatusTests: XCTestCase {
         XCTAssertEqual(status, .working(arrived))
         XCTAssertTrue(status.message.lowercased().contains("last"))
     }
+
+    /// The limits offer is a suggestion, not a fault — a healthy
+    /// install with the offer showing must not read as "blocked".
+    func testAnOfferIsNotAFault() {
+        let status = PermissionAnsweringStatus.resolve(enabled: true,
+                                                       hookIssue: .usageLimitsAvailable,
+                                                       lastSeen: nil)
+        XCTAssertEqual(status, .waiting)
+    }
 }

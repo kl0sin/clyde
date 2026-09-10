@@ -371,6 +371,17 @@ enum HookInstaller {
             }
         }
 
+        /// False for the one issue that is an offer rather than a
+        /// fault. Fault consumers — the permission status line, the
+        /// Settings hooks row — filter on this so a healthy install
+        /// never reads as broken because Clyde has a suggestion.
+        var isFault: Bool {
+            switch self {
+            case .usageLimitsAvailable: return false
+            default: return true
+            }
+        }
+
         // Defers to ShortcutPermission so the pane a button opens is
         // defined once. The two drifting apart is a silent fault: the
         // button still opens System Settings, just not at the

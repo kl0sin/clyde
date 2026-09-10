@@ -164,4 +164,16 @@ final class AppViewModelTests: XCTestCase {
         monitor.sessions = [s]
         XCTAssertFalse(vm.hasRateLimitedSession)
     }
+
+    /// Dismissing the offer must actually persist — the chip's × only
+    /// closes the card, so `dismissCurrentBanner()` is the only path
+    /// that writes `offerDismissedKey`.
+    func testDismissingTheOfferPersistsTheDecline() {
+        defer { UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.offerDismissedKey) }
+        let vm = AppViewModel()
+        vm.hookHealthIssue = .usageLimitsAvailable
+        vm.dismissCurrentBanner()
+        XCTAssertNil(vm.hookHealthIssue)
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: UsageLimitsInstaller.offerDismissedKey))
+    }
 }
