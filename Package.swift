@@ -28,6 +28,7 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/clyde-hook.sh"),
+                .copy("Resources/clyde-statusline.sh"),
                 .copy("Assets/AppIcon.icns"),
             ],
             linkerSettings: [
