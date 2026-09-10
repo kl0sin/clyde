@@ -147,6 +147,7 @@ Worth noting where these came from. Five of the seven were found by the user wor
 
 - [x] Limits band above Activity and a session meter in compact's footer, fed by a status-line wrapper installed behind the user's own status line and restored on uninstall. Opt-in, offered once by chip. Two notifications: 80% of the session window, and its reset after exhaustion. Spec: `docs/superpowers/specs/2026-09-10-usage-limits-design.md` !hi #ux #hooks
 - [ ] Live for a working day on a Max plan before release: do the numbers track `/usage`, does the 80% notification land once and not on every turn, what does the terminal look like to someone who had no status line before. The last of those decides whether the toggle stays off by default !hi #qa
+- [ ] A status line that something else replaced is reported only in Settings › General. The spec asked for it in the panel, the way a missing hook is: a second non-fault chip, or a line in the Limits band's footer. Decide after the live day whether anyone actually hits it !lo #ux
 
 ## Phase: v0.3.0+ — UX polish, content & reach
 
