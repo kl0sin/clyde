@@ -97,6 +97,6 @@ final class StatusLineScriptTests: XCTestCase {
 
     func testCarriesAVersionStamp() throws {
         let source = try String(contentsOf: Self.scriptURL, encoding: .utf8)
-        XCTAssertTrue(source.contains("# clyde-statusline-version: \(1)"))
+        XCTAssertTrue(source.contains("# clyde-statusline-version: \(UsageLimitsInstaller.currentScriptVersion)"))
     }
 }

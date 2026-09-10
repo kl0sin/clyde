@@ -56,6 +56,20 @@ enum AppPaths {
         clydeDir.appendingPathComponent("logs")
     }
 
+    /// Status-line snapshots and the user's own status line command,
+    /// kept outside settings.json so a hand edit there cannot lose it.
+    static var usageDir: URL {
+        clydeDir.appendingPathComponent("usage")
+    }
+
+    static var usageSnapshotFile: URL {
+        usageDir.appendingPathComponent("statusline.json")
+    }
+
+    static var usagePassthroughFile: URL {
+        usageDir.appendingPathComponent("passthrough")
+    }
+
     static var claudeDir: URL {
         homeRoot.appendingPathComponent(".claude")
     }
@@ -70,6 +84,10 @@ enum AppPaths {
 
     static var clydeHookScript: URL {
         claudeHooksDir.appendingPathComponent("clyde-hook.sh")
+    }
+
+    static var clydeStatusLineScript: URL {
+        claudeHooksDir.appendingPathComponent("clyde-statusline.sh")
     }
 
     /// Legacy filename used by older Clyde builds. Kept here so the
