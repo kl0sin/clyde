@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-statusline-version: 1
+# clyde-statusline-version: 2
 # Clyde status-line wrapper — copies what Claude Code tells the status
 # line into ~/.clyde/usage/ so Clyde can show the subscription limits.
 # Installed by Clyde. Safe to remove; Clyde's Settings restores your own
@@ -13,7 +13,7 @@ LOG_DIR="$HOME/.clyde/logs"
 LOG="$LOG_DIR/statusline.log"
 mkdir -p "$USAGE_DIR" "$LOG_DIR" 2>/dev/null || true
 
-trap 'rc=$?; printf "[%s] clyde-statusline line %s exited %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$LINENO" "$rc" >>"$LOG" 2>/dev/null; exit 0' ERR
+trap 'rc=$?; printf "[%s] clyde-statusline line %s exited %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$LINENO" "$rc" >>"$LOG" 2>/dev/null' ERR
 
 INPUT=$(cat 2>/dev/null || echo "{}")
 

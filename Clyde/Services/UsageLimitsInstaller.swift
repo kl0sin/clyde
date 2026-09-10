@@ -11,7 +11,7 @@ enum UsageLimitsInstaller {
 
     /// MUST stay in sync with the `clyde-statusline-version` line at the
     /// top of `Clyde/Resources/clyde-statusline.sh`.
-    static let currentScriptVersion = 1
+    static let currentScriptVersion = 2
 
     /// The Settings toggle. Off by default: a configured status line is
     /// visible in the terminal in a way the hook is not.

@@ -99,4 +99,14 @@ final class StatusLineScriptTests: XCTestCase {
         let source = try String(contentsOf: Self.scriptURL, encoding: .utf8)
         XCTAssertTrue(source.contains("# clyde-statusline-version: \(UsageLimitsInstaller.currentScriptVersion)"))
     }
+
+    /// A trap that exits takes the user's own status line down with it
+    /// for that render if an unguarded command ever fails before the
+    /// passthrough runs. Log and continue instead.
+    func testAnErrorBeforeThePassthroughDoesNotSkipIt() throws {
+        let source = try String(contentsOf: Self.scriptURL, encoding: .utf8)
+        let trapLine = source.split(separator: "\n").first { $0.hasPrefix("trap ") }
+        XCTAssertNotNil(trapLine)
+        XCTAssertFalse(trapLine?.contains("exit 0") ?? true)
+    }
 }
