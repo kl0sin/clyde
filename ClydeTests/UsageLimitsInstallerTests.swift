@@ -100,6 +100,45 @@ final class UsageLimitsInstallerTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: AppPaths.claudeSettingsFile, encoding: .utf8), "{ not json")
     }
 
+    func testUninstallRefusesUnparseableSettings() throws {
+        try FileManager.default.createDirectory(at: AppPaths.claudeDir, withIntermediateDirectories: true)
+        try "{ not json".write(to: AppPaths.claudeSettingsFile, atomically: true, encoding: .utf8)
+        XCTAssertThrowsError(try UsageLimitsInstaller.uninstall()) { error in
+            XCTAssertEqual(error as? UsageLimitsInstaller.InstallError, .parseFailed)
+        }
+        XCTAssertEqual(try String(contentsOf: AppPaths.claudeSettingsFile, encoding: .utf8), "{ not json")
+    }
+
+    func testInstallStoresPassthroughBeforeWritingTheScript() throws {
+        try writeSettings(["statusLine": ["type": "command", "command": "~/bin/my-status.sh"]])
+        // Make usageDir a plain file so the passthrough write (and the
+        // directory creation ahead of it) cannot succeed.
+        try FileManager.default.createDirectory(at: AppPaths.clydeDir, withIntermediateDirectories: true)
+        try "x".write(to: AppPaths.usageDir, atomically: true, encoding: .utf8)
+
+        XCTAssertThrowsError(try UsageLimitsInstaller.install()) { error in
+            guard case .writeFailed = error as? UsageLimitsInstaller.InstallError else {
+                XCTFail("expected .writeFailed, got \(error)")
+                return
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: AppPaths.clydeStatusLineScript.path))
+        XCTAssertEqual(UsageLimitsInstaller.healthCheck(), .notInstalled)
+    }
+
+    func testUninstallKeepsThePassthroughWhenDisplaced() throws {
+        try writeSettings(["statusLine": ["type": "command", "command": "~/bin/my-status.sh"]])
+        try UsageLimitsInstaller.install()
+        try writeSettings(["statusLine": ["type": "command", "command": "~/bin/newer.sh"]])
+
+        try UsageLimitsInstaller.uninstall()
+
+        let statusLine = try XCTUnwrap(try readSettings()["statusLine"] as? [String: Any])
+        XCTAssertEqual(statusLine["command"] as? String, "~/bin/newer.sh")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: AppPaths.clydeStatusLineScript.path))
+        XCTAssertEqual(try String(contentsOf: AppPaths.usagePassthroughFile, encoding: .utf8), "~/bin/my-status.sh")
+    }
+
     func testHealthCheckStates() throws {
         XCTAssertEqual(UsageLimitsInstaller.healthCheck(), .notInstalled)
 

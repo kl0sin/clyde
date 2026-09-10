@@ -121,8 +121,29 @@ enum UsageLimitsInstaller {
     static func install() throws {
         var settings = try readSettings()
 
-        try FileManager.default.createDirectory(at: AppPaths.claudeHooksDir, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: AppPaths.usageDir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: AppPaths.claudeHooksDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: AppPaths.usageDir, withIntermediateDirectories: true)
+        } catch {
+            throw InstallError.writeFailed(error.localizedDescription)
+        }
+
+        // Decide and store the passthrough before touching the script:
+        // if this fails, nothing lands on disk for healthCheck() to
+        // misread as an installed-but-displaced wrapper.
+        if let theirs = configuredCommand(in: settings), !isClydeStatusLineCommand(theirs) {
+            // Theirs goes behind ours. Overwrites an older stored
+            // command on purpose: a user who changed status lines while
+            // the feature was off means the new one.
+            do {
+                try theirs.write(to: AppPaths.usagePassthroughFile, atomically: true, encoding: .utf8)
+            } catch {
+                throw InstallError.writeFailed(error.localizedDescription)
+            }
+        } else if configuredCommand(in: settings) == nil {
+            try? FileManager.default.removeItem(at: AppPaths.usagePassthroughFile)
+        }
+
         let script = try loadScript()
         do {
             try script.write(to: AppPaths.clydeStatusLineScript, atomically: true, encoding: .utf8)
@@ -133,14 +154,6 @@ enum UsageLimitsInstaller {
                                                ofItemAtPath: AppPaths.clydeStatusLineScript.path)
 
         var statusLine = settings["statusLine"] as? [String: Any] ?? [:]
-        if let theirs = configuredCommand(in: settings), !isClydeStatusLineCommand(theirs) {
-            // Theirs goes behind ours. Overwrites an older stored
-            // command on purpose: a user who changed status lines while
-            // the feature was off means the new one.
-            try theirs.write(to: AppPaths.usagePassthroughFile, atomically: true, encoding: .utf8)
-        } else if configuredCommand(in: settings) == nil {
-            try? FileManager.default.removeItem(at: AppPaths.usagePassthroughFile)
-        }
         statusLine["type"] = "command"
         statusLine["command"] = AppPaths.clydeStatusLineScript.path
         settings["statusLine"] = statusLine
@@ -160,10 +173,13 @@ enum UsageLimitsInstaller {
                 settings["statusLine"] = nil
             }
             try writeSettings(settings)
+            // Only once it has been restored into settings.json — and
+            // only when the slot really was ours to begin with. If
+            // something else displaced Clyde first, this is the only
+            // copy of what the user had before Clyde; leave it.
+            try? FileManager.default.removeItem(at: AppPaths.usagePassthroughFile)
         }
-        // Only once settings.json no longer points at it.
         try? FileManager.default.removeItem(at: AppPaths.clydeStatusLineScript)
-        try? FileManager.default.removeItem(at: AppPaths.usagePassthroughFile)
         try? FileManager.default.removeItem(at: AppPaths.usageSnapshotFile)
         ClydeLog.hooks.info("Status line wrapper uninstalled")
     }
