@@ -254,6 +254,26 @@ struct GeneralSettingsTab: View {
             }
         }
 
+        SettingsSection(title: "Claude usage limits") {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Toggle(isOn: $appViewModel.showUsageLimits) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Show Claude usage limits")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white)
+                        Text("The 5-hour session and the 7-day week, with their resets, in the panel. Clyde installs a status line wrapper in Claude Code for this and keeps any status line you already have behind it. A configured status line hides most of the terminal footer's keyboard hints.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.45))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+                .accessibilityHint("Shows how much of each Claude subscription window is used")
+
+                UsageLimitsStatusLine(status: usageLimitsStatus)
+            }
+        }
+
         SettingsSection(title: "Startup") {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(isOn: Binding(
@@ -1500,11 +1520,53 @@ private extension GeneralSettingsTab {
                                           hookIssue: appViewModel.hookHealthIssue,
                                           lastSeen: permissionStore.lastRequestSeenAt)
     }
+
+    var usageLimitsStatus: UsageLimitsStatus {
+        UsageLimitsStatus.resolve(enabled: appViewModel.showUsageLimits,
+                                  issue: appViewModel.showUsageLimits ? UsageLimitsInstaller.healthCheck() : nil,
+                                  installError: appViewModel.usageInstallError,
+                                  lastSnapshot: appViewModel.usageLimits?.updatedAt)
+    }
 }
 
 /// One line saying what the switch above is actually doing.
 struct PermissionAnsweringStatusLine: View {
     let status: PermissionAnsweringStatus
+
+    private var icon: String {
+        switch status {
+        case .off:      return "moon.zzz"
+        case .blocked:  return "exclamationmark.triangle.fill"
+        case .waiting:  return "clock"
+        case .working:  return "checkmark.circle.fill"
+        }
+    }
+
+    private var tint: Color {
+        switch status {
+        case .off:      return Color(white: 0.45)
+        case .blocked:  return SessionTheme.attentionColor
+        case .waiting:  return Color(white: 0.55)
+        case .working:  return SessionTheme.readyColor.opacity(0.9)
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(status.message)
+                .font(.system(size: 10))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(tint)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// One line saying what the limits switch is actually doing.
+struct UsageLimitsStatusLine: View {
+    let status: UsageLimitsStatus
 
     private var icon: String {
         switch status {
