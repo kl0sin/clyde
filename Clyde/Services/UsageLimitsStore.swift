@@ -20,7 +20,6 @@ final class UsageLimitsStore: ObservableObject {
     private let directory: URL
     private let isEnabled: () -> Bool
     private var dirSource: DispatchSourceFileSystemObject?
-    private var dirFD: Int32 = -1
     private var expiryTimer: Timer?
 
     init(directory: URL = AppPaths.usageDir,
@@ -79,7 +78,6 @@ final class UsageLimitsStore: ObservableObject {
             ClydeLog.hooks.error("Failed to open usage dir for watching")
             return
         }
-        dirFD = fd
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             eventMask: [.write, .rename, .delete],
@@ -88,12 +86,10 @@ final class UsageLimitsStore: ObservableObject {
         source.setEventHandler { [weak self] in
             Task { @MainActor [weak self] in self?.scan() }
         }
-        source.setCancelHandler { [weak self] in
-            if let fd = self?.dirFD, fd >= 0 {
-                close(fd)
-                self?.dirFD = -1
-            }
-        }
+        // Capture the descriptor rather than reading it back from a
+        // property — that spelling leaked one descriptor per restart in
+        // ProcessMonitor.
+        source.setCancelHandler { close(fd) }
         source.resume()
         dirSource = source
     }

@@ -83,4 +83,15 @@ final class UsageLimitsStoreTests: XCTestCase {
         }
         XCTAssertEqual(store.limits?.fiveHour?.usedPercentage, 42)
     }
+
+    func testRestartingTheWatcherDoesNotCrashAndStillScans() throws {
+        try writeSnapshot(fiveHourResetsAt: Date().timeIntervalSince1970 + 3600)
+        let store = makeStore()
+        store.start()
+        store.stop()
+        store.start()
+        store.stop()
+        store.scan()
+        XCTAssertEqual(store.limits?.fiveHour?.usedPercentage, 42)
+    }
 }
