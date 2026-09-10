@@ -873,7 +873,11 @@ final class AppViewModel: ObservableObject {
     /// result, so Settings can read it without touching disk on every
     /// render.
     private func refreshUsageHealth() {
-        guard showUsageLimits else { usageHealthIssue = nil; return }
+        // Reads the defaults key, not `showUsageLimits`, so a test (or
+        // stray) view model outliving its sandboxed home does nothing
+        // once the key is gone — no late repair landing in a real
+        // ~/.claude from a 60-second timer tick nobody is watching.
+        guard UsageLimitsInstaller.isEnabled else { usageHealthIssue = nil; return }
         var issue = UsageLimitsInstaller.healthCheck()
         // The same repairs HookInstaller makes for itself: a wrapper
         // that is gone, stamped older than the bundled one, or

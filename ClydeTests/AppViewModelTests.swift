@@ -189,9 +189,15 @@ final class AppViewModelTests: XCTestCase {
         HookInstaller.claudeInstalledOverride = true
         UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
         defer {
+            // The defaults key goes first: `refreshUsageHealth()` now
+            // reads `UsageLimitsInstaller.isEnabled` off it, not the
+            // VM's in-memory `showUsageLimits`, so a `hookHealTimer`
+            // tick that survives this test (nothing here stops it)
+            // finds the feature off before it ever finds the sandbox
+            // gone — no late repair landing in a real ~/.claude.
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             AppPaths.homeOverride = nil
             HookInstaller.claudeInstalledOverride = nil
-            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             try? FileManager.default.removeItem(at: tempHome)
         }
 
@@ -225,9 +231,15 @@ final class AppViewModelTests: XCTestCase {
         HookInstaller.claudeInstalledOverride = true
         UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
         defer {
+            // The defaults key goes first: `refreshUsageHealth()` now
+            // reads `UsageLimitsInstaller.isEnabled` off it, not the
+            // VM's in-memory `showUsageLimits`, so a `hookHealTimer`
+            // tick that survives this test (nothing here stops it)
+            // finds the feature off before it ever finds the sandbox
+            // gone — no late repair landing in a real ~/.claude.
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             AppPaths.homeOverride = nil
             HookInstaller.claudeInstalledOverride = nil
-            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             try? FileManager.default.removeItem(at: tempHome)
         }
 
@@ -256,9 +268,15 @@ final class AppViewModelTests: XCTestCase {
         // and the "nothing installed yet" assertion below is honest.
         UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
         defer {
+            // The defaults key goes first: `refreshUsageHealth()` now
+            // reads `UsageLimitsInstaller.isEnabled` off it, not the
+            // VM's in-memory `showUsageLimits`, so a `hookHealTimer`
+            // tick that survives this test (nothing here stops it)
+            // finds the feature off before it ever finds the sandbox
+            // gone — no late repair landing in a real ~/.claude.
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             AppPaths.homeOverride = nil
             HookInstaller.claudeInstalledOverride = nil
-            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             try? FileManager.default.removeItem(at: tempHome)
         }
 
@@ -271,6 +289,30 @@ final class AppViewModelTests: XCTestCase {
         try UsageLimitsInstaller.install()
         vm.refreshHookHealth()
         XCTAssertNil(vm.usageHealthIssue)
+
+        // Now prove the guard itself: with the defaults key gone (what
+        // every teardown above does first) `refreshUsageHealth()` must
+        // do nothing, even with the VM's own `showUsageLimits` still
+        // true and a live sandbox to write into — it never gets that
+        // far under a fresh, empty home.
+        UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
+        let freshHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-usagehealth-fresh-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: freshHome, withIntermediateDirectories: true)
+        let previousHome = AppPaths.homeOverride
+        AppPaths.homeOverride = freshHome
+        defer {
+            AppPaths.homeOverride = previousHome
+            try? FileManager.default.removeItem(at: freshHome)
+        }
+
+        vm.refreshHookHealth()
+        XCTAssertNil(vm.usageHealthIssue)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: freshHome.appendingPathComponent(".clyde/usage").path),
+            "the guard must hold even though vm.showUsageLimits is still true"
+        )
+        XCTAssertTrue(vm.showUsageLimits, "sanity: the VM's own property was never touched by the guard")
     }
 
     /// Turning the feature off must not leave a remembered exhaustion
@@ -284,9 +326,15 @@ final class AppViewModelTests: XCTestCase {
         HookInstaller.claudeInstalledOverride = true
         UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
         defer {
+            // The defaults key goes first: `refreshUsageHealth()` now
+            // reads `UsageLimitsInstaller.isEnabled` off it, not the
+            // VM's in-memory `showUsageLimits`, so a `hookHealTimer`
+            // tick that survives this test (nothing here stops it)
+            // finds the feature off before it ever finds the sandbox
+            // gone — no late repair landing in a real ~/.claude.
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             AppPaths.homeOverride = nil
             HookInstaller.claudeInstalledOverride = nil
-            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             try? FileManager.default.removeItem(at: tempHome)
         }
 
@@ -314,9 +362,15 @@ final class AppViewModelTests: XCTestCase {
         HookInstaller.claudeInstalledOverride = true
         UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
         defer {
+            // The defaults key goes first: `refreshUsageHealth()` now
+            // reads `UsageLimitsInstaller.isEnabled` off it, not the
+            // VM's in-memory `showUsageLimits`, so a `hookHealTimer`
+            // tick that survives this test (nothing here stops it)
+            // finds the feature off before it ever finds the sandbox
+            // gone — no late repair landing in a real ~/.claude.
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             AppPaths.homeOverride = nil
             HookInstaller.claudeInstalledOverride = nil
-            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             try? FileManager.default.removeItem(at: tempHome)
         }
 
@@ -344,9 +398,15 @@ final class AppViewModelTests: XCTestCase {
         HookInstaller.claudeInstalledOverride = true
         UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
         defer {
+            // The defaults key goes first: `refreshUsageHealth()` now
+            // reads `UsageLimitsInstaller.isEnabled` off it, not the
+            // VM's in-memory `showUsageLimits`, so a `hookHealTimer`
+            // tick that survives this test (nothing here stops it)
+            // finds the feature off before it ever finds the sandbox
+            // gone — no late repair landing in a real ~/.claude.
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             AppPaths.homeOverride = nil
             HookInstaller.claudeInstalledOverride = nil
-            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
             try? FileManager.default.removeItem(at: tempHome)
         }
 

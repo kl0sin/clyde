@@ -31,7 +31,10 @@ struct UsageLimitsAlerts: Equatable {
             result.append(.sessionNearLimit(resetsAt: window.resetsAt))
         }
 
-        if let exhaustedResetsAt {
+        // A window that is itself exhausted is never a reset, even if
+        // it is a different window than the one already recorded — the
+        // warn block above just said "used up" for this same tick.
+        if !exhausted, let exhaustedResetsAt {
             let windowTurnedOver = window.map { $0.resetsAt != exhaustedResetsAt } ?? false
             if windowTurnedOver || now >= exhaustedResetsAt {
                 result.append(.sessionBackAfterReset)
