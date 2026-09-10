@@ -172,6 +172,7 @@ enum HookInstaller {
         case cleatHooksCapDisabled              // cleat installed but its hooks cap is off
         case accessibilityNotTrusted
         case strayCopy(AppLocation)         // permission cannot stick where this copy lives            // macOS hasn't granted accessibility, so ⌃⌘C is dead
+        case usageLimitsAvailable               // feature is off and the user has not yet declined it
 
         /// Where an issue asks for the user's attention.
         ///
@@ -188,7 +189,7 @@ enum HookInstaller {
 
         var presentation: Presentation {
             switch self {
-            case .accessibilityNotTrusted, .strayCopy, .cleatHooksCapDisabled:
+            case .accessibilityNotTrusted, .strayCopy, .cleatHooksCapDisabled, .usageLimitsAvailable:
                 return .chip
             default:
                 return .banner
@@ -202,6 +203,8 @@ enum HookInstaller {
                 return "Shortcut off"
             case .cleatHooksCapDisabled:
                 return "Cleat hooks off"
+            case .usageLimitsAvailable:
+                return "Limits"
             default:
                 return bannerTitle ?? "Needs attention"
             }
@@ -220,6 +223,8 @@ enum HookInstaller {
                 return "Global shortcut is off"
             case .strayCopy:
                 return "Clyde is running from the wrong place"
+            case .usageLimitsAvailable:
+                return "Clyde can show your Claude limits"
             default:
                 return nil
             }
@@ -251,6 +256,8 @@ enum HookInstaller {
                 return (location.advice ?? "") + " macOS keeps a separate permission for every copy of an app, which is why granting it here does not take."
             case .accessibilityNotTrusted:
                 return "⌃⌘C needs accessibility permission from macOS. Grant it and the shortcut starts working — no restart. If Clyde is already listed there, macOS is holding an entry from an older copy: remove it with − and add Clyde again. Everything else already works."
+            case .usageLimitsAvailable:
+                return "See how much of the 5-hour session and the 7-day week is used, and when each resets. Clyde installs a status line wrapper in Claude Code for this; a status line hides most of the terminal footer's keyboard hints. Turn it on in Settings."
             }
         }
 
@@ -281,7 +288,7 @@ enum HookInstaller {
         /// anywhere useful).
         var isActionable: Bool {
             switch self {
-            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .strayCopy:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .strayCopy, .usageLimitsAvailable:
                 return false
             case .claudeNotInstalled,
                  .notInstalled,
@@ -304,7 +311,7 @@ enum HookInstaller {
         /// rediscovers Settings — stay non-dismissable.
         var isDismissable: Bool {
             switch self {
-            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .strayCopy:
+            case .cleatHooksCapDisabled, .accessibilityNotTrusted, .strayCopy, .usageLimitsAvailable:
                 return true
             default:
                 return false
@@ -324,6 +331,8 @@ enum HookInstaller {
                 return "cleatHooksCapDisabled"
             case .accessibilityNotTrusted:
                 return "accessibilityNotTrusted"
+            case .usageLimitsAvailable:
+                return "usageLimitsAvailable"
             default:
                 return nil
             }
@@ -348,6 +357,16 @@ enum HookInstaller {
         var isShortcutPermission: Bool {
             switch self {
             case .accessibilityNotTrusted: return true
+            default: return false
+            }
+        }
+
+        /// True for the advisory whose action is a Clyde setting rather
+        /// than a System Settings pane: the detail card carries an
+        /// "Open Settings" button.
+        var opensSettings: Bool {
+            switch self {
+            case .usageLimitsAvailable: return true
             default: return false
             }
         }
@@ -523,6 +542,12 @@ enum HookInstaller {
             let location = AppLocation.current
             return location.canKeepPermissions ? .accessibilityNotTrusted
                                                : .strayCopy(location)
+        }
+
+        // Lowest priority of all: an offer, not a fault. Only when
+        // everything above is healthy is the panel quiet enough for it.
+        if UsageLimitsInstaller.shouldOffer() {
+            return .usageLimitsAvailable
         }
         return nil
     }

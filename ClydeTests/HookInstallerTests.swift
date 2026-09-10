@@ -32,6 +32,10 @@ final class HookInstallerTests: XCTestCase {
         // has granted the test runner accessibility access.
         HookInstaller.accessibilityTrustedOverride = true
         HookInstaller.inputMonitoringTrustedOverride = true
+        // The limits offer is a chip that would otherwise sit behind
+        // every "fully healthy" assertion. Tests that cover the offer
+        // flip this on themselves.
+        UsageLimitsInstaller.offerOverride = false
     }
 
     override func tearDown() async throws {
@@ -41,6 +45,7 @@ final class HookInstallerTests: XCTestCase {
         CleatProbe.configPathOverride = nil
         HookInstaller.accessibilityTrustedOverride = nil
         HookInstaller.inputMonitoringTrustedOverride = nil
+        UsageLimitsInstaller.offerOverride = nil
         if let tempHome {
             try? FileManager.default.removeItem(at: tempHome)
         }
@@ -502,6 +507,26 @@ final class HookInstallerTests: XCTestCase {
         XCTAssertEqual(HookInstaller.HealthIssue.accessibilityNotTrusted.chipLabel, "Shortcut off")
         XCTAssertLessThanOrEqual(
             HookInstaller.HealthIssue.cleatHooksCapDisabled.chipLabel.count, 16)
+    }
+
+    func testOfferIsAChipBehindEveryRealIssue() throws {
+        UsageLimitsInstaller.offerOverride = true
+        // Not installed outranks the offer.
+        XCTAssertEqual(HookInstaller.healthCheck(), .notInstalled)
+        try HookInstaller.install()
+        XCTAssertEqual(HookInstaller.healthCheck(), .usageLimitsAvailable)
+        UsageLimitsInstaller.offerOverride = false
+        XCTAssertNil(HookInstaller.healthCheck())
+    }
+
+    func testOfferIsDismissableAndOpensSettings() {
+        let issue = HookInstaller.HealthIssue.usageLimitsAvailable
+        XCTAssertEqual(issue.presentation, .chip)
+        XCTAssertTrue(issue.isDismissable)
+        XCTAssertFalse(issue.isActionable)
+        XCTAssertTrue(issue.opensSettings)
+        XCTAssertEqual(issue.dismissalIdentity, "usageLimitsAvailable")
+        XCTAssertEqual(issue.chipLabel, "Limits")
     }
 
 }

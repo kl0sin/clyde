@@ -18,6 +18,7 @@ final class AppLocationTests: XCTestCase {
         // test fail somewhere else entirely.
         AppLocation.override = nil
         HookInstaller.accessibilityTrustedOverride = nil
+        UsageLimitsInstaller.offerOverride = nil
         super.tearDown()
     }
 
@@ -82,6 +83,7 @@ final class AppLocationTests: XCTestCase {
     /// A copy in the wrong place with a working permission is left in
     /// peace — nothing is broken, so nothing is said.
     func testAWorkingPermissionIsNotLecturedAboutLocation() throws {
+        UsageLimitsInstaller.offerOverride = false
         try HookInstaller.install()
         HookInstaller.accessibilityTrustedOverride = true
         AppLocation.override = .elsewhere

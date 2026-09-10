@@ -97,6 +97,21 @@ struct AdvisoryDetail: View {
             if issue.isShortcutPermission {
                 ShortcutPermissionActions(onOpen: onClose)
                     .padding(.top, 2)
+            } else if issue.opensSettings {
+                Button("Open Settings") {
+                    NotificationCenter.default.post(name: .clydeOpenSettings, object: nil)
+                    onClose()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(TextColor.primary)
+                .padding(.horizontal, Spacing.xs)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.small)
+                        .fill(Color.white.opacity(0.12))
+                )
+                .padding(.top, 2)
             } else if let url = issue.bannerActionURL, let title = issue.bannerActionTitle {
                 advisoryButton(title, url: url, prominent: true)
                     .padding(.top, 2)

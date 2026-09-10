@@ -49,6 +49,57 @@ final class AppViewModel: ObservableObject {
     let activityLog: ActivityLog
     let pushService: PushService
 
+    let usageStore = UsageLimitsStore()
+
+    /// The two subscription windows, or nil when there is nothing to
+    /// show: feature off, no snapshot yet, or a plan that has none.
+    @Published private(set) var usageLimits: UsageLimits?
+
+    /// The install error from the last toggle, for Settings to show.
+    @Published private(set) var usageInstallError: String?
+
+    /// Off by default. On installs the status line wrapper; off
+    /// uninstalls it and puts the user's own status line back.
+    @Published var showUsageLimits: Bool = UserDefaults.standard
+        .bool(forKey: UsageLimitsInstaller.settingKey) {
+        didSet {
+            guard showUsageLimits != oldValue else { return }
+            UserDefaults.standard.set(showUsageLimits, forKey: UsageLimitsInstaller.settingKey)
+            usageInstallError = nil
+            do {
+                if showUsageLimits {
+                    try UsageLimitsInstaller.install()
+                } else {
+                    try UsageLimitsInstaller.uninstall()
+                }
+            } catch {
+                usageInstallError = error.localizedDescription
+                ClydeLog.hooks.error("Usage limits toggle failed: \(error.localizedDescription, privacy: .public)")
+            }
+            usageStore.scan()
+            // Turning it on retires the offer chip; off may bring it back.
+            refreshHookHealth()
+        }
+    }
+
+    /// A live session that Claude Code stopped with `rate_limit` is the
+    /// account-level "exhausted" fact, whatever the percentage says.
+    var hasRateLimitedSession: Bool {
+        processMonitor.sessions.contains { !$0.isGhost && $0.errorReason == "rate_limit" }
+    }
+
+    var usageIsStale: Bool {
+        guard let usageLimits else { return false }
+        return usageLimits.isStale(now: Date(), hasLiveSession: hasLiveSessions)
+    }
+
+    /// The session whose status line wrote the snapshot, by display
+    /// name, so the footer can say where the numbers came from.
+    func usageSessionName(for limits: UsageLimits) -> String? {
+        guard let id = limits.sessionID else { return nil }
+        return processMonitor.sessions.first { $0.sessionId == id }?.displayName
+    }
+
     /// Drives the first-run coachmark tour. Owned here so the same
     /// instance is shared between the expanded panel and the Settings
     /// window via `.environmentObject`.
@@ -295,6 +346,14 @@ final class AppViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    private func startUsageStore() {
+        usageStore.start()
+        usageStore.$limits
+            .receive(on: RunLoop.main)
+            .sink { [weak self] limits in self?.usageLimits = limits }
+            .store(in: &cancellables)
+    }
+
     func toggleExpanded() {
         isCollapsed.toggle()
     }
@@ -346,6 +405,7 @@ final class AppViewModel: ObservableObject {
         processMonitor.startPolling()
         attentionMonitor.start()
         startPermissionStore()
+        startUsageStore()
         // One-shot legacy migration must run BEFORE the first health check,
         // otherwise the check sees the old `clyde-notify.sh` file in place
         // and reports "everything fine" while settings.json points nowhere.
@@ -695,6 +755,9 @@ final class AppViewModel: ObservableObject {
                 // hooks` interactively). The banner tells them what
                 // to do; reinstalling Clyde's hook wouldn't help.
                 shouldAutoInstall = false
+            case .usageLimitsAvailable:
+                // An offer. Nothing to install until the user says so.
+                shouldAutoInstall = false
             }
 
             let resolvedIssue: HookInstaller.HealthIssue?
@@ -733,6 +796,11 @@ final class AppViewModel: ObservableObject {
             return
         }
         dismissedBannerIdentities.insert(identity)
+        // The offer is one-time across launches, unlike the health
+        // advisories that come back on relaunch.
+        if issue == .usageLimitsAvailable {
+            UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.offerDismissedKey)
+        }
         hookHealthIssue = nil
     }
 

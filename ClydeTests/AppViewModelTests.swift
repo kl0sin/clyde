@@ -151,4 +151,17 @@ final class AppViewModelTests: XCTestCase {
         // No call to dismiss; the banner stays visible.
         XCTAssertEqual(vm2.hookHealthIssue, .cleatHooksCapDisabled)
     }
+
+    @MainActor
+    func testRateLimitedSessionIsExhausted() {
+        let monitor = ProcessMonitor()
+        let vm = AppViewModel(processMonitor: monitor)
+        var s = Session(pid: 4242, workingDirectory: "/tmp/x", status: .busy)
+        s.errorReason = "rate_limit"
+        monitor.sessions = [s]
+        XCTAssertTrue(vm.hasRateLimitedSession)
+        s.errorReason = nil
+        monitor.sessions = [s]
+        XCTAssertFalse(vm.hasRateLimitedSession)
+    }
 }
