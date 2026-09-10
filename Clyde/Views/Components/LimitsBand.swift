@@ -98,14 +98,7 @@ struct LimitsBand: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(TextColor.secondary)
                 .frame(width: 58, alignment: .leading)
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.10))
-                    Capsule().fill(fill)
-                        .frame(width: geo.size.width * CGFloat(min(100, max(0, window.usedPercentage)) / 100))
-                }
-            }
-            .frame(height: 5)
+            UsageBar(usedPercentage: window.usedPercentage, fill: fill, height: 5)
             Text(UsageLimits.percentText(for: window, level: level))
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .monospacedDigit()

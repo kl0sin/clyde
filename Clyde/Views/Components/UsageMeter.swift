@@ -28,12 +28,8 @@ struct UsageMeter: View {
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(TextColor.tertiary)
             }
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.10))
-                Capsule().fill(fill)
-                    .frame(width: barWidth * CGFloat(min(100, max(0, window.usedPercentage)) / 100))
-            }
-            .frame(width: barWidth, height: 4)
+            UsageBar(usedPercentage: window.usedPercentage, fill: fill)
+                .frame(width: barWidth)
             if showsValue {
                 Text(UsageLimits.percentText(for: window, level: level))
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -49,5 +45,25 @@ struct UsageMeter: View {
     private var accessibilityText: String {
         let name = label == "7d" ? "Week" : "Session"
         return "\(name) \(UsageLimits.percentText(for: window, level: level)) used"
+    }
+}
+
+/// The bar alone: a track and a fill, sized by whatever frame it is
+/// given. The meter gives it a fixed width; the band's rows let it
+/// fill the row.
+struct UsageBar: View {
+    let usedPercentage: Double
+    let fill: Color
+    var height: CGFloat = 4
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.10))
+                Capsule().fill(fill)
+                    .frame(width: geo.size.width * CGFloat(min(100, max(0, usedPercentage)) / 100))
+            }
+        }
+        .frame(height: height)
     }
 }
