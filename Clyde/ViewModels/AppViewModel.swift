@@ -873,7 +873,26 @@ final class AppViewModel: ObservableObject {
     /// result, so Settings can read it without touching disk on every
     /// render.
     private func refreshUsageHealth() {
-        usageHealthIssue = showUsageLimits ? UsageLimitsInstaller.healthCheck() : nil
+        guard showUsageLimits else { usageHealthIssue = nil; return }
+        var issue = UsageLimitsInstaller.healthCheck()
+        // The same repairs HookInstaller makes for itself: a wrapper
+        // that is gone, stamped older than the bundled one, or
+        // unstamped is put back without asking. A slot something else
+        // took is not — adopting it silently would be wrong.
+        switch issue {
+        case .scriptMissing, .outdated, .scriptVersionUnreadable:
+            do {
+                try UsageLimitsInstaller.install()
+                ClydeLog.hooks.info("Repaired status line wrapper (was: \(issue?.message ?? "", privacy: .public))")
+                issue = UsageLimitsInstaller.healthCheck()
+            } catch {
+                ClydeLog.hooks.error("Status line wrapper repair failed: \(error.localizedDescription, privacy: .public)")
+                usageInstallError = error.localizedDescription
+            }
+        case .notInstalled, .displaced, .none:
+            break
+        }
+        usageHealthIssue = issue
     }
 
     /// Persist the user's choice to remove the hook so we don't re-install

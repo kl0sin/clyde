@@ -302,4 +302,65 @@ final class AppViewModelTests: XCTestCase {
         vm.evaluateUsageAlerts(limits: nil, rateLimited: false)
         XCTAssertNil(vm.usageAlerts.exhaustedResetsAt)
     }
+
+    /// Mirrors `HookInstaller`'s self-repair: an outdated wrapper is put
+    /// back on the same `refreshHookHealth()` call that discovers it,
+    /// not just reported into a Settings pane nobody is looking at.
+    func testAnOutdatedWrapperIsRepairedOnRefresh() throws {
+        let tempHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-usagerepair-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
+        AppPaths.homeOverride = tempHome
+        HookInstaller.claudeInstalledOverride = true
+        UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
+        defer {
+            AppPaths.homeOverride = nil
+            HookInstaller.claudeInstalledOverride = nil
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
+            try? FileManager.default.removeItem(at: tempHome)
+        }
+
+        try UsageLimitsInstaller.install()
+        let script = try String(contentsOf: AppPaths.clydeStatusLineScript, encoding: .utf8)
+        let downgraded = script.replacingOccurrences(
+            of: "# clyde-statusline-version: \(UsageLimitsInstaller.currentScriptVersion)",
+            with: "# clyde-statusline-version: 0")
+        try downgraded.write(to: AppPaths.clydeStatusLineScript, atomically: true, encoding: .utf8)
+
+        let vm = AppViewModel()
+        vm.refreshHookHealth()
+
+        XCTAssertNil(vm.usageHealthIssue)
+        XCTAssertEqual(UsageLimitsInstaller.installedScriptVersion(), UsageLimitsInstaller.currentScriptVersion)
+    }
+
+    /// A slot something else took after Clyde is reported, not adopted —
+    /// silently overwriting another tool's status line would be wrong.
+    func testADisplacedWrapperIsNotAdopted() throws {
+        let tempHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-usagedisplaced-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
+        AppPaths.homeOverride = tempHome
+        HookInstaller.claudeInstalledOverride = true
+        UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
+        defer {
+            AppPaths.homeOverride = nil
+            HookInstaller.claudeInstalledOverride = nil
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
+            try? FileManager.default.removeItem(at: tempHome)
+        }
+
+        try UsageLimitsInstaller.install()
+        let settings: [String: Any] = ["statusLine": ["type": "command", "command": "~/bin/other.sh"]]
+        let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: AppPaths.claudeSettingsFile, options: .atomic)
+
+        let vm = AppViewModel()
+        vm.refreshHookHealth()
+
+        XCTAssertEqual(vm.usageHealthIssue, .displaced(by: "~/bin/other.sh"))
+        let after = try JSONSerialization.jsonObject(with: Data(contentsOf: AppPaths.claudeSettingsFile)) as? [String: Any]
+        let command = (after?["statusLine"] as? [String: Any])?["command"] as? String
+        XCTAssertEqual(command, "~/bin/other.sh")
+    }
 }
