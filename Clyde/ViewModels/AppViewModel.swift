@@ -355,7 +355,8 @@ final class AppViewModel: ObservableObject {
     /// sends whatever it earns. Internal so the pairing of the two
     /// signals can be tested without a notification centre.
     func evaluateUsageAlerts(limits: UsageLimits?, rateLimited: Bool) {
-        for alert in usageAlerts.alerts(for: limits, rateLimited: rateLimited) {
+        guard showUsageLimits else { usageAlerts = UsageLimitsAlerts(); return }
+        for alert in usageAlerts.alerts(for: limits, rateLimited: rateLimited, now: Date()) {
             switch alert {
             case .sessionNearLimit(let resetsAt):
                 let window = limits?.fiveHour ?? UsageWindow(usedPercentage: 0, resetsAt: resetsAt)

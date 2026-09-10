@@ -43,10 +43,20 @@ final class UsageLimitsAlertsTests: XCTestCase {
                        [.sessionBackAfterReset])
     }
 
-    func testAWindowThatSimplyVanishesAfterExhaustionAlsoAnnounces() {
+    func testAVanishedWindowAnnouncesOnlyOnceItsResetTimeHasPassed() {
         var alerts = UsageLimitsAlerts()
         _ = alerts.alerts(for: limits(100), rateLimited: false)
-        XCTAssertEqual(alerts.alerts(for: nil, rateLimited: false), [.sessionBackAfterReset])
+        XCTAssertEqual(alerts.alerts(for: nil, rateLimited: false, now: reset.addingTimeInterval(-60)), [])
+        XCTAssertEqual(alerts.alerts(for: nil, rateLimited: false, now: reset.addingTimeInterval(60)),
+                       [.sessionBackAfterReset])
+    }
+
+    func testClosingTheRateLimitedSessionIsNotAReset() {
+        var alerts = UsageLimitsAlerts()
+        _ = alerts.alerts(for: limits(42), rateLimited: true)
+        XCTAssertEqual(alerts.alerts(for: limits(42), rateLimited: false, now: reset.addingTimeInterval(-60)), [])
+        XCTAssertEqual(alerts.alerts(for: limits(42), rateLimited: false, now: reset.addingTimeInterval(60)),
+                       [.sessionBackAfterReset])
     }
 
     func testStartingExhaustedDoesNotAnnounceAReset() {

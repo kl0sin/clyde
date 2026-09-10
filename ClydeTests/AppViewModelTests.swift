@@ -181,22 +181,35 @@ final class AppViewModelTests: XCTestCase {
     /// watchers with no ordering between them. A window that is only
     /// exhausted because of the marker (JSON still shows headroom)
     /// must still be tracked, so its later reset gets announced.
-    func testRateLimitOnlyExhaustionIsObserved() {
+    func testRateLimitOnlyExhaustionIsObserved() throws {
+        let tempHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-ratelimitonly-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
+        AppPaths.homeOverride = tempHome
+        HookInstaller.claudeInstalledOverride = true
+        UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
+        defer {
+            AppPaths.homeOverride = nil
+            HookInstaller.claudeInstalledOverride = nil
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
+            try? FileManager.default.removeItem(at: tempHome)
+        }
+
         let vm = AppViewModel()
         let resetsAt = Date().addingTimeInterval(3600)
         let limits = UsageLimits(fiveHour: UsageWindow(usedPercentage: 42, resetsAt: resetsAt),
                                   sevenDay: nil, updatedAt: Date(), sessionID: nil, modelName: nil)
 
         vm.evaluateUsageAlerts(limits: limits, rateLimited: false)
-        XCTAssertFalse(vm.usageAlerts.wasExhausted)
+        XCTAssertNil(vm.usageAlerts.exhaustedResetsAt)
 
         vm.evaluateUsageAlerts(limits: limits, rateLimited: true)
-        XCTAssertTrue(vm.usageAlerts.wasExhausted)
+        XCTAssertNotNil(vm.usageAlerts.exhaustedResetsAt)
 
         let nextWindow = UsageLimits(fiveHour: UsageWindow(usedPercentage: 3, resetsAt: resetsAt.addingTimeInterval(5 * 3600)),
                                       sevenDay: nil, updatedAt: Date(), sessionID: nil, modelName: nil)
         vm.evaluateUsageAlerts(limits: nextWindow, rateLimited: false)
-        XCTAssertFalse(vm.usageAlerts.wasExhausted)
+        XCTAssertNil(vm.usageAlerts.exhaustedResetsAt)
     }
 
     /// Pins that the combined pipeline is actually wired: flipping a
@@ -204,14 +217,27 @@ final class AppViewModelTests: XCTestCase {
     /// crash or mark the window exhausted (there is no window to be
     /// exhausted). Not asserting on notification delivery — the centre
     /// is unauthorized in tests — only that the pipeline runs.
-    func testCombinedPipelineReactsToRateLimitAlone() {
+    func testCombinedPipelineReactsToRateLimitAlone() throws {
+        let tempHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-combinedpipeline-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
+        AppPaths.homeOverride = tempHome
+        HookInstaller.claudeInstalledOverride = true
+        UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
+        defer {
+            AppPaths.homeOverride = nil
+            HookInstaller.claudeInstalledOverride = nil
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
+            try? FileManager.default.removeItem(at: tempHome)
+        }
+
         let monitor = ProcessMonitor()
         let vm = AppViewModel(processMonitor: monitor)
         var s = Session(pid: 4343, workingDirectory: "/tmp/y", status: .busy)
         s.errorReason = "rate_limit"
         monitor.sessions = [s]
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-        XCTAssertFalse(vm.usageAlerts.wasExhausted)
+        XCTAssertNil(vm.usageAlerts.exhaustedResetsAt)
     }
 
     /// `usageHealthIssue` must come from a cache `refreshHookHealth()`
@@ -245,5 +271,35 @@ final class AppViewModelTests: XCTestCase {
         try UsageLimitsInstaller.install()
         vm.refreshHookHealth()
         XCTAssertNil(vm.usageHealthIssue)
+    }
+
+    /// Turning the feature off must not leave a remembered exhaustion
+    /// behind for a later `nil`/false pair to "resolve" into a false
+    /// "you can continue" notification.
+    func testTurningTheFeatureOffIsNotAReset() throws {
+        let tempHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-usageoff-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
+        AppPaths.homeOverride = tempHome
+        HookInstaller.claudeInstalledOverride = true
+        UserDefaults.standard.set(true, forKey: UsageLimitsInstaller.settingKey)
+        defer {
+            AppPaths.homeOverride = nil
+            HookInstaller.claudeInstalledOverride = nil
+            UserDefaults.standard.removeObject(forKey: UsageLimitsInstaller.settingKey)
+            try? FileManager.default.removeItem(at: tempHome)
+        }
+
+        let vm = AppViewModel()
+        XCTAssertTrue(vm.showUsageLimits)
+
+        let exhausted = UsageLimits(fiveHour: UsageWindow(usedPercentage: 100, resetsAt: Date().addingTimeInterval(3600)),
+                                     sevenDay: nil, updatedAt: Date(), sessionID: nil, modelName: nil)
+        vm.evaluateUsageAlerts(limits: exhausted, rateLimited: false)
+        XCTAssertNotNil(vm.usageAlerts.exhaustedResetsAt)
+
+        vm.showUsageLimits = false
+        vm.evaluateUsageAlerts(limits: nil, rateLimited: false)
+        XCTAssertNil(vm.usageAlerts.exhaustedResetsAt)
     }
 }
