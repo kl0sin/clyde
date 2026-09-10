@@ -272,6 +272,7 @@ Tool/plan line transitions are crossfades, not slides. Status pill does not puls
 4. Check the terminal: the status line still shows what the previous command printed (`mine`).
 5. Check `~/.clyde/usage/statusline.json`: it exists and contains `rate_limits`.
 6. In Clyde, open the full panel: the Limits band sits above Activity with both meters. Click it: two rows and an "Updated … from the … session" line. Switch to compact: a `5h` meter beside Expand.
-7. Switch the setting off. `~/.claude/settings.json` has the previous `statusLine` back (or none if there was none); the wrapper script and `~/.clyde/usage/` are gone; the band and the meter are gone.
+7. Switch the setting off. `~/.claude/settings.json` has the previous `statusLine` back (or none if there was none); the wrapper script, the snapshot and the stored passthrough are gone (the empty `~/.clyde/usage/` directory stays); the band and the meter are gone.
+8. Switch it on again, then hand-edit `~/.claude/settings.json` so `statusLine.command` is `echo other`. Within a minute Settings › General says `Not working — Another status line replaced Clyde's (echo other)…`; Clyde does not overwrite it. Switch the setting off and on to adopt it.
 
 **Expect:** no "status line" error in the Claude Code TUI at any point; every wrapper invocation exits 0 (`~/.clyde/logs/statusline.log` stays empty).
