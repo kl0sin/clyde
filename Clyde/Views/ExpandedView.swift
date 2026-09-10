@@ -73,6 +73,13 @@ struct ExpandedView: View {
 
             Spacer(minLength: 0)
 
+            if let limits = appViewModel.usageLimits, limits.hasAnyWindow {
+                LimitsBand(limits: limits,
+                           rateLimited: appViewModel.hasRateLimitedSession,
+                           stale: appViewModel.usageIsStale,
+                           sessionName: appViewModel.usageSessionName(for: limits))
+            }
+
             ActivityTimelineView(log: appViewModel.activityLog,
                                  showsReview: appViewModel.historyAvailable)
 
