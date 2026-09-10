@@ -143,6 +143,10 @@ Worth noting where these came from. Five of the seven were found by the user wor
 - [x] The setting now says what it is doing, not just what was asked for: off names where the questions go instead, a hook that cannot deliver reads as broken, and on-but-nothing-has-ever-arrived is its own state that names the mode Claude asks in. Clyde records when a question last reached it, which is the only honest evidence the feature works !md #ux
 - [ ] The panel is 400x420 and the content keeps growing — permission requests joined a session list, an Activity trail and a summary bar. A first attempt made the panel user-resizable and was reverted the same hour: `.resizable` in the style mask changed more than the size, detaching the panel from the widget anchor, breaking the slide animation and making the bottom edge grab itself during an ordinary window drag (three unintended resizes were logged, ending at the 320 floor). The tests written for it only covered the one risk that was already understood — that content still could not resize the window — so none of that showed. Whatever comes next needs the anchor maths, the show/hide animation and the drag regions in scope from the start, not the size alone !md #ux
 
+## Phase: v0.10.0 — Usage limits
+
+- [ ] Show the two subscription windows Claude Code meters — the 5-hour session and the 7-day week — as a Limits band above Activity in the full panel and a session-only meter in the compact footer, fed by a status-line wrapper Clyde installs beside its hook and never from the rate-limited OAuth endpoint. Opt-in, because a configured status line changes what the terminal shows. Spec: `docs/superpowers/specs/2026-09-10-usage-limits-design.md` !hi #ux #hooks
+
 ## Phase: v0.3.0+ — UX polish, content & reach
 
 Backlog. Pick when there's time or when community interest bumps priority.
