@@ -50,6 +50,7 @@ final class AppViewModel: ObservableObject {
     let pushService: PushService
 
     let usageStore = UsageLimitsStore()
+    private var usageAlerts = UsageLimitsAlerts()
 
     /// The two subscription windows, or nil when there is nothing to
     /// show: feature off, no snapshot yet, or a plan that has none.
@@ -350,7 +351,24 @@ final class AppViewModel: ObservableObject {
         usageStore.start()
         usageStore.$limits
             .receive(on: RunLoop.main)
-            .sink { [weak self] limits in self?.usageLimits = limits }
+            .sink { [weak self] limits in
+                guard let self else { return }
+                self.usageLimits = limits
+                for alert in self.usageAlerts.alerts(for: limits, rateLimited: self.hasRateLimitedSession) {
+                    switch alert {
+                    case .sessionNearLimit(let resetsAt):
+                        let window = UsageWindow(usedPercentage: 0, resetsAt: resetsAt)
+                        let when = UsageLimits.resetText(for: window, now: Date(), level: .normal)
+                        self.notificationService.sendUsageNotification(
+                            identifier: "usage-session-\(Int(resetsAt.timeIntervalSince1970))",
+                            body: "Claude session window is nearly used up — \(when)")
+                    case .sessionBackAfterReset:
+                        self.notificationService.sendUsageNotification(
+                            identifier: "usage-session-reset",
+                            body: "Claude session window has reset — you can continue")
+                    }
+                }
+            }
             .store(in: &cancellables)
     }
 

@@ -235,6 +235,18 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         UNUserNotificationCenter.current().add(request)
     }
 
+    /// A notification that is about the account rather than a session.
+    /// Same switches, same snooze, no PID to open on click.
+    func sendUsageNotification(identifier: String, body: String) {
+        guard systemNotificationsEnabled, isAuthorized, !isSnoozed else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Clyde"
+        content.body = body
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
     // MARK: - Delegate
 
     nonisolated func userNotificationCenter(
