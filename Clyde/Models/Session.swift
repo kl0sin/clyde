@@ -145,6 +145,8 @@ struct Session: Identifiable, Equatable {
     /// `runtime == "cleat"`. Empty otherwise. Shown as a tooltip on
     /// the cleat badge and useful for future container-aware actions.
     var container: String = ""
+    /// True for a session no person is watching — see the hook's HEADLESS rule. Hidden from the published list unless the user asks.
+    var isHeadless: Bool = false
 
     var isGhost: Bool { endedAt != nil }
 

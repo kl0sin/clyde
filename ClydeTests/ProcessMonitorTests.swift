@@ -64,6 +64,22 @@ final class ProcessMonitorTests: XCTestCase {
         return pid
     }
 
+    /// Writes a headless-flavoured `-info` file the way clyde-hook.sh
+    /// writes it when SessionStart detects no controlling terminal on
+    /// stdin (the Agent SDK, `claude -p` in a script, a test suite).
+    /// Same PID semantics as `writeInfoFile`.
+    private func writeHeadlessInfoFile(
+        in dir: URL,
+        sessionId: String = UUID().uuidString,
+        cwd: String = "/tmp"
+    ) -> pid_t {
+        let pid = getpid()
+        let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","started_at":0,"headless":true}"#
+        let url = dir.appendingPathComponent("\(sessionId)-info")
+        try? body.write(to: url, atomically: true, encoding: .utf8)
+        return pid
+    }
+
     /// Writes a `-tool` marker the way PreToolUse hook would. Same PID
     /// semantics as `writeInfoFile` (uses the current process PID so
     /// kill(pid, 0) succeeds).
@@ -1403,6 +1419,56 @@ final class ProcessMonitorTests: XCTestCase {
         await monitor.poll()
 
         XCTAssertEqual(monitor.sessions.first?.status, .busy)
+    }
+
+    // MARK: - Automated sessions
+
+    func testHeadlessSessionIsTrackedButNotPublished() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeHeadlessInfoFile(in: dir, sessionId: sid)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+                                     isLiveClaudeProcessCheck: { _ in true },
+                                     showsAutomatedSessions: { false })
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.count, 0)
+        XCTAssertEqual(monitor.automatedSessionCount, 1)
+        XCTAssertEqual(monitor.trackedSessions.first?.isHeadless, true)
+        XCTAssertEqual(monitor.clydeState, .sleeping)
+    }
+
+    func testHeadlessSessionIsPublishedWhenTheSettingSaysSo() async {
+        let dir = tempStateDir()
+        _ = writeHeadlessInfoFile(in: dir, sessionId: UUID().uuidString)
+        var show = false
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+                                     isLiveClaudeProcessCheck: { _ in true },
+                                     showsAutomatedSessions: { show })
+        await monitor.poll()
+        XCTAssertEqual(monitor.sessions.count, 0)
+        show = true
+        monitor.republish()
+        XCTAssertEqual(monitor.sessions.count, 1)
+        XCTAssertEqual(monitor.automatedSessionCount, 0)
+    }
+
+    func testHeadlessSessionDoesNotAnnounceIdle() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        let pid = writeHeadlessInfoFile(in: dir, sessionId: sid)
+        // busy first, then idle — the transition that plays the sound
+        try? "{\"session_id\": \"\(sid)\", \"pid\": \(pid), \"timestamp\": \(Int(Date().timeIntervalSince1970))}"
+            .write(to: dir.appendingPathComponent("\(sid)-busy"), atomically: true, encoding: .utf8)
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+                                     isLiveClaudeProcessCheck: { _ in true },
+                                     showsAutomatedSessions: { false })
+        var announced = 0
+        monitor.onSessionBecameIdle = { _ in announced += 1 }
+        await monitor.poll()
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sid)-busy"))
+        await monitor.poll()
+        XCTAssertEqual(monitor.trackedSessions.first?.status, .idle)
+        XCTAssertEqual(announced, 0)
     }
 
 }

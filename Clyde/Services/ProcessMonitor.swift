@@ -26,8 +26,55 @@ struct RealShellExecutor: ShellExecutor {
 /// A Claude process with active children → busy (processing a tool). No children → idle (waiting).
 @MainActor
 final class ProcessMonitor: ObservableObject {
-    @Published var sessions: [Session] = []
+    /// Everything discovered on disk — liveness, ghosts, revival on
+    /// resume — headless or not. `didSet` re-derives the published
+    /// list, so every internal write of this array stays in sync with
+    /// what the UI sees without each call site remembering to do so.
+    private(set) var trackedSessions: [Session] = [] { didSet { republish() } }
+
+    /// What a person should see. `trackedSessions` minus the headless
+    /// ones, unless the setting says to show them. Every consumer reads
+    /// this; none of them has to know the distinction exists.
+    @Published private(set) var sessions: [Session] = []
+    /// Live headless sessions hidden from `sessions`. Zero while the
+    /// setting shows them, since then they are in the list.
+    @Published private(set) var automatedSessionCount: Int = 0
     @Published var clydeState: ClydeState = .sleeping
+
+    static let showAutomatedSessionsKey = "showAutomatedSessions"
+    private let showsAutomatedSessions: () -> Bool
+
+    /// Re-derive the published list from what is tracked. Called from
+    /// `trackedSessions`'s observer and after the setting flips.
+    ///
+    /// `sessions` is assigned unconditionally, even when the filtered
+    /// result is unchanged: `ActivityLog` relies on `$sessions` firing
+    /// on every poll to notice changes that live outside `Session`
+    /// itself (the hook's `source` field, keyed off `hookInfoByPID`,
+    /// drives its auto-compact detection) — see the comment on
+    /// `lastReconcileFingerprint` there.
+    func republish() {
+        let show = showsAutomatedSessions()
+        sessions = show ? trackedSessions : trackedSessions.filter { !$0.isHeadless }
+        let hidden = show ? 0 : trackedSessions.filter { $0.isHeadless && !$0.isGhost }.count
+        if hidden != automatedSessionCount { automatedSessionCount = hidden }
+        let live = sessions.filter { !$0.isGhost }
+        clydeState = live.isEmpty ? .sleeping
+            : (live.contains(where: { $0.status == .busy }) ? .busy : .idle)
+    }
+
+    /// Tests only.
+    func replaceTrackedSessions(_ sessions: [Session]) {
+        trackedSessions = sessions
+    }
+
+    /// True unless the session is a headless one currently hidden from
+    /// the published list — used to gate `onSessionBecameIdle`, so a
+    /// program nobody is watching doesn't ring the "session finished"
+    /// bell.
+    private func announcesIdle(_ session: Session) -> Bool {
+        !(session.isHeadless && !showsAutomatedSessions())
+    }
 
     private let shell: ShellExecutor
     private let stateDir: URL
@@ -113,12 +160,14 @@ final class ProcessMonitor: ObservableObject {
         shell: ShellExecutor = RealShellExecutor(),
         pollingInterval: TimeInterval = AppConstants.defaultPollingInterval,
         stateDir: URL = AppPaths.stateDir,
-        isLiveClaudeProcessCheck: @escaping @Sendable (pid_t) -> Bool = ProcessMonitor.defaultIsLiveClaudeProcess
+        isLiveClaudeProcessCheck: @escaping @Sendable (pid_t) -> Bool = ProcessMonitor.defaultIsLiveClaudeProcess,
+        showsAutomatedSessions: @escaping () -> Bool = { UserDefaults.standard.bool(forKey: ProcessMonitor.showAutomatedSessionsKey) }
     ) {
         self.shell = shell
         self.pollingInterval = pollingInterval
         self.stateDir = stateDir
         self.isLiveClaudeProcessCheck = isLiveClaudeProcessCheck
+        self.showsAutomatedSessions = showsAutomatedSessions
     }
 
     deinit {
@@ -154,6 +203,11 @@ final class ProcessMonitor: ObservableObject {
         /// `runtime == "cleat"`, empty otherwise. Surfaced in the UI
         /// and useful for tooltips / debug.
         let container: String
+        /// True when the hook found no controlling terminal on stdin at
+        /// `SessionStart` — the Agent SDK, `claude -p` in a script, a
+        /// test suite. Drives whether the session is hidden from
+        /// `sessions`.
+        let headless: Bool
     }
 
     /// Side map of PID → runtime ("" or "cleat") populated by
@@ -210,7 +264,8 @@ final class ProcessMonitor: ObservableObject {
                         cwd: info.cwd,
                         source: info.source,
                         runtime: info.runtime,
-                        container: info.container
+                        container: info.container,
+                        headless: info.headless
                     )
                 }
             }
@@ -247,6 +302,7 @@ final class ProcessMonitor: ObservableObject {
         let source: String
         let runtime: String
         let container: String
+        let headless: Bool
     }
 
     private func readInfoFile(file: URL) -> ParsedInfo? {
@@ -260,13 +316,15 @@ final class ProcessMonitor: ObservableObject {
         let source = (json["source"] as? String) ?? ""
         let runtime = (json["runtime"] as? String) ?? ""
         let container = (json["container"] as? String) ?? ""
+        let headless = (json["headless"] as? Bool) ?? false
         return ParsedInfo(
             pid: pid_t(pidValue),
             sessionId: sessionId,
             cwd: cwd,
             source: source,
             runtime: runtime,
-            container: container
+            container: container,
+            headless: headless
         )
     }
 
@@ -401,7 +459,7 @@ final class ProcessMonitor: ObservableObject {
 
         // Capture the previous live PIDs so we can promote disappearances
         // to ghost rows that linger briefly in the UI.
-        let previousLivePIDs = Set(sessions.lazy.filter { !$0.isGhost }.map(\.pid))
+        let previousLivePIDs = Set(trackedSessions.lazy.filter { !$0.isGhost }.map(\.pid))
 
         var updatedSessions: [Session] = []
         updatedSessions.reserveCapacity(pids.count)
@@ -430,7 +488,7 @@ final class ProcessMonitor: ObservableObject {
         // strictly one tick per PID — second appearance is always
         // rendered, so a genuine non-resume new session is delayed by
         // at most one polling interval.
-        let hasRecentGhost = sessions.contains { session in
+        let hasRecentGhost = trackedSessions.contains { session in
             guard session.isGhost, let endedAt = session.endedAt else { return false }
             return now.timeIntervalSince(endedAt) < Self.resumeDeferWindow
         }
@@ -453,7 +511,7 @@ final class ProcessMonitor: ObservableObject {
             // we lose the "was a ghost" signal once the row is live.
             if let info,
                !info.sessionId.isEmpty,
-               sessions.contains(where: { $0.sessionId == info.sessionId && $0.isGhost })
+               trackedSessions.contains(where: { $0.sessionId == info.sessionId && $0.isGhost })
             {
                 revivedSessionIds.insert(info.sessionId)
             }
@@ -468,7 +526,7 @@ final class ProcessMonitor: ObservableObject {
         // "ended Xm ago" until the linger window expires.
         let livePIDs = Set(updatedSessions.map(\.pid))
         for vanished in previousLivePIDs.subtracting(livePIDs) {
-            if let last = sessions.first(where: { $0.pid == vanished && !$0.isGhost }) {
+            if let last = trackedSessions.first(where: { $0.pid == vanished && !$0.isGhost }) {
                 var ghost = last
                 ghost.status = .idle
                 ghost.endedAt = now
@@ -478,7 +536,7 @@ final class ProcessMonitor: ObservableObject {
         }
 
         // Carry forward existing ghosts that are still within the linger window.
-        for existingGhost in sessions where existingGhost.isGhost {
+        for existingGhost in trackedSessions where existingGhost.isGhost {
             // Skip ghosts whose session_id was just revived by a resumed
             // session. Otherwise the resumed live row and the stale ghost
             // would coexist in the UI for the full linger window.
@@ -493,16 +551,9 @@ final class ProcessMonitor: ObservableObject {
         }
 
         // Sort: live sessions by recency (newest first), then ghosts at the bottom.
-        sessions = updatedSessions.sorted { lhs, rhs in
+        trackedSessions = updatedSessions.sorted { lhs, rhs in
             if lhs.isGhost != rhs.isGhost { return !lhs.isGhost }
             return lhs.statusChangedAt > rhs.statusChangedAt
-        }
-
-        let liveSessions = sessions.filter { !$0.isGhost }
-        if liveSessions.isEmpty {
-            clydeState = .sleeping
-        } else {
-            clydeState = liveSessions.contains(where: { $0.status == .busy }) ? .busy : .idle
         }
     }
 
@@ -522,7 +573,7 @@ final class ProcessMonitor: ObservableObject {
         let info = hookInfoByPID[pid]
 
         // (1) PID match against live rows.
-        if var existing = sessions.first(where: { $0.pid == pid && !$0.isGhost }) {
+        if var existing = trackedSessions.first(where: { $0.pid == pid && !$0.isGhost }) {
             // Backfill metadata from the hook info if it became available.
             if existing.sessionId == nil, let info {
                 existing.sessionId = info.sessionId
@@ -537,12 +588,13 @@ final class ProcessMonitor: ObservableObject {
             if let info {
                 existing.runtime = info.runtime
                 existing.container = info.container
+                existing.isHeadless = info.headless
             }
 
             if existing.status != newStatus {
                 existing.status = newStatus
                 existing.statusChangedAt = Date()
-                if newStatus == .idle {
+                if newStatus == .idle, announcesIdle(existing) {
                     onSessionBecameIdle?(existing)
                 }
             }
@@ -559,7 +611,7 @@ final class ProcessMonitor: ObservableObject {
 
         // (2) sessionId match — revival path for `claude --resume`.
         if let sid = info?.sessionId, !sid.isEmpty,
-           var revived = sessions.first(where: { $0.sessionId == sid })
+           var revived = trackedSessions.first(where: { $0.sessionId == sid })
         {
             revived.pid = pid
             revived.endedAt = nil
@@ -571,6 +623,7 @@ final class ProcessMonitor: ObservableObject {
             if let info {
                 revived.runtime = info.runtime
                 revived.container = info.container
+                revived.isHeadless = info.headless
             }
             revived.activeTool = hookToolByPID[pid]
             revived.activePlan = hookPlanByPID[pid]
@@ -592,6 +645,7 @@ final class ProcessMonitor: ObservableObject {
         )
         fresh.runtime = info?.runtime ?? ""
         fresh.container = info?.container ?? ""
+        fresh.isHeadless = info?.headless ?? false
         fresh.activeTool = hookToolByPID[pid]
         fresh.activePlan = hookPlanByPID[pid]
         fresh.activeToolCount = hookToolCountByPID[pid] ?? 0
@@ -1172,7 +1226,7 @@ final class ProcessMonitor: ObservableObject {
     /// `pollHookState` so the UI reflects hook events instantly.
     private func applyBusyStateToSessions() {
         var changed = false
-        var updated = sessions
+        var updated = trackedSessions
         for index in updated.indices where !updated[index].isGhost {
             let pid = updated[index].pid
             let newStatus = statusIncludingAgents(pid: pid)
@@ -1183,7 +1237,7 @@ final class ProcessMonitor: ObservableObject {
                 // An abandoned marker means nothing has happened for a
                 // very long time, not that the turn finished — saying
                 // "session finished" there would be inventing an event.
-                if newStatus == .idle && !hasBeenAbandoned(pid: pid) {
+                if newStatus == .idle && !hasBeenAbandoned(pid: pid) && announcesIdle(updated[index]) {
                     onSessionBecameIdle?(updated[index])
                 }
             }
@@ -1230,13 +1284,7 @@ final class ProcessMonitor: ObservableObject {
             }
         }
         if changed {
-            sessions = updated
-            let liveSessions = sessions.filter { !$0.isGhost }
-            if liveSessions.isEmpty {
-                clydeState = .sleeping
-            } else {
-                clydeState = liveSessions.contains(where: { $0.status == .busy }) ? .busy : .idle
-            }
+            trackedSessions = updated
         }
     }
 

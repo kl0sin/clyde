@@ -158,10 +158,10 @@ final class AppViewModelTests: XCTestCase {
         let vm = AppViewModel(processMonitor: monitor)
         var s = Session(pid: 4242, workingDirectory: "/tmp/x", status: .busy)
         s.errorReason = "rate_limit"
-        monitor.sessions = [s]
+        monitor.replaceTrackedSessions([s])
         XCTAssertTrue(vm.hasRateLimitedSession)
         s.errorReason = nil
-        monitor.sessions = [s]
+        monitor.replaceTrackedSessions([s])
         XCTAssertFalse(vm.hasRateLimitedSession)
     }
 
@@ -247,7 +247,7 @@ final class AppViewModelTests: XCTestCase {
         let vm = AppViewModel(processMonitor: monitor)
         var s = Session(pid: 4343, workingDirectory: "/tmp/y", status: .busy)
         s.errorReason = "rate_limit"
-        monitor.sessions = [s]
+        monitor.replaceTrackedSessions([s])
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
         XCTAssertNil(vm.usageAlerts.exhaustedResetsAt)
     }
