@@ -1471,4 +1471,28 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertEqual(announced, 0)
     }
 
+    /// A headless session that dies becomes a ghost like any other —
+    /// and a ghost is not "live" for `automatedSessionCount`'s purpose
+    /// (the spec: "live headless sessions, ghosts excluded"). Mirrors
+    /// `testProcessNamedClaudeLeavesNoGhostWhenItExits`'s two-poll
+    /// liveness-flip shape, but for the headless-count path instead of
+    /// the ordinary-session path.
+    func testHeadlessGhostIsNotCountedAsAutomated() async {
+        let dir = tempStateDir()
+        let sid = UUID().uuidString
+        _ = writeHeadlessInfoFile(in: dir, sessionId: sid)
+        var alive = true
+        let monitor = ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: dir,
+                                     isLiveClaudeProcessCheck: { _ in alive },
+                                     showsAutomatedSessions: { false })
+        await monitor.poll()
+        XCTAssertEqual(monitor.automatedSessionCount, 1)
+
+        alive = false
+        await monitor.poll()
+
+        XCTAssertEqual(monitor.automatedSessionCount, 0)
+        XCTAssertTrue(monitor.sessions.isEmpty)
+    }
+
 }

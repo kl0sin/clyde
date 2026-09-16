@@ -148,9 +148,12 @@ final class AppViewModel: ObservableObject {
     }
 
     var clydeState: ClydeState {
-        // Attention takes priority over busy — if any session is waiting for
-        // permission, surface that distinct state to the animation layer.
-        if !attentionMonitor.attentionPIDs.isEmpty {
+        // Only a session the user can see may put the face on alert: a
+        // hidden automated session that asks for permission has no row
+        // to answer it on, and a waving mascot with nothing to click is
+        // exactly the noise this filter exists to end.
+        let visible = Set(processMonitor.sessions.lazy.filter { !$0.isGhost }.map(\.pid))
+        if attentionMonitor.attentionPIDs.contains(where: visible.contains) {
             return .attention
         }
         return processMonitor.clydeState

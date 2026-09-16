@@ -424,6 +424,68 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(command, "~/bin/other.sh")
     }
 
+    /// The attention monitor reads event files without ever consulting
+    /// the session list, so a hidden automated session that writes a
+    /// permission-request event still used to flip the widget's face —
+    /// even though the panel had no row for the user to answer it on.
+    /// Only a PID belonging to a published, visible session may set
+    /// `.attention`.
+    func testAttentionFromAHiddenSessionDoesNotAlarmTheWidget() async throws {
+        let stateDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-hiddenattention-state-\(UUID().uuidString)")
+        let eventsDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-hiddenattention-events-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: eventsDir, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: stateDir)
+            try? FileManager.default.removeItem(at: eventsDir)
+        }
+
+        let sid = UUID().uuidString
+        let pid = getpid()
+        let infoBody = #"{"session_id":"\#(sid)","pid":\#(pid),"cwd":"/tmp/x","started_at":0,"headless":true}"#
+        try infoBody.write(
+            to: stateDir.appendingPathComponent("\(sid)-info"), atomically: true, encoding: .utf8)
+        let eventBody = #"{"session_id":"\#(sid)","pid":\#(pid),"cwd":"/tmp/x","event":"PermissionRequest","timestamp":0}"#
+        try eventBody.write(
+            to: eventsDir.appendingPathComponent("\(sid).json"), atomically: true, encoding: .utf8)
+
+        var show = false
+        let shell = MockShellExecutor()
+        shell.responses["pgrep"] = ""
+        let monitor = ProcessMonitor(
+            shell: shell, pollingInterval: 1, stateDir: stateDir,
+            isLiveClaudeProcessCheck: { _ in true },
+            showsAutomatedSessions: { show }
+        )
+        let attention = AttentionMonitor(eventsDir: eventsDir)
+
+        let vm = AppViewModel(
+            processMonitor: monitor,
+            terminalLauncher: TerminalLauncher(),
+            notificationService: NotificationService(),
+            attentionMonitor: attention,
+            pushService: PushService()
+        )
+
+        await monitor.poll()
+        attention.start()
+        attention.stop()
+
+        XCTAssertNotEqual(vm.clydeState, .attention,
+                          "a hidden headless session's permission request must not alarm the widget")
+        XCTAssertTrue(vm.processMonitor.sessions.isEmpty)
+
+        show = true
+        monitor.republish()
+        attention.start()
+        attention.stop()
+
+        XCTAssertEqual(vm.clydeState, .attention,
+                       "once the session is shown, its permission request must alarm the widget")
+    }
+
     func testShowAutomatedSessionsPersistsAndRepublishes() {
         let key = ProcessMonitor.showAutomatedSessionsKey
         UserDefaults.standard.removeObject(forKey: key)
