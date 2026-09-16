@@ -6,6 +6,7 @@ struct SummaryBar: View {
     let sessionCount: Int
     let busyCount: Int
     let idleCount: Int
+    var automatedCount: Int = 0
     let clydeState: ClydeState
     /// An advisory that is not worth a banner: the shortcut being off,
     /// or cleat's hook bridge. Sits here as a chip, with the detail and
@@ -45,8 +46,8 @@ struct SummaryBar: View {
                 AdvisoryChip(issue: advisory) { advisoryExpanded.wrappedValue.toggle() }
             }
 
-            if sessionCount > 0 {
-                Text("\(sessionCount) \(sessionCount == 1 ? "session" : "sessions")")
+            if sessionCount > 0 || automatedCount > 0 {
+                Text(summaryText)
                     .font(.system(size: 10))
                     .foregroundStyle(Color(white: 0.4))
             }
@@ -62,14 +63,28 @@ struct SummaryBar: View {
         .accessibilityLabel(summaryAccessibilityLabel)
     }
 
+    private var summaryText: String {
+        if sessionCount == 0 {
+            return "\(automatedCount) automated"
+        }
+        let base = "\(sessionCount) \(sessionCount == 1 ? "session" : "sessions")"
+        guard automatedCount > 0 else { return base }
+        return "\(base) · \(automatedCount) automated"
+    }
+
     private var summaryAccessibilityLabel: String {
-        if sessionCount == 0 { return "Waiting for sessions" }
+        if sessionCount == 0 {
+            if automatedCount > 0 { return "Waiting for sessions. \(automatedCount) automated." }
+            return "Waiting for sessions"
+        }
         var parts: [String] = []
         if busyCount > 0 { parts.append("\(busyCount) working") }
         if idleCount > 0 { parts.append("\(idleCount) ready") }
         let summary = "Status summary: " + parts.joined(separator: ", ")
         let total = sessionCount == 1 ? "1 session" : "\(sessionCount) sessions"
-        return "\(summary). \(total) total."
+        var label = "\(summary). \(total) total."
+        if automatedCount > 0 { label += " \(automatedCount) automated." }
+        return label
     }
 
 }

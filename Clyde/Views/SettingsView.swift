@@ -348,6 +348,18 @@ struct GeneralSettingsTab: View {
 
         SettingsSection(title: "Monitoring") {
             VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $appViewModel.showAutomatedSessions) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Show automated sessions")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white)
+                        Text("Sessions started by programs rather than from a terminal — the Agent SDK, `claude -p` in a script, a test suite. Off keeps them out of the panel, the counts and the sounds.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(white: 0.45))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Fallback poll interval")

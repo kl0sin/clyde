@@ -87,6 +87,17 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    /// Off by default: sessions started by programs stay out of the
+    /// panel, the counts and the sounds. On, they are ordinary sessions.
+    @Published var showAutomatedSessions: Bool = UserDefaults.standard
+        .bool(forKey: ProcessMonitor.showAutomatedSessionsKey) {
+        didSet {
+            guard showAutomatedSessions != oldValue else { return }
+            UserDefaults.standard.set(showAutomatedSessions, forKey: ProcessMonitor.showAutomatedSessionsKey)
+            processMonitor.republish()
+        }
+    }
+
     /// A live session that Claude Code stopped with `rate_limit` is the
     /// account-level "exhausted" fact, whatever the percentage says.
     var hasRateLimitedSession: Bool {

@@ -87,6 +87,7 @@ struct ExpandedView: View {
                 sessionCount: sessionViewModel.sessionCount,
                 busyCount: sessionViewModel.busyCount,
                 idleCount: sessionViewModel.idleCount,
+                automatedCount: appViewModel.processMonitor.automatedSessionCount,
                 clydeState: appViewModel.clydeState,
                 advisory: advisory,
                 advisoryExpanded: $showsAdvisory

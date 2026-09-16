@@ -423,4 +423,14 @@ final class AppViewModelTests: XCTestCase {
         let command = (after?["statusLine"] as? [String: Any])?["command"] as? String
         XCTAssertEqual(command, "~/bin/other.sh")
     }
+
+    func testShowAutomatedSessionsPersistsAndRepublishes() {
+        let key = ProcessMonitor.showAutomatedSessionsKey
+        UserDefaults.standard.removeObject(forKey: key)
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        let vm = AppViewModel(processMonitor: ProcessMonitor())
+        XCTAssertFalse(vm.showAutomatedSessions)
+        vm.showAutomatedSessions = true
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: key))
+    }
 }
