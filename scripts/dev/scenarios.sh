@@ -309,16 +309,23 @@ accessibility)
     ;;
 
 automated-sessions)
+    install_hook
+    build_and_run
+    open_panel
     say "Three headless sessions in parallel, then one from the terminal"
     note "Watch the widget: it must not change, and no sound must play."
-    for i in 1 2 3; do
+    pids=()
+    for _ in 1 2 3; do
         claude -p "reply with the single word ok" < /dev/null > /dev/null 2>&1 &
+        pids+=("$!")
     done
     sleep 20
+    shot automated-sessions
     note "Expected: summary bar says '3 automated' (no visible session to precede it) while they run; no rows; no sound."
     note "Now run in this terminal:  claude -p 'reply with the single word ok'"
     note "Expected: an ordinary row appears and the ready sound plays once."
     note "Settings › General › Monitoring › Show automated sessions turns the hidden ones into rows."
+    kill "${pids[@]}" 2>/dev/null || true
     ;;
 
 restore)
