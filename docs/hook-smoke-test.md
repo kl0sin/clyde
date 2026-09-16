@@ -276,3 +276,26 @@ Tool/plan line transitions are crossfades, not slides. Status pill does not puls
 8. Switch it on again, then hand-edit `~/.claude/settings.json` so `statusLine.command` is `echo other`. Within a minute Settings › General says `Not working — Another status line replaced Clyde's (echo other)…`; Clyde does not overwrite it. Switch the setting off and on to adopt it.
 
 **Expect:** no "status line" error in the Claude Code TUI at any point; every wrapper invocation exits 0 (`~/.clyde/logs/statusline.log` stays empty).
+
+---
+
+## Scenario 10 — Headless sessions from scripts stay quiet
+
+**Goal:** sessions started by programs (Agent SDK, scripted `claude -p`, test suite runners) are tracked but hidden, count in the summary bar, and do not trigger the ready sound.
+
+**Setup:**
+- Clyde must be running.
+- Open the full panel to watch the summary bar.
+- Have audio or the sound-mute status visible so you can confirm no ready sound plays.
+
+**Steps:**
+1. Start three parallel headless sessions: `for i in 1 2 3; do claude -p "reply with the single word ok" < /dev/null > /dev/null 2>&1 & done`
+2. Watch the panel for 20 seconds while they run — look at the summary bar at the bottom, the session rows, and listen for sounds.
+3. After ~20 seconds, start one interactive session: type `claude` in the terminal and send a prompt (something that takes a couple seconds, e.g. "list the files in this project and summarize").
+4. Watch the panel again for the new session, listen for the ready sound, then let it complete.
+
+**Expect:**
+- While the three headless sessions run: the summary bar shows a count like "· 3 automated" or "3 sessions · 3 automated"; no session rows appear in the panel; no ready sound plays.
+- When the interactive `claude -p` session starts: a new row appears in the panel; the ready sound plays once.
+- `hook.log` contains hook events (`SessionStart`, `Stop`) for all four sessions, with the three headless ones bearing `headless=true` in their `-info` markers.
+- Settings › General › Monitoring › Show automated sessions toggle exists; flipping it to ON makes the three headless rows visible; flipping back to OFF hides them again.

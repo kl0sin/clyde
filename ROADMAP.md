@@ -149,7 +149,8 @@ Worth noting where these came from. Five of the seven were found by the user wor
 - [ ] Live for a working day on a Max plan before release: do the numbers track `/usage`, does the 80% notification land once and not on every turn, what does the terminal look like to someone who had no status line before. The last of those decides whether the toggle stays off by default !hi #qa
 - [ ] A status line that something else replaced is reported only in Settings › General. The spec asked for it in the panel, the way a missing hook is: a second non-fault chip, or a line in the Limits band's footer. Decide after the live day whether anyone actually hits it !lo #ux
 
-- [ ] Sessions started by programs (Agent SDK, scripted `claude -p`, test suites) fill the widget and play the ready sound for every turn — 45 sounds in three minutes in a field report. Hide them by default, count them in the summary bar, add a switch. Spec: `docs/superpowers/specs/2026-09-16-automated-sessions-design.md` !hi #hooks #ux
+- [x] Sessions started by programs are tracked but hidden: the hook marks a session whose stdin is not a terminal (or whose entrypoint is sdk-*) headless, the monitor publishes only the rest plus a count, the summary bar shows the count, a Monitoring switch shows them. From a field report of 45 ready sounds in three minutes. Spec: `docs/superpowers/specs/2026-09-16-automated-sessions-design.md` !hi #hooks #ux
+- [ ] The review window counts automated sessions as work; decide whether history should carry the headless flag too !lo #qa
 
 ## Phase: v0.3.0+ — UX polish, content & reach
 

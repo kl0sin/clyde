@@ -100,6 +100,7 @@ list)
     note "panel-size         measure the running app's panel — run it against a RELEASED build"
     note "settings-history   history size, and whether the numbers go stale"
     note "accessibility      the banner shown when the global shortcut has no permission"
+    note "automated-sessions the panel must stay quiet while a script runs claude -p in parallel"
     note "restore            put ~/.clyde and the installed hook back"
     ;;
 
@@ -305,6 +306,19 @@ accessibility)
     say "PASS if a banner says the global shortcut has no permission"
     note "A locally built app has a different signature than the release, so macOS"
     note "drops the Accessibility grant — that is the state this banner exists for."
+    ;;
+
+automated-sessions)
+    say "Three headless sessions in parallel, then one from the terminal"
+    note "Watch the widget: it must not change, and no sound must play."
+    for i in 1 2 3; do
+        claude -p "reply with the single word ok" < /dev/null > /dev/null 2>&1 &
+    done
+    sleep 20
+    note "Expected: full panel summary bar says '· 3 automated' while they run; no rows; no sound."
+    note "Now run in this terminal:  claude -p 'reply with the single word ok'"
+    note "Expected: an ordinary row appears and the ready sound plays once."
+    note "Settings › General › Monitoring › Show automated sessions turns the hidden ones into rows."
     ;;
 
 restore)
