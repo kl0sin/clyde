@@ -151,6 +151,7 @@ Worth noting where these came from. Five of the seven were found by the user wor
 
 - [x] Sessions started by programs are tracked but hidden: the hook marks a session whose stdin is not a terminal (or whose entrypoint is sdk-*) headless, the monitor publishes only the rest plus a count, the summary bar shows the count, a Monitoring switch shows them. From a field report of 45 ready sounds in three minutes. Spec: `docs/superpowers/specs/2026-09-16-automated-sessions-design.md` !hi #hooks #ux
 - [ ] The review window counts automated sessions as work; decide whether history should carry the headless flag too !lo #qa
+- [ ] Flipping "Show automated sessions" makes the Activity trail record sessionEnded/sessionStarted for sessions that never stopped — ActivityLog diffs the published list and cannot tell hidden from gone. Teach it the difference or suppress the trail during a toggle !lo #ux
 
 ## Phase: v0.3.0+ — UX polish, content & reach
 

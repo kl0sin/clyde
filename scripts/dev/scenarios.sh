@@ -315,7 +315,7 @@ automated-sessions)
         claude -p "reply with the single word ok" < /dev/null > /dev/null 2>&1 &
     done
     sleep 20
-    note "Expected: full panel summary bar says '· 3 automated' while they run; no rows; no sound."
+    note "Expected: summary bar says '3 automated' (no visible session to precede it) while they run; no rows; no sound."
     note "Now run in this terminal:  claude -p 'reply with the single word ok'"
     note "Expected: an ordinary row appears and the ready sound plays once."
     note "Settings › General › Monitoring › Show automated sessions turns the hidden ones into rows."

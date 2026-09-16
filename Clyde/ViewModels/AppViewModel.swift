@@ -1005,14 +1005,20 @@ final class AppViewModel: ObservableObject {
 
         lines.append("")
         lines.append("--- Sessions ---")
-        let sessions = processMonitor.sessions
+        // `trackedSessions`, not `sessions` — the published list already
+        // excludes hidden automated sessions, and "it was classified
+        // automated" is exactly the kind of thing a user pastes this
+        // dump to find out.
+        let sessions = processMonitor.trackedSessions
         let attentionPIDs = attentionMonitor.attentionPIDs
         lines.append("Total: \(sessions.count)")
         for s in sessions {
             let attn = attentionPIDs.contains(s.pid) ? " [attention]" : ""
             let sid = s.sessionId.map { " sid=\($0)" } ?? ""
-            lines.append("  pid=\(s.pid) status=\(s.status) cwd=\(s.workingDirectory)\(sid)\(attn)")
+            let automated = s.isHeadless ? (showAutomatedSessions ? " (automated, shown)" : " (automated, hidden)") : ""
+            lines.append("  pid=\(s.pid) status=\(s.status) cwd=\(s.workingDirectory)\(sid)\(attn)\(automated)")
         }
+        lines.append("Automated sessions hidden: \(processMonitor.automatedSessionCount)")
 
         lines.append("")
         lines.append("--- Polling ---")

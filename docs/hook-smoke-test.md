@@ -291,11 +291,11 @@ Tool/plan line transitions are crossfades, not slides. Status pill does not puls
 **Steps:**
 1. Start three parallel headless sessions: `for i in 1 2 3; do claude -p "reply with the single word ok" < /dev/null > /dev/null 2>&1 & done`
 2. Watch the panel for 20 seconds while they run — look at the summary bar at the bottom, the session rows, and listen for sounds.
-3. After ~20 seconds, start one interactive session: type `claude` in the terminal and send a prompt (something that takes a couple seconds, e.g. "list the files in this project and summarize").
+3. After ~20 seconds, start one interactive session: type `claude -p "list the files in this project and summarize"` into the terminal — typed and run from the foreground, so it keeps its terminal on stdin and is not classified headless.
 4. Watch the panel again for the new session, listen for the ready sound, then let it complete.
 
 **Expect:**
-- While the three headless sessions run: the summary bar shows a count like "· 3 automated" or "3 sessions · 3 automated"; no session rows appear in the panel; no ready sound plays.
-- When the interactive `claude -p` session starts: a new row appears in the panel; the ready sound plays once.
-- `hook.log` contains hook events (`SessionStart`, `Stop`) for all four sessions, with the three headless ones bearing `headless=true` in their `-info` markers.
+- While the three headless sessions run: with no ordinary session visible the summary bar reads "3 automated" (no leading "·"); once the interactive one is also up it reads "1 session · 3 automated" (a leading "N sessions ·" only appears when there is a visible session to count). No session rows appear in the panel for the headless three; no ready sound plays for them.
+- When the interactive `claude -p` session starts: a new row appears in the panel; the ready sound plays once for it, and only it.
+- `hook.log`'s `SessionStart` lines carry `headless=true` at the end for the three headless sessions (other event lines for the same sessions do not — the log field is only ever populated on `SessionStart`). Separately, each headless session's `-info` file under `~/.clyde/state/` carries `"headless": true` in its JSON body, for the life of the session.
 - Settings › General › Monitoring › Show automated sessions toggle exists; flipping it to ON makes the three headless rows visible; flipping back to OFF hides them again.

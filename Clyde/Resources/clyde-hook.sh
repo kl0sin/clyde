@@ -596,6 +596,13 @@ fi
 #
 # CLYDE_HOOK_STDIN is a test seam — a test runner may or may not own a
 # terminal, so the tests say which case they mean.
+#
+# log_event prints $HEADLESS as it stood at the moment it ran. That's
+# only ever populated on SessionStart, which calls detect_headless
+# first; every other event calls log_event before it gets a chance to
+# run detect_headless (if it runs at all), so the log line's
+# `headless=` field is meaningful on SessionStart only — expect it
+# blank elsewhere even for a headless session.
 detect_headless() {
     [ -n "$HEADLESS_DETECTED" ] && return 0
     HEADLESS=""
@@ -1157,11 +1164,10 @@ case "$HOOK_EVENT" in
         # SessionStart hook never fired for it. Backfill -info so the
         # session "graduates" to full hook tracking from now on.
         #
-        # In practice this is now unreachable: the generic any-event
-        # backfill above already creates -info for any event, including
-        # this one, before this block ever runs. Left in place —
-        # removing dead code is a separate cleanup, not a place to slip
-        # a behavioral change into.
+        # The generic any-event backfill above already handles this in
+        # the common case, but it is guarded by `[ -n "$SESSION_ID" ]`:
+        # a payload with no session_id skips it entirely. This block
+        # still runs then, so it is not dead code.
         if [ ! -f "$STATE_DIR/$KEY-info" ]; then
             detect_headless
             atomic_write "$STATE_DIR/$KEY-info" \
