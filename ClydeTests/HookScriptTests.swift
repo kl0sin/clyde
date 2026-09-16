@@ -1838,4 +1838,20 @@ final class HookScriptTests: XCTestCase {
         XCTAssertNil(try infoJSON(sid: sid, home: home)["headless"])
     }
 
+    /// SessionStart calls `detect_headless` twice within one hook
+    /// invocation — once before `log_event`, again in the generic
+    /// any-event backfill (since -info doesn't exist yet the first
+    /// time it's checked). Without memoization that's two `lsof`
+    /// spawns per SessionStart. The `count` seam value appends a line
+    /// to detect.log every time the lookup branch actually runs, so
+    /// exactly one line proves the second call short-circuited.
+    func testDetectionRunsOnceWithinOneEvent() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "count"])
+        let log = try String(contentsOf: home.appendingPathComponent(".clyde/logs/detect.log"), encoding: .utf8)
+        let lines = log.split(separator: "\n")
+        XCTAssertEqual(lines.count, 1, "detect_headless's lookup branch ran \(lines.count) times, expected exactly 1")
+    }
+
 }

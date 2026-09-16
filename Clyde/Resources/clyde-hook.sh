@@ -588,25 +588,45 @@ fi
 # it down to every claude it spawns.
 #
 # lsof costs a few tens of milliseconds, so this runs only where -info
-# is written. CLYDE_HOOK_STDIN is a test seam — a test runner may or
-# may not own a terminal, so the tests say which case they mean.
+# is written. Several call sites can each be the first to need an
+# answer for the same event (SessionStart calls it before log_event,
+# then the generic backfill below calls it again because -info doesn't
+# exist yet) — HEADLESS_DETECTED memoizes so lsof only ever runs once
+# per hook invocation, no matter how many sites ask.
+#
+# CLYDE_HOOK_STDIN is a test seam — a test runner may or may not own a
+# terminal, so the tests say which case they mean.
 detect_headless() {
+    [ -n "$HEADLESS_DETECTED" ] && return 0
     HEADLESS=""
     case "${CLAUDE_CODE_ENTRYPOINT:-}" in
-        sdk*) HEADLESS=true; return 0 ;;
+        sdk*) HEADLESS=true; HEADLESS_DETECTED=true; return 0 ;;
     esac
-    [ -n "$CLEAT_RUNTIME" ] && return 0
+    if [ -n "$CLEAT_RUNTIME" ]; then
+        HEADLESS_DETECTED=true
+        return 0
+    fi
     local stdin_name
     if [ -n "${CLYDE_HOOK_STDIN:-}" ]; then
-        # "unknown" is a second seam value standing in for lsof coming
-        # back empty (missing binary, sandboxed, whatever) — a test
-        # can't express "empty" any other way through this seam, since
-        # an empty CLYDE_HOOK_STDIN is indistinguishable from unset.
-        if [ "$CLYDE_HOOK_STDIN" = "unknown" ]; then
-            stdin_name=""
-        else
-            stdin_name=$CLYDE_HOOK_STDIN
-        fi
+        case "$CLYDE_HOOK_STDIN" in
+            # "unknown" stands in for lsof coming back empty (missing
+            # binary, sandboxed, whatever) — a test can't express
+            # "empty" any other way through this seam, since an empty
+            # CLYDE_HOOK_STDIN is indistinguishable from unset.
+            unknown) stdin_name="" ;;
+            # "count" is a seam-only counter: it appends a line to
+            # detect.log every time this branch actually runs the
+            # lookup, so a test can assert the memoization above
+            # prevented a second lookup within one invocation. Never
+            # taken outside a test — CLYDE_HOOK_STDIN is never "count"
+            # in production.
+            count)
+                mkdir -p "$HOME/.clyde/logs" 2>/dev/null
+                printf 'x\n' >>"$HOME/.clyde/logs/detect.log" 2>/dev/null || true
+                stdin_name="/dev/ttys004"
+                ;;
+            *) stdin_name=$CLYDE_HOOK_STDIN ;;
+        esac
     else
         stdin_name=$(lsof -a -p "$CLAUDE_PID" -d 0 -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1)
     fi
@@ -618,9 +638,11 @@ detect_headless() {
         "") ;;
         *) HEADLESS=true ;;
     esac
+    HEADLESS_DETECTED=true
     return 0
 }
 HEADLESS=""
+HEADLESS_DETECTED=""
 [ "$HOOK_EVENT" = SessionStart ] && detect_headless
 log_event
 if [ -z "$CLAUDE_PID" ]; then
@@ -1134,6 +1156,12 @@ case "$HOOK_EVENT" in
         # If this is an existing session that predates Clyde, the
         # SessionStart hook never fired for it. Backfill -info so the
         # session "graduates" to full hook tracking from now on.
+        #
+        # In practice this is now unreachable: the generic any-event
+        # backfill above already creates -info for any event, including
+        # this one, before this block ever runs. Left in place —
+        # removing dead code is a separate cleanup, not a place to slip
+        # a behavioral change into.
         if [ ! -f "$STATE_DIR/$KEY-info" ]; then
             detect_headless
             atomic_write "$STATE_DIR/$KEY-info" \
