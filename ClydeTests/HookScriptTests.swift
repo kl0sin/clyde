@@ -1815,4 +1815,27 @@ final class HookScriptTests: XCTestCase {
         XCTAssertTrue(line.hasSuffix("source=startup headless=true"), String(line))
     }
 
+    /// The generic any-event backfill (not just the SessionStart write,
+    /// not just the UserPromptSubmit-specific one) must classify a
+    /// session it is seeing for the first time — Clyde installed
+    /// mid-session, or a race with SessionStart, both land here.
+    func testHeadlessIsDetectedWhenTheFirstEventIsNotSessionStart() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        let payload = #"{"session_id": "\#(sid)", "hook_event_name": "PreToolUse", "cwd": "/tmp/x", "tool_name": "Bash", "tool_input": {"command": "ls"}}"#
+        try runHook(payload: payload, home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "pipe"])
+        XCTAssertEqual(try infoJSON(sid: sid, home: home)["headless"] as? Bool, true)
+    }
+
+    /// An `lsof` that answers nothing (missing binary, sandboxed,
+    /// whatever) must not be read as "no terminal" — hiding a real
+    /// session is the worse mistake, so an unclassifiable stdin leaves
+    /// the session visible.
+    func testUnknownStdinIsNotHeadless() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "unknown"])
+        XCTAssertNil(try infoJSON(sid: sid, home: home)["headless"])
+    }
+
 }

@@ -598,12 +598,24 @@ detect_headless() {
     [ -n "$CLEAT_RUNTIME" ] && return 0
     local stdin_name
     if [ -n "${CLYDE_HOOK_STDIN:-}" ]; then
-        stdin_name=$CLYDE_HOOK_STDIN
+        # "unknown" is a second seam value standing in for lsof coming
+        # back empty (missing binary, sandboxed, whatever) — a test
+        # can't express "empty" any other way through this seam, since
+        # an empty CLYDE_HOOK_STDIN is indistinguishable from unset.
+        if [ "$CLYDE_HOOK_STDIN" = "unknown" ]; then
+            stdin_name=""
+        else
+            stdin_name=$CLYDE_HOOK_STDIN
+        fi
     else
         stdin_name=$(lsof -a -p "$CLAUDE_PID" -d 0 -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1)
     fi
     case "$stdin_name" in
         /dev/tty*) ;;
+        # lsof answering nothing is "we don't know", not "no terminal" —
+        # hiding a real session is the worse mistake than showing one we
+        # couldn't classify, so an unknown stdin fails toward visible.
+        "") ;;
         *) HEADLESS=true ;;
     esac
     return 0
@@ -644,9 +656,19 @@ if [ -n "$CLEAT_RUNTIME" ]; then
     ESC_CONTAINER=$(printf '%s' "$CLEAT_CNAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
     INFO_RUNTIME_FIELDS=", \"runtime\": \"$CLEAT_RUNTIME\", \"container\": \"$ESC_CONTAINER\""
 fi
-if [ -n "$HEADLESS" ]; then
-    INFO_RUNTIME_FIELDS="$INFO_RUNTIME_FIELDS, \"headless\": true"
-fi
+
+# $INFO_RUNTIME_FIELDS plus a "headless" suffix when $HEADLESS is set at
+# call time — every -info write site calls this rather than reading
+# $INFO_RUNTIME_FIELDS directly, since detection can happen anywhere
+# from here (SessionStart) to well after (a lazy backfill on whichever
+# event happens to see the session first).
+info_fields() {
+    if [ -n "$HEADLESS" ]; then
+        printf '%s, "headless": true' "$INFO_RUNTIME_FIELDS"
+    else
+        printf '%s' "$INFO_RUNTIME_FIELDS"
+    fi
+}
 
 # Atomic write helper: stage to a temp file in the same dir, then mv.
 # `tool_input` is a JSON object, not a scalar, so extract_field cannot
@@ -964,8 +986,13 @@ case "$HOOK_EVENT" in
         ;;
     *)
         if [ -n "$SESSION_ID" ] && [ ! -f "$STATE_DIR/$KEY-info" ]; then
+            # First sighting of this session wasn't SessionStart (Clyde
+            # was installed mid-session, or the event just raced it) —
+            # detection hasn't run yet, so run it now, once, before the
+            # file that fixes the session's classification is written.
+            detect_headless
             atomic_write "$STATE_DIR/$KEY-info" \
-                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$INFO_RUNTIME_FIELDS}"
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$(info_fields)}"
         elif [ -n "$SESSION_ID" ] && [ -n "$CWD" ] && [ "$HOOK_EVENT" != "CwdChanged" ]; then
             # And correct it when it disagrees. Every event carries the
             # session's own cwd, so this is self-correcting the same way
@@ -1025,7 +1052,7 @@ case "$HOOK_EVENT" in
     SessionStart)
         ESC_SOURCE=$(printf '%s' "$SOURCE" | sed 's/\\/\\\\/g; s/"/\\"/g')
         atomic_write "$STATE_DIR/$KEY-info" \
-            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"$INFO_RUNTIME_FIELDS}"
+            "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP, \"source\": \"$ESC_SOURCE\"$(info_fields)}"
         ;;
     SessionEnd)
         rm -f "$STATE_DIR/$KEY-info" "$STATE_DIR/$KEY-busy" "$STATE_DIR/$KEY-error" "$STATE_DIR/$KEY-tool" "$STATE_DIR/$KEY-plan" "$STATE_DIR/$KEY-lastmsg" "$EVENTS_DIR/$KEY.json"
@@ -1109,9 +1136,8 @@ case "$HOOK_EVENT" in
         # session "graduates" to full hook tracking from now on.
         if [ ! -f "$STATE_DIR/$KEY-info" ]; then
             detect_headless
-            [ -n "$HEADLESS" ] && INFO_RUNTIME_FIELDS="$INFO_RUNTIME_FIELDS, \"headless\": true"
             atomic_write "$STATE_DIR/$KEY-info" \
-                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$INFO_RUNTIME_FIELDS}"
+                "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$(info_fields)}"
         fi
         # If the previous turn finished a plan (done_count == task_count),
         # drop the -plan marker now that the user has moved on. Partial
