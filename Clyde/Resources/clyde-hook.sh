@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 45
+# clyde-hook-version: 46
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -11,6 +11,7 @@
 #
 # Handled events:
 #   SessionStart        → state/<session_id>-info (alive marker, includes source)
+#   (SessionStart) -info also carries "headless": true when the session has no terminal (see HEADLESS below)
 #   SessionEnd          → removes info + busy + error + tool + plan + event + cleans up -agents/ dir
 #   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info, drops fully-completed -plan)
 #   Stop                → removes busy + error + tool + event marker; writes state/<session_id>-lastmsg (one-line reply preview)
@@ -333,6 +334,7 @@ esac
 log_event() {
     local extra=""
     [ -n "$SOURCE" ] && extra=" source=$SOURCE"
+    [ -n "$HEADLESS" ] && extra="$extra headless=true"
     printf "[%s] event=%-22s sid=%s ppid=%s pid=%s cwd=%s%s\n" \
         "$(date "+%Y-%m-%d %H:%M:%S")" \
         "$HOOK_EVENT" \
@@ -576,6 +578,38 @@ if detect_cleat_host_process; then
 else
     CLAUDE_PID=$(find_claude_pid || echo "")
 fi
+
+# Whether a person is looking at this session. The interactive TUI
+# needs a terminal on its stdin and has one; a session a program
+# started — the Agent SDK, `claude -p` from a script, a test suite —
+# reads from a pipe or /dev/null, and the SDK also exports
+# CLAUDE_CODE_ENTRYPOINT=sdk-*. The process's *controlling* terminal
+# was tried first and rejected: a server started from a terminal hands
+# it down to every claude it spawns.
+#
+# lsof costs a few tens of milliseconds, so this runs only where -info
+# is written. CLYDE_HOOK_STDIN is a test seam — a test runner may or
+# may not own a terminal, so the tests say which case they mean.
+detect_headless() {
+    HEADLESS=""
+    case "${CLAUDE_CODE_ENTRYPOINT:-}" in
+        sdk*) HEADLESS=true; return 0 ;;
+    esac
+    [ -n "$CLEAT_RUNTIME" ] && return 0
+    local stdin_name
+    if [ -n "${CLYDE_HOOK_STDIN:-}" ]; then
+        stdin_name=$CLYDE_HOOK_STDIN
+    else
+        stdin_name=$(lsof -a -p "$CLAUDE_PID" -d 0 -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1)
+    fi
+    case "$stdin_name" in
+        /dev/tty*) ;;
+        *) HEADLESS=true ;;
+    esac
+    return 0
+}
+HEADLESS=""
+[ "$HOOK_EVENT" = SessionStart ] && detect_headless
 log_event
 if [ -z "$CLAUDE_PID" ]; then
     printf "[%s] WARN no claude ancestor for event=%s ppid=%s\n" \
@@ -609,6 +643,9 @@ INFO_RUNTIME_FIELDS=""
 if [ -n "$CLEAT_RUNTIME" ]; then
     ESC_CONTAINER=$(printf '%s' "$CLEAT_CNAME" | sed 's/\\/\\\\/g; s/"/\\"/g')
     INFO_RUNTIME_FIELDS=", \"runtime\": \"$CLEAT_RUNTIME\", \"container\": \"$ESC_CONTAINER\""
+fi
+if [ -n "$HEADLESS" ]; then
+    INFO_RUNTIME_FIELDS="$INFO_RUNTIME_FIELDS, \"headless\": true"
 fi
 
 # Atomic write helper: stage to a temp file in the same dir, then mv.
@@ -1071,6 +1108,8 @@ case "$HOOK_EVENT" in
         # SessionStart hook never fired for it. Backfill -info so the
         # session "graduates" to full hook tracking from now on.
         if [ ! -f "$STATE_DIR/$KEY-info" ]; then
+            detect_headless
+            [ -n "$HEADLESS" ] && INFO_RUNTIME_FIELDS="$INFO_RUNTIME_FIELDS, \"headless\": true"
             atomic_write "$STATE_DIR/$KEY-info" \
                 "{\"session_id\": \"$ESC_SID\", \"pid\": $CLAUDE_PID, \"cwd\": \"$ESC_CWD\", \"started_at\": $TIMESTAMP$INFO_RUNTIME_FIELDS}"
         fi

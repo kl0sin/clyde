@@ -74,8 +74,8 @@ final class HookScriptTests: XCTestCase {
     /// is asserted by the caller since the hook MUST always exit 0 to
     /// avoid raising "Stop hook error" in Claude's session.
     @discardableResult
-    private func runHook(payload: String, home: URL) throws -> Int32 {
-        let task = try startHook(payload: payload, home: home)
+    private func runHook(payload: String, home: URL, extraEnv: [String: String] = [:]) throws -> Int32 {
+        let task = try startHook(payload: payload, home: home, extraEnv: extraEnv)
         task.waitUntilExit()
         return task.terminationStatus
     }
@@ -85,7 +85,7 @@ final class HookScriptTests: XCTestCase {
     /// them, so any test that runs events strictly one-after-another is
     /// modelling an execution order production does not provide. Tests
     /// that care about inter-event ordering use this to overlap them.
-    private func startHook(payload: String, home: URL) throws -> Process {
+    private func startHook(payload: String, home: URL, extraEnv: [String: String] = [:]) throws -> Process {
         let task = Process()
         // Launch as `claude → bash → hook` so the hook process has a
         // `claude` ancestor at its immediate PPID. The `; exit $?`
@@ -96,6 +96,16 @@ final class HookScriptTests: XCTestCase {
         task.arguments = ["-c", #"/bin/bash "$0"; exit $?"#, Self.hookScriptURL.path]
         var env = ProcessInfo.processInfo.environment
         env["HOME"] = home.path
+        for (key, value) in extraEnv {
+            env[key] = value
+        }
+        // `swift test` runs under Claude Code itself, so the inherited
+        // environment already carries CLAUDE_CODE_ENTRYPOINT=cli. A test
+        // that wants to assert the "no entrypoint" case has to clear it
+        // explicitly rather than relying on it being absent.
+        if extraEnv["CLAUDE_CODE_ENTRYPOINT"] == nil {
+            env.removeValue(forKey: "CLAUDE_CODE_ENTRYPOINT")
+        }
         task.environment = env
 
         let stdin = Pipe()
@@ -1759,6 +1769,50 @@ final class HookScriptTests: XCTestCase {
                 $0.hasSuffix(".request") || $0.hasSuffix(".decision")
             } ?? []
         XCTAssertEqual(leftovers, [], "leftovers would be answered stale next time")
+    }
+
+    // MARK: - Headless sessions
+
+    private func infoJSON(sid: String, home: URL) throws -> [String: Any] {
+        let url = home.appendingPathComponent(".clyde/state/\(sid)-info")
+        let data = try Data(contentsOf: url)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    private func sessionStart(sid: String) -> String {
+        #"{"session_id": "\#(sid)", "hook_event_name": "SessionStart", "cwd": "/tmp/x", "source": "startup"}"#
+    }
+
+    func testSDKEntrypointMarksTheSessionHeadless() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "sdk-py", "CLYDE_HOOK_STDIN": "/dev/ttys004"])
+        XCTAssertEqual(try infoJSON(sid: sid, home: home)["headless"] as? Bool, true)
+    }
+
+    func testPipedStdinIsHeadless() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "pipe"])
+        XCTAssertEqual(try infoJSON(sid: sid, home: home)["headless"] as? Bool, true)
+    }
+
+    func testTerminalSessionIsNotHeadlessAndInfoIsUnchanged() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "/dev/ttys004"])
+        let json = try infoJSON(sid: sid, home: home)
+        XCTAssertNil(json["headless"])
+        XCTAssertEqual(Set(json.keys), ["session_id", "pid", "cwd", "started_at", "source"])
+    }
+
+    func testHeadlessIsLoggedAtTheEndOfTheLine() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "sdk-ts"])
+        let log = try String(contentsOf: home.appendingPathComponent(".clyde/logs/hook.log"), encoding: .utf8)
+        let line = try XCTUnwrap(log.split(separator: "\n").first { $0.contains(sid) })
+        XCTAssertTrue(line.hasSuffix("source=startup headless=true"), String(line))
     }
 
 }
