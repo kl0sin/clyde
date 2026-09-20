@@ -1539,7 +1539,9 @@ fi
 # Rides on the same detection as -info: $HEADLESS is only ever populated
 # by detect_headless (SessionStart, or a lazy backfill later), so this
 # flag lands on exactly the events that also wrote it into -info.
-[ -n "$HEADLESS" ] && SPOOL_EXTRA="$SPOOL_EXTRA, \"headless\": true"
+if [ -n "$HEADLESS" ]; then
+    SPOOL_EXTRA="$SPOOL_EXTRA, \"headless\": true"
+fi
 spool_append "$SPOOL_EXTRA"
 
 exit 0

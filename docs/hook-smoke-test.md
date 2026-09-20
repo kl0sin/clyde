@@ -294,7 +294,7 @@ Tool/plan line transitions are crossfades, not slides. Status pill does not puls
 3. After ~20 seconds, start one interactive session: type `claude -p "list the files in this project and summarize"` into the terminal — typed and run from the foreground, so it keeps its terminal on stdin and is not classified headless.
 4. Watch the panel again for the new session, listen for the ready sound, then let it complete.
 5. With the panel open and the three headless sessions still running, flip Settings › General › Monitoring › Show automated sessions ON then OFF twice in a row, watching the panel's Activity trail throughout.
-6. Open the review window and check today's session/turn/working-time numbers.
+6. Open the review window and check today's session/turn/working-time numbers — wait for the next ingest (a minute) or reopen the window so the check isn't run before the spool has been ingested.
 
 **Expect:**
 - While the three headless sessions run: with no ordinary session visible the summary bar reads "3 automated" (no leading "·"); once the interactive one is also up it reads "1 session · 3 automated" (a leading "N sessions ·" only appears when there is a visible session to count). No session rows appear in the panel for the headless three; no ready sound plays for them.

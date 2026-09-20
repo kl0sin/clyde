@@ -152,7 +152,8 @@ final class HistoryStore {
     /// How many sessions the hook has flagged as automated. Available for
     /// Settings › History to say what is stored, not what the review
     /// counts — that split lives in `HistoryStats`, which reads
-    /// `human_events` instead. Used by the tests today.
+    /// `human_events` instead. Exercised only by tests today; no
+    /// production call site exists yet.
     func automatedSessionCount() -> Int {
         ingestQueue.sync { scalarIntInner("SELECT COUNT(*) FROM automated_sessions") ?? 0 }
     }
@@ -163,6 +164,9 @@ final class HistoryStore {
         return (attrs?[.size] as? NSNumber)?.int64Value ?? 0
     }
 
+    /// Wipes `automated_sessions` along with everything else, so a session
+    /// still running when this runs loses its automated flag until a later
+    /// spool line re-flags it.
     func clear() throws {
         try ingestQueue.sync {
             try execInner("""
