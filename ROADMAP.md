@@ -150,8 +150,9 @@ Worth noting where these came from. Five of the seven were found by the user wor
 - [ ] A status line that something else replaced is reported only in Settings › General. The spec asked for it in the panel, the way a missing hook is: a second non-fault chip, or a line in the Limits band's footer. Decide after the live day whether anyone actually hits it !lo #ux
 
 - [x] Sessions started by programs are tracked but hidden: the hook marks a session whose stdin is not a terminal (or whose entrypoint is sdk-*) headless, the monitor publishes only the rest plus a count, the summary bar shows the count, a Monitoring switch shows them. From a field report of 45 ready sounds in three minutes. Spec: `docs/superpowers/specs/2026-09-16-automated-sessions-design.md` !hi #hooks #ux
-- [ ] The review window counts automated sessions as work; decide whether history should carry the headless flag too !lo #qa
-- [ ] Flipping "Show automated sessions" makes the Activity trail record sessionEnded/sessionStarted for sessions that never stopped — ActivityLog diffs the published list and cannot tell hidden from gone. Teach it the difference or suppress the trail during a toggle !lo #ux
+- [x] History now records automated sessions and the review reads through `human_events`, a view that excludes them; Settings › History still reports every stored event !lo #qa
+- [x] ActivityLog remembers every tracked session and speaks only about the published ones, so toggling "Show automated sessions" no longer writes phantom sessionStarted/sessionEnded rows for sessions that never stopped !lo #ux
+- [x] `CLYDE_HOOK_CLEAT` names the container so the cleat branch of the headless rule runs under test !lo #hooks #qa
 
 ## Phase: v0.3.0+ — UX polish, content & reach
 

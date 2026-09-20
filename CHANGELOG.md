@@ -13,6 +13,7 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 ### Fixed
 
 - Sessions started by programs — the Agent SDK, `claude -p` from a script, a test suite — no longer fill the panel, the widget and the ready sound. They are tracked but hidden; the full panel's summary bar counts them ("3 sessions · 6 automated"), and Settings › General › Monitoring › Show automated sessions brings them back as ordinary sessions. Interactive sessions, including `claude -p` typed into a terminal, are unaffected.
+- Showing or hiding automated sessions no longer writes "session started" and "session ended" rows to the Activity trail for sessions that never stopped. The review window no longer counts automated sessions' turns and working time; Settings › History still reports every stored event.
 
 ## [0.9.2] — 2026-09-09
 
