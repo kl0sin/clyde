@@ -110,11 +110,10 @@ final class HistoryStore {
         // hook flagged, and `human_events` is what the review reads
         // instead of `events` so those sessions never count as work.
         // `IF NOT EXISTS` on both means a database from before this change
-        // gets them for free on open.
+        // gets them for free on open. NOT NULL matters: a NULL session_id
+        // would make the NOT IN below return nothing.
         try execInner("""
-            CREATE TABLE IF NOT EXISTS automated_sessions (
-              session_id TEXT PRIMARY KEY
-            );
+            CREATE TABLE IF NOT EXISTS automated_sessions (session_id TEXT PRIMARY KEY NOT NULL);
             CREATE VIEW IF NOT EXISTS human_events AS
               SELECT * FROM events
               WHERE session_id NOT IN (SELECT session_id FROM automated_sessions);
@@ -150,10 +149,10 @@ final class HistoryStore {
         }
     }
 
-    /// How many sessions the hook has flagged as automated. Settings ›
-    /// History uses this to say what is stored, not what the review
+    /// How many sessions the hook has flagged as automated. Available for
+    /// Settings › History to say what is stored, not what the review
     /// counts — that split lives in `HistoryStats`, which reads
-    /// `human_events` instead.
+    /// `human_events` instead. Used by the tests today.
     func automatedSessionCount() -> Int {
         ingestQueue.sync { scalarIntInner("SELECT COUNT(*) FROM automated_sessions") ?? 0 }
     }
