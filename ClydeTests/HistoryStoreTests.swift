@@ -74,6 +74,44 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(migrated.eventCount(), 1)
     }
 
+    func testParsesTheHeadlessFlag() {
+        let e = HistorySpool.parse(line: #"{"ts": 1, "event": "SessionStart", "session_id": "b", "cwd": "/r", "headless": true}"#)
+        XCTAssertEqual(e?.headless, true)
+        XCTAssertEqual(HistorySpool.parse(line: spoolLine("Stop", ts: 2))?.headless, false)
+    }
+
+    func testIngestRecordsAutomatedSessions() throws {
+        let dir = tempDir()
+        writeSpool([#"{"ts": 1, "event": "SessionStart", "session_id": "b", "cwd": "/r", "headless": true}"#,
+                    spoolLine("Stop", ts: 2)], in: dir)
+        let store = try HistoryStore(directory: dir)
+        XCTAssertEqual(store.ingestPending(), 2)
+        XCTAssertEqual(store.automatedSessionCount(), 1)
+        XCTAssertEqual(store.eventCount(), 2, "the store keeps every event; only the stats exclude")
+    }
+
+    /// Databases created before this change have neither the
+    /// `automated_sessions` table nor the `human_events` view. Opening one
+    /// must add both rather than failing.
+    func testOpeningAPreFlagDatabaseAddsTheTableAndView() throws {
+        let dir = tempDir()
+        let old = try HistoryStore(directory: dir)
+        old.read { handle in
+            sqlite3_exec(handle, "DROP VIEW human_events", nil, nil, nil)
+            sqlite3_exec(handle, "DROP TABLE automated_sessions", nil, nil, nil)
+        }
+
+        let migrated = try HistoryStore(directory: dir)
+        try migrated.insert([
+            HistoryEvent(ts: Date(timeIntervalSince1970: 1), event: "SessionStart",
+                         sessionID: "b", project: "/r", tool: nil, summary: nil,
+                         durationMs: nil, headless: true)
+        ])
+
+        XCTAssertEqual(migrated.automatedSessionCount(), 1)
+        XCTAssertEqual(migrated.eventCount(), 1)
+    }
+
     private func tempDir() -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("clyde-history-\(UUID().uuidString)")

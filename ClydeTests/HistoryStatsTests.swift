@@ -10,9 +10,11 @@ final class HistoryStatsTests: XCTestCase {
     }
 
     private func event(_ name: String, at seconds: Int, session: String = "s1",
-                       project: String = "/repo", tool: String? = nil) -> HistoryEvent {
+                       project: String = "/repo", tool: String? = nil,
+                       headless: Bool = false) -> HistoryEvent {
         HistoryEvent(ts: Date(timeIntervalSince1970: TimeInterval(seconds)), event: name,
-                     sessionID: session, project: project, tool: tool, summary: nil)
+                     sessionID: session, project: project, tool: tool, summary: nil,
+                     headless: headless)
     }
 
     private let wholeRange = (from: Date(timeIntervalSince1970: 0),
@@ -439,6 +441,24 @@ final class HistoryStatsTests: XCTestCase {
 
         XCTAssertTrue(HistoryStats(store: store)
             .dailyActivity(from: wholeRange.from, to: wholeRange.to).isEmpty)
+    }
+
+    /// The review reads the user's own work: an automated session (a test
+    /// suite, a headless SDK run) is recorded like any other, but must
+    /// contribute no working time and no session count.
+    func testAutomatedSessionsAddNoWorkAndNoCount() throws {
+        let store = try makeStore()
+        try store.insert([
+            event("SessionStart", at: 0, session: "bot", headless: true),
+            event("UserPromptSubmit", at: 10, session: "bot", headless: true),
+            event("Stop", at: 70, session: "bot", headless: true),
+            event("UserPromptSubmit", at: 100, session: "me"),
+            event("Stop", at: 130, session: "me"),
+        ])
+        let totals = HistoryStats(store: store).totals(from: wholeRange.from, to: wholeRange.to)
+        XCTAssertEqual(totals.workingSeconds, 30)
+        XCTAssertEqual(totals.turns, 1)
+        XCTAssertEqual(totals.sessions, 1)
     }
 
     func testRangeExcludesEventsOutsideIt() throws {

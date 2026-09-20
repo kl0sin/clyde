@@ -35,7 +35,7 @@ final class HistoryStats {
             SELECT SUM(dt), COUNT(*), MAX(dt) FROM (
               SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt, event,
                      LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
-              FROM events
+              FROM human_events
               -- Deliberate: the range filter runs before LEAD builds pairs, so a
               -- turn straddling a window boundary (prompt before `from`, Stop
               -- inside it, or vice versa) is missing one endpoint and
@@ -51,7 +51,7 @@ final class HistoryStats {
             SELECT SUM(dt) FROM (
               SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt, event,
                      LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
-              FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
+              FROM human_events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
                 AND event IN ('UserPromptSubmit','Stop')
             ) WHERE event = 'Stop' AND next_event = 'UserPromptSubmit' AND dt IS NOT NULL
             """)
@@ -61,14 +61,14 @@ final class HistoryStats {
             SELECT MAX(dt) FROM (
               SELECT LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt, event,
                      LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
-              FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
+              FROM human_events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
                 AND event IN ('UserPromptSubmit','Stop')
             ) WHERE event = 'Stop' AND next_event = 'UserPromptSubmit' AND dt IS NOT NULL
             """)
         let promptCount = scalarInt(
-            "SELECT COUNT(*) FROM events WHERE event = 'UserPromptSubmit' AND ts >= \(epoch(from)) AND ts < \(epoch(to))") ?? 0
+            "SELECT COUNT(*) FROM human_events WHERE event = 'UserPromptSubmit' AND ts >= \(epoch(from)) AND ts < \(epoch(to))") ?? 0
         let sessionCount = scalarInt(
-            "SELECT COUNT(DISTINCT session_id) FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))") ?? 0
+            "SELECT COUNT(DISTINCT session_id) FROM human_events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))") ?? 0
 
         let workingSeconds: Int64? = turns.first?.first ?? nil
         let waitingSeconds: Int64? = waits.first?.first ?? nil
@@ -101,7 +101,7 @@ final class HistoryStats {
               SELECT project, session_id, event,
                      LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt,
                      LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
-              FROM events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
+              FROM human_events WHERE ts >= \(epoch(from)) AND ts < \(epoch(to))
                 AND event IN ('UserPromptSubmit','Stop')
             ) WHERE event = 'UserPromptSubmit' AND next_event = 'Stop' AND dt IS NOT NULL
             GROUP BY project
@@ -119,7 +119,7 @@ final class HistoryStats {
 
         var turnsByProject: [String: Int] = [:]
         let turnsSQL = """
-            SELECT project, COUNT(*) FROM events
+            SELECT project, COUNT(*) FROM human_events
             WHERE event = 'UserPromptSubmit' AND ts >= \(epoch(from)) AND ts < \(epoch(to))
             GROUP BY project
             """
@@ -181,7 +181,7 @@ final class HistoryStats {
     func toolSeconds(from: Date, to: Date) -> Int {
         var intervals: [String: [(start: Int, end: Int)]] = [:]
         let sql = """
-            SELECT session_id, ts, duration_ms FROM events
+            SELECT session_id, ts, duration_ms FROM human_events
             WHERE event = 'PostToolUse' AND duration_ms IS NOT NULL
               AND ts >= ? AND ts < ?
             ORDER BY session_id, ts
@@ -238,7 +238,7 @@ final class HistoryStats {
         let filter = project == nil ? "" : "AND (project = ?3 OR project LIKE ?3 || '/.claude/worktrees/%') "
         let sql = """
             SELECT ts, event, session_id, project, tool, summary
-            FROM events
+            FROM human_events
             WHERE ts >= ?1 AND ts < ?2 \(filter)
               AND event IN ('PreToolUse', 'SubagentStart', 'StopFailure')
             ORDER BY ts DESC, id DESC
@@ -286,7 +286,7 @@ final class HistoryStats {
               SELECT ts, event, project,
                      LEAD(ts) OVER (PARTITION BY session_id ORDER BY ts, id) - ts AS dt,
                      LEAD(event) OVER (PARTITION BY session_id ORDER BY ts, id) AS next_event
-              FROM events WHERE ts >= ?1 AND ts < ?2
+              FROM human_events WHERE ts >= ?1 AND ts < ?2
                 AND event IN ('UserPromptSubmit','Stop')
             ),
             marked AS (
@@ -344,7 +344,7 @@ final class HistoryStats {
 
     private func topTool(project: String, from: Date, to: Date) -> String? {
         let sql = """
-            SELECT tool FROM events
+            SELECT tool FROM human_events
             WHERE tool IS NOT NULL AND project = ?
               AND ts >= ? AND ts < ?
             GROUP BY tool ORDER BY COUNT(*) DESC, tool ASC LIMIT 1

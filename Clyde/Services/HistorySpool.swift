@@ -20,7 +20,8 @@ enum HistorySpool {
             project: Session.projectRoot(from: (json["cwd"] as? String) ?? ""),
             tool: json["tool"] as? String,
             summary: json["summary"] as? String,
-            durationMs: json["dur"] as? Int
+            durationMs: json["dur"] as? Int,
+            headless: json["headless"] as? Bool ?? false
         )
     }
 }

@@ -15,6 +15,11 @@ struct HistoryEvent: Equatable {
     /// the machine compiling, instead of reporting one wall-clock number
     /// and calling all of it work.
     var durationMs: Int?
+    /// Whether the hook detected this session as automated (a test suite,
+    /// a CI run, an SDK-driven agent) rather than a human at a terminal.
+    /// The store keeps these events like any other; only the review's
+    /// stats read through a view that leaves them out.
+    var headless: Bool = false
 }
 
 /// Totals for one period, computed on read. Nothing is pre-aggregated —

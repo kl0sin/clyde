@@ -104,6 +104,21 @@ final class HistoryStore {
         // Adding it is the whole migration; the error when it already
         // exists is the expected case, not a failure.
         try? execInner("ALTER TABLE events ADD COLUMN duration_ms INTEGER")
+
+        // Automated sessions (a test suite, a headless SDK run) are
+        // recorded like any other session; this table names the ones the
+        // hook flagged, and `human_events` is what the review reads
+        // instead of `events` so those sessions never count as work.
+        // `IF NOT EXISTS` on both means a database from before this change
+        // gets them for free on open.
+        try execInner("""
+            CREATE TABLE IF NOT EXISTS automated_sessions (
+              session_id TEXT PRIMARY KEY
+            );
+            CREATE VIEW IF NOT EXISTS human_events AS
+              SELECT * FROM events
+              WHERE session_id NOT IN (SELECT session_id FROM automated_sessions);
+            """)
     }
 
     deinit { sqlite3_close(db) }
@@ -135,6 +150,14 @@ final class HistoryStore {
         }
     }
 
+    /// How many sessions the hook has flagged as automated. Settings ›
+    /// History uses this to say what is stored, not what the review
+    /// counts — that split lives in `HistoryStats`, which reads
+    /// `human_events` instead.
+    func automatedSessionCount() -> Int {
+        ingestQueue.sync { scalarIntInner("SELECT COUNT(*) FROM automated_sessions") ?? 0 }
+    }
+
     func databaseSizeBytes() -> Int64 {
         // File-system metadata, not a connection access — no lock needed.
         let attrs = try? FileManager.default.attributesOfItem(atPath: databaseURL.path)
@@ -143,7 +166,10 @@ final class HistoryStore {
 
     func clear() throws {
         try ingestQueue.sync {
-            try execInner("DELETE FROM events; DELETE FROM ingested_files; VACUUM;")
+            try execInner("""
+                DELETE FROM events; DELETE FROM ingested_files;
+                DELETE FROM automated_sessions; VACUUM;
+                """)
         }
     }
 
@@ -209,6 +235,13 @@ final class HistoryStore {
         }
         defer { sqlite3_finalize(stmt) }
 
+        var flagStmt: OpaquePointer?
+        let flagSQL = "INSERT OR IGNORE INTO automated_sessions (session_id) VALUES (?)"
+        guard sqlite3_prepare_v2(db, flagSQL, -1, &flagStmt, nil) == SQLITE_OK else {
+            throw StoreError.statementFailed(lastError())
+        }
+        defer { sqlite3_finalize(flagStmt) }
+
         for event in events {
             sqlite3_reset(stmt)
             sqlite3_bind_int64(stmt, 1, Int64(event.ts.timeIntervalSince1970))
@@ -224,6 +257,14 @@ final class HistoryStore {
             }
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 throw StoreError.statementFailed(lastError())
+            }
+
+            if event.headless {
+                sqlite3_reset(flagStmt)
+                bindText(flagStmt, 1, event.sessionID)
+                guard sqlite3_step(flagStmt) == SQLITE_DONE else {
+                    throw StoreError.statementFailed(lastError())
+                }
             }
         }
     }
