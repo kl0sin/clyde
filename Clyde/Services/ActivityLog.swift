@@ -116,10 +116,17 @@ final class ActivityLog: ObservableObject {
         let trackedLive = (processMonitor?.trackedSessions ?? []).filter { !$0.isGhost }
         let trackedLivePIDs = Set(trackedLive.map(\.pid))
 
-        // Cheap fingerprint of inputs that could trigger an event. If nothing
-        // observable changed since the previous tick, skip the diff entirely.
+        // Cheap fingerprint of inputs that could trigger an event. Hashed
+        // over `trackedLive` — everything the monitor knows about, not just
+        // `live` (the published subset) — so a hidden session's status,
+        // attention, error, subagent, or hook-source change still moves the
+        // fingerprint and the diff below runs to keep its snapshot current.
+        // Skip that and a hidden automated session going idle→busy while
+        // hidden leaves a stale snapshot; showing it later replays that
+        // transition as a phantom event. Emission below still only speaks
+        // about `live`.
         var hasher = Hasher()
-        for s in live {
+        for s in trackedLive {
             hasher.combine(s.pid)
             hasher.combine(s.status)
             hasher.combine(attentionPIDs.contains(s.pid))
@@ -129,12 +136,6 @@ final class ActivityLog: ObservableObject {
             // transition (which keeps every other field unchanged)
             // doesn't get short-circuited away by the fingerprint check.
             hasher.combine(processMonitor?.hookInfoByPID[s.pid]?.source ?? "")
-        }
-        // Include the tracked PIDs (sorted for a stable hash) so a toggle
-        // flip (which changes `live` but not `trackedLive`) still passes
-        // through and re-seeds hidden sessions' snapshots correctly.
-        for pid in trackedLivePIDs.sorted() {
-            hasher.combine(pid)
         }
         let fingerprint = hasher.finalize()
         if fingerprint == lastReconcileFingerprint && snapshots.keys.allSatisfy(trackedLivePIDs.contains) {

@@ -48,8 +48,7 @@ final class ActivityLogTests: XCTestCase {
     /// Writes the `-info` file SessionStart produces. `source` is what
     /// separates a fresh session from a resume or an auto-compact restart.
     @discardableResult
-    private func writeInfo(sessionId: String, cwd: String = "/repo", source: String = "startup", headless: Bool = false) -> pid_t {
-        let pid = getpid()
+    private func writeInfo(sessionId: String, cwd: String = "/repo", source: String = "startup", headless: Bool = false, pid: pid_t = getpid()) -> pid_t {
         var body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","started_at":0,"source":"\#(source)""#
         if headless {
             body += #","headless":true"#
@@ -246,6 +245,45 @@ final class ActivityLogTests: XCTestCase {
         monitor.republish()
         try await Task.sleep(nanoseconds: 200_000_000)
         XCTAssertEqual(log.events, [], "hiding a session that is still running is not an end")
+
+        // Positive control: reconcile must still be running after all that
+        // toggling, not permanently short-circuited by some earlier state.
+        // A distinct PID (init, guaranteed alive and != getpid(), same
+        // trick as ProcessMonitorTests) keeps this a genuinely new session
+        // rather than colliding with "bot"'s PID.
+        writeInfo(sessionId: "me", pid: 1)
+        await monitor.poll()
+        try await waitForEvents(log, count: 1)
+        XCTAssertEqual(log.events.first?.kind, .sessionStarted)
+    }
+
+    /// A hidden session's status change must still move the fingerprint, or
+    /// the seeding pass never runs and its snapshot goes stale. Reveal it
+    /// later and a stale snapshot replays every transition it made while
+    /// hidden as a phantom event.
+    func testHiddenActivityKeepsTheSnapshotFreshSoRevealEmitsNothing() async throws {
+        var show = false
+        let monitor = makeMonitor(showsAutomated: { show })
+        let log = ActivityLog(processMonitor: monitor, attentionMonitor: AttentionMonitor(eventsDir: eventsDir))
+        let pid = writeInfo(sessionId: "bot", headless: true)
+        await monitor.poll()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        writeBusy(sessionId: "bot", pid: pid)
+        await monitor.poll()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        show = true
+        monitor.republish()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(log.events, [], "the snapshot was current at reveal, so nothing phantom to report")
+
+        // Positive control: reconcile did run and the snapshot really was
+        // fresh — going idle now still produces the expected event.
+        removeBusy(sessionId: "bot")
+        await monitor.poll()
+        try await waitForEvents(log, count: 1)
+        XCTAssertEqual(log.events.first?.kind, .sessionReady)
     }
 
     func testShownAutomatedSessionBehavesLikeAnyOther() async throws {
