@@ -48,9 +48,13 @@ final class ActivityLogTests: XCTestCase {
     /// Writes the `-info` file SessionStart produces. `source` is what
     /// separates a fresh session from a resume or an auto-compact restart.
     @discardableResult
-    private func writeInfo(sessionId: String, cwd: String = "/repo", source: String = "startup") -> pid_t {
+    private func writeInfo(sessionId: String, cwd: String = "/repo", source: String = "startup", headless: Bool = false) -> pid_t {
         let pid = getpid()
-        let body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","started_at":0,"source":"\#(source)"}"#
+        var body = #"{"session_id":"\#(sessionId)","pid":\#(pid),"cwd":"\#(cwd)","started_at":0,"source":"\#(source)""#
+        if headless {
+            body += #","headless":true"#
+        }
+        body += "}"
         try? body.write(to: stateDir.appendingPathComponent("\(sessionId)-info"),
                         atomically: true, encoding: .utf8)
         return pid
@@ -202,5 +206,59 @@ final class ActivityLogTests: XCTestCase {
         log.clear()
 
         XCTAssertEqual(log.events, [])
+    }
+
+    // MARK: - Automated sessions
+
+    private func makeMonitor(showsAutomated: @escaping () -> Bool) -> ProcessMonitor {
+        ProcessMonitor(shell: emptyShell(), pollingInterval: 1, stateDir: stateDir,
+                       isLiveClaudeProcessCheck: { _ in true },
+                       showsAutomatedSessions: showsAutomated)
+    }
+
+    func testHiddenSessionNeverReachesTheTrail() async throws {
+        let monitor = makeMonitor(showsAutomated: { false })
+        let log = ActivityLog(processMonitor: monitor, attentionMonitor: AttentionMonitor(eventsDir: eventsDir))
+        let pid = writeInfo(sessionId: "bot", headless: true)
+        await monitor.poll()
+        writeBusy(sessionId: "bot", pid: pid)
+        await monitor.poll()
+        removeBusy(sessionId: "bot")
+        await monitor.poll()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(log.events, [])
+    }
+
+    func testTogglingTheSettingIsNotAStartOrAnEnd() async throws {
+        var show = false
+        let monitor = makeMonitor(showsAutomated: { show })
+        let log = ActivityLog(processMonitor: monitor, attentionMonitor: AttentionMonitor(eventsDir: eventsDir))
+        writeInfo(sessionId: "bot", headless: true)
+        await monitor.poll()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        show = true
+        monitor.republish()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(log.events, [], "showing a session that was already running is not a start")
+
+        show = false
+        monitor.republish()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(log.events, [], "hiding a session that is still running is not an end")
+    }
+
+    func testShownAutomatedSessionBehavesLikeAnyOther() async throws {
+        let monitor = makeMonitor(showsAutomated: { true })
+        let log = ActivityLog(processMonitor: monitor, attentionMonitor: AttentionMonitor(eventsDir: eventsDir))
+        writeInfo(sessionId: "bot", headless: true)
+        await monitor.poll()
+        try await waitForEvents(log, count: 1)
+        XCTAssertEqual(log.events.first?.kind, .sessionStarted)
+
+        try FileManager.default.removeItem(at: stateDir.appendingPathComponent("bot-info"))
+        await monitor.poll()
+        try await waitForEvents(log, count: 2)
+        XCTAssertEqual(log.events.first?.kind, .sessionEnded)
     }
 }

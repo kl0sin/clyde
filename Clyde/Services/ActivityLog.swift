@@ -44,8 +44,10 @@ final class ActivityLog: ObservableObject {
         self.attentionMonitor = attentionMonitor
 
         // Seed the snapshot map without firing any events for sessions
-        // that already exist when the app launches.
-        for session in processMonitor.sessions where !session.isGhost {
+        // that already exist when the app launches. Uses `trackedSessions`
+        // (not the published, filtered `sessions`) so a hidden automated
+        // session doesn't look "new" the moment it's revealed.
+        for session in processMonitor.trackedSessions where !session.isGhost {
             snapshots[session.pid] = Snapshot(
                 status: session.status,
                 hadAttention: attentionMonitor.attentionPIDs.contains(session.pid),
@@ -56,15 +58,22 @@ final class ActivityLog: ObservableObject {
             )
         }
 
+        // Both publishers live on `@MainActor` types and this class is
+        // itself `@MainActor`, so delivery is synchronous with the
+        // property mutation that triggered it — no `.receive(on:)` hop.
+        // That matters here: `reconcile` also reads `processMonitor`'s
+        // `trackedSessions` directly (not just the `sessions` argument),
+        // and a scheduled hop would let that read race ahead of a second,
+        // unrelated mutation before the first tick's callback ran,
+        // handing `reconcile` a `sessions` snapshot and a `trackedSessions`
+        // read that no longer describe the same moment.
         processMonitor.$sessions
-            .receive(on: RunLoop.main)
             .sink { [weak self] sessions in
                 self?.reconcile(sessions: sessions)
             }
             .store(in: &cancellables)
 
         attentionMonitor.$attentionPIDs
-            .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 if let sessions = self?.processMonitor?.sessions {
                     self?.reconcile(sessions: sessions)
@@ -80,10 +89,19 @@ final class ActivityLog: ObservableObject {
 
     // MARK: - Diffing
 
+    /// `sessions` is the published, filtered list — it hides automated
+    /// (headless) sessions unless the "Show automated sessions" toggle is
+    /// on. `trackedSessions` is everything the monitor actually knows
+    /// about. The trail speaks only about `live` (the published sessions,
+    /// what the user can see), but remembers `trackedLive` too, so
+    /// flipping the toggle reveals or hides a session without the trail
+    /// mistaking that for it starting or ending.
     private func reconcile(sessions: [Session]) {
         let attentionPIDs = attentionMonitor?.attentionPIDs ?? []
         let live = sessions.filter { !$0.isGhost }
         let livePIDs = Set(live.map(\.pid))
+        let trackedLive = (processMonitor?.trackedSessions ?? []).filter { !$0.isGhost }
+        let trackedLivePIDs = Set(trackedLive.map(\.pid))
 
         // Cheap fingerprint of inputs that could trigger an event. If nothing
         // observable changed since the previous tick, skip the diff entirely.
@@ -99,8 +117,12 @@ final class ActivityLog: ObservableObject {
             // doesn't get short-circuited away by the fingerprint check.
             hasher.combine(processMonitor?.hookInfoByPID[s.pid]?.source ?? "")
         }
+        // Include the tracked count so a toggle flip (which changes `live`
+        // but not `trackedLive`) still passes through and re-seeds hidden
+        // sessions' snapshots correctly.
+        hasher.combine(trackedLivePIDs.count)
         let fingerprint = hasher.finalize()
-        if fingerprint == lastReconcileFingerprint && snapshots.keys.allSatisfy(livePIDs.contains) {
+        if fingerprint == lastReconcileFingerprint && snapshots.keys.allSatisfy(trackedLivePIDs.contains) {
             return
         }
         lastReconcileFingerprint = fingerprint
@@ -217,9 +239,25 @@ final class ActivityLog: ObservableObject {
             )
         }
 
+        // Automated sessions hidden by the toggle — seed/refresh their
+        // snapshots silently so a later reveal doesn't look like a start.
+        // Restricted to `isHeadless` so a transient publish race (tracked
+        // and published lists briefly out of step across ticks) can't get
+        // mistaken for a hide and swallow a real session's start event.
+        for session in trackedLive where session.isHeadless && !livePIDs.contains(session.pid) {
+            snapshots[session.pid] = Snapshot(
+                status: session.status,
+                hadAttention: attentionPIDs.contains(session.pid),
+                hadError: session.errorReason,
+                hadSubagent: session.primarySubagentType,
+                displayName: session.displayName,
+                lastSource: processMonitor?.hookInfoByPID[session.pid]?.source ?? ""
+            )
+        }
+
         // Sessions that disappeared
         let knownPIDs = Set(snapshots.keys)
-        for goneP in knownPIDs.subtracting(livePIDs) {
+        for goneP in knownPIDs.subtracting(trackedLivePIDs) {
             if let snapshot = snapshots[goneP] {
                 append(.init(
                     timestamp: Date(),
