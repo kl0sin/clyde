@@ -1854,4 +1854,42 @@ final class HookScriptTests: XCTestCase {
         XCTAssertEqual(lines.count, 1, "detect_headless's lookup branch ran \(lines.count) times, expected exactly 1")
     }
 
+    /// A cleat session's headless verdict must not fall through to the
+    /// stdin rule — CLEAT_RUNTIME being set short-circuits detect_headless
+    /// before it ever looks at $CLYDE_HOOK_STDIN, no matter how the seam
+    /// stages it.
+    func testCleatSessionIsNeverClassifiedByStdin() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLYDE_HOOK_CLEAT": "cleat-test-1", "CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "pipe"])
+        let json = try infoJSON(sid: sid, home: home)
+        XCTAssertNil(json["headless"])
+        XCTAssertEqual(json["runtime"] as? String, "cleat")
+        XCTAssertEqual(json["container"] as? String, "cleat-test-1")
+    }
+
+    func testCleatSessionWithSDKEntrypointIsHeadless() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLYDE_HOOK_CLEAT": "cleat-test-1", "CLAUDE_CODE_ENTRYPOINT": "sdk-ts"])
+        XCTAssertEqual(try infoJSON(sid: sid, home: home)["headless"] as? Bool, true)
+    }
+
+    func testSpoolLineCarriesHeadless() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "pipe"])
+        let spool = try String(contentsOf: home.appendingPathComponent(".clyde/history/spool.jsonl"), encoding: .utf8)
+        let line = try XCTUnwrap(spool.split(separator: "\n").first { $0.contains(sid) })
+        XCTAssertTrue(line.contains(#""headless": true"#), String(line))
+    }
+
+    func testSpoolLineOmitsHeadlessForATerminalSession() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "/dev/ttys004"])
+        let spool = try String(contentsOf: home.appendingPathComponent(".clyde/history/spool.jsonl"), encoding: .utf8)
+        XCTAssertFalse(spool.contains("headless"))
+    }
+
 }

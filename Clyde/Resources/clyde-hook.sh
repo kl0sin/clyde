@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 46
+# clyde-hook-version: 47
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -11,7 +11,7 @@
 #
 # Handled events:
 #   SessionStart        → state/<session_id>-info (alive marker, includes source)
-#   (SessionStart) -info also carries "headless": true when the session has no terminal (see HEADLESS below)
+#   (SessionStart) -info also carries "headless": true when the session has no terminal (see HEADLESS below); the spool line for the event that made this determination carries the same flag
 #   SessionEnd          → removes info + busy + error + tool + plan + event + cleans up -agents/ dir
 #   UserPromptSubmit    → state/<session_id>-busy marker (+ backfill -info, drops fully-completed -plan)
 #   Stop                → removes busy + error + tool + event marker; writes state/<session_id>-lastmsg (one-line reply preview)
@@ -546,7 +546,15 @@ CLEAT_RUNTIME=""
 CLEAT_HOST_CWD=""
 CLEAT_HOST_PID=""
 CLEAT_HOST_WORKSPACE=""
-if detect_cleat_host_process; then
+if [ -n "${CLYDE_HOOK_CLEAT:-}" ]; then
+    # Test seam. The real detection walks the parent chain for a cleat
+    # process and asks Docker for the container; a test can stage
+    # neither. The seam names the container and leaves PID resolution
+    # to the ordinary walk, so the cleat-only branches run for real.
+    CLEAT_RUNTIME="cleat"
+    CLEAT_CNAME=$CLYDE_HOOK_CLEAT
+    CLAUDE_PID=$(find_claude_pid || echo "")
+elif detect_cleat_host_process; then
     if resolve_cleat_cname "$CLEAT_HOST_CWD" "$CLEAT_HOST_PID"; then
         CLEAT_RUNTIME="cleat"
         # CLEAT_HOST_PID is the cleat shell process PID — a real macOS PID
@@ -1528,6 +1536,10 @@ if [ -n "${TOOL_SUMMARY:-}" ]; then
     ESC_TSUM=$(printf '%s' "$TOOL_SUMMARY" | sed 's/\\/\\\\/g; s/"/\\"/g')
     SPOOL_EXTRA="$SPOOL_EXTRA, \"summary\": \"$ESC_TSUM\""
 fi
+# Rides on the same detection as -info: $HEADLESS is only ever populated
+# by detect_headless (SessionStart, or a lazy backfill later), so this
+# flag lands on exactly the events that also wrote it into -info.
+[ -n "$HEADLESS" ] && SPOOL_EXTRA="$SPOOL_EXTRA, \"headless\": true"
 spool_append "$SPOOL_EXTRA"
 
 exit 0
