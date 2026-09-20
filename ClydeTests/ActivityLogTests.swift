@@ -261,4 +261,71 @@ final class ActivityLogTests: XCTestCase {
         try await waitForEvents(log, count: 2)
         XCTAssertEqual(log.events.first?.kind, .sessionEnded)
     }
+
+    /// A session hidden by the toggle for its entire life never appeared
+    /// in the trail — so its end shouldn't appear either. Before this was
+    /// fixed, the silent seeding pass gave hidden sessions a snapshot,
+    /// and that snapshot's disappearance was reported as `.sessionEnded`
+    /// with the bot's name: a row for a session the panel never showed.
+    func testHiddenSessionThatEndsLeavesNoTrace() async throws {
+        let monitor = makeMonitor(showsAutomated: { false })
+        let log = ActivityLog(processMonitor: monitor, attentionMonitor: AttentionMonitor(eventsDir: eventsDir))
+        writeInfo(sessionId: "bot", headless: true)
+        await monitor.poll()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        try FileManager.default.removeItem(at: stateDir.appendingPathComponent("bot-info"))
+        await monitor.poll()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(log.events, [], "a session the user never saw should not announce its end either")
+    }
+
+    /// Contrast with the test above: once a session was actually shown,
+    /// hiding it again and letting it end is still honest — the user did
+    /// see it start, so they should see it end.
+    func testSessionShownThenHiddenStillEndsVisibly() async throws {
+        var show = true
+        let monitor = makeMonitor(showsAutomated: { show })
+        let log = ActivityLog(processMonitor: monitor, attentionMonitor: AttentionMonitor(eventsDir: eventsDir))
+        writeInfo(sessionId: "bot", headless: true)
+        await monitor.poll()
+        try await waitForEvents(log, count: 1)
+        XCTAssertEqual(log.events.first?.kind, .sessionStarted)
+
+        show = false
+        monitor.republish()
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        try FileManager.default.removeItem(at: stateDir.appendingPathComponent("bot-info"))
+        await monitor.poll()
+        try await waitForEvents(log, count: 2)
+        XCTAssertEqual(log.events.first?.kind, .sessionEnded,
+                        "the user did see this session start, so its end is still honest")
+    }
+
+    // MARK: - Attention timing
+
+    /// `@Published` delivers to subscribers during `willSet`, before the
+    /// backing storage updates — a sink that discards its argument and
+    /// re-reads `attentionMonitor.attentionPIDs` synchronously would still
+    /// see the old (empty) set. Regression test: a permission prompt must
+    /// surface on the very tick the attention file appears, without
+    /// waiting for an unrelated `ProcessMonitor` poll to happen to run
+    /// afterward.
+    func testPermissionRequestSurfacesOnTheAttentionTick() async throws {
+        let monitor = makeMonitor()
+        let attentionMonitor = AttentionMonitor(eventsDir: eventsDir)
+        let log = ActivityLog(processMonitor: monitor, attentionMonitor: attentionMonitor)
+
+        let pid = writeInfo(sessionId: "s1")
+        await monitor.poll()
+        try await waitForEvents(log, count: 1)
+
+        let body = #"{"pid":\#(pid),"event":"PermissionRequest","timestamp":0}"#
+        try body.write(to: eventsDir.appendingPathComponent("\(pid).json"), atomically: true, encoding: .utf8)
+        attentionMonitor.start()
+
+        try await waitForEvents(log, count: 2)
+        XCTAssertEqual(log.events.first?.kind, .permissionRequested)
+    }
 }

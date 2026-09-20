@@ -28,6 +28,12 @@ final class ActivityLog: ObservableObject {
         /// `SessionStart` in the *same* PID — without tracking source we
         /// only emit a lifecycle event when the PID itself changes.
         var lastSource: String
+        /// `true` when this snapshot was written from the published
+        /// (visible) loop; `false` when written silently for a hidden
+        /// automated session. Only a snapshot the user actually saw
+        /// announces `.sessionEnded` when it disappears — a session that
+        /// was never shown just vanishes without a trace.
+        var wasPublished: Bool
     }
     private var snapshots: [pid_t: Snapshot] = [:]
     /// Hash of the last sessions+attention input we processed. Used to
@@ -47,6 +53,7 @@ final class ActivityLog: ObservableObject {
         // that already exist when the app launches. Uses `trackedSessions`
         // (not the published, filtered `sessions`) so a hidden automated
         // session doesn't look "new" the moment it's revealed.
+        let publishedPIDsAtLaunch = Set(processMonitor.sessions.lazy.filter { !$0.isGhost }.map(\.pid))
         for session in processMonitor.trackedSessions where !session.isGhost {
             snapshots[session.pid] = Snapshot(
                 status: session.status,
@@ -54,7 +61,8 @@ final class ActivityLog: ObservableObject {
                 hadError: session.errorReason,
                 hadSubagent: session.primarySubagentType,
                 displayName: session.displayName,
-                lastSource: processMonitor.hookInfoByPID[session.pid]?.source ?? ""
+                lastSource: processMonitor.hookInfoByPID[session.pid]?.source ?? "",
+                wasPublished: publishedPIDsAtLaunch.contains(session.pid)
             )
         }
 
@@ -66,17 +74,23 @@ final class ActivityLog: ObservableObject {
         // and a scheduled hop would let that read race ahead of a second,
         // unrelated mutation before the first tick's callback ran,
         // handing `reconcile` a `sessions` snapshot and a `trackedSessions`
-        // read that no longer describe the same moment.
+        // read that no longer describe the same moment. The same reasoning
+        // applies to `attentionPIDs`: `@Published` delivers a value to its
+        // subscribers during `willSet`, before the backing storage is
+        // updated, so a sink that discards its argument and re-reads
+        // `attentionMonitor.attentionPIDs` synchronously would still see
+        // the *old* set. Both sinks below pass the value they were handed
+        // straight into `reconcile` rather than re-reading the property.
         processMonitor.$sessions
             .sink { [weak self] sessions in
-                self?.reconcile(sessions: sessions)
+                self?.reconcile(sessions: sessions, attentionPIDs: self?.attentionMonitor?.attentionPIDs ?? [])
             }
             .store(in: &cancellables)
 
         attentionMonitor.$attentionPIDs
-            .sink { [weak self] _ in
+            .sink { [weak self] attentionPIDs in
                 if let sessions = self?.processMonitor?.sessions {
-                    self?.reconcile(sessions: sessions)
+                    self?.reconcile(sessions: sessions, attentionPIDs: attentionPIDs)
                 }
             }
             .store(in: &cancellables)
@@ -96,8 +110,7 @@ final class ActivityLog: ObservableObject {
     /// what the user can see), but remembers `trackedLive` too, so
     /// flipping the toggle reveals or hides a session without the trail
     /// mistaking that for it starting or ending.
-    private func reconcile(sessions: [Session]) {
-        let attentionPIDs = attentionMonitor?.attentionPIDs ?? []
+    private func reconcile(sessions: [Session], attentionPIDs: Set<pid_t>) {
         let live = sessions.filter { !$0.isGhost }
         let livePIDs = Set(live.map(\.pid))
         let trackedLive = (processMonitor?.trackedSessions ?? []).filter { !$0.isGhost }
@@ -117,10 +130,12 @@ final class ActivityLog: ObservableObject {
             // doesn't get short-circuited away by the fingerprint check.
             hasher.combine(processMonitor?.hookInfoByPID[s.pid]?.source ?? "")
         }
-        // Include the tracked count so a toggle flip (which changes `live`
-        // but not `trackedLive`) still passes through and re-seeds hidden
-        // sessions' snapshots correctly.
-        hasher.combine(trackedLivePIDs.count)
+        // Include the tracked PIDs (sorted for a stable hash) so a toggle
+        // flip (which changes `live` but not `trackedLive`) still passes
+        // through and re-seeds hidden sessions' snapshots correctly.
+        for pid in trackedLivePIDs.sorted() {
+            hasher.combine(pid)
+        }
         let fingerprint = hasher.finalize()
         if fingerprint == lastReconcileFingerprint && snapshots.keys.allSatisfy(trackedLivePIDs.contains) {
             return
@@ -235,7 +250,8 @@ final class ActivityLog: ObservableObject {
                 hadError: session.errorReason,
                 hadSubagent: session.primarySubagentType,
                 displayName: session.displayName,
-                lastSource: currentSource
+                lastSource: currentSource,
+                wasPublished: true
             )
         }
 
@@ -245,20 +261,26 @@ final class ActivityLog: ObservableObject {
         // and published lists briefly out of step across ticks) can't get
         // mistaken for a hide and swallow a real session's start event.
         for session in trackedLive where session.isHeadless && !livePIDs.contains(session.pid) {
+            // Once a session has been shown, hiding it again must not
+            // erase that: `wasPublished` only ever turns on, here.
+            let previouslyPublished = snapshots[session.pid]?.wasPublished ?? false
             snapshots[session.pid] = Snapshot(
                 status: session.status,
                 hadAttention: attentionPIDs.contains(session.pid),
                 hadError: session.errorReason,
                 hadSubagent: session.primarySubagentType,
                 displayName: session.displayName,
-                lastSource: processMonitor?.hookInfoByPID[session.pid]?.source ?? ""
+                lastSource: processMonitor?.hookInfoByPID[session.pid]?.source ?? "",
+                wasPublished: previouslyPublished
             )
         }
 
-        // Sessions that disappeared
+        // Sessions that disappeared. A session the user never saw (hidden
+        // by the toggle the whole time it ran) just vanishes — only a
+        // snapshot that was ever published announces `.sessionEnded`.
         let knownPIDs = Set(snapshots.keys)
         for goneP in knownPIDs.subtracting(trackedLivePIDs) {
-            if let snapshot = snapshots[goneP] {
+            if let snapshot = snapshots[goneP], snapshot.wasPublished {
                 append(.init(
                     timestamp: Date(),
                     kind: .sessionEnded,
