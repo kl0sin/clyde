@@ -47,9 +47,17 @@ struct SummaryBar: View {
             }
 
             if sessionCount > 0 || automatedCount > 0 {
-                Text(summaryText)
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color(white: 0.4))
+                // The count is the first thing to give up its words: with
+                // an advisory chip beside it, the full sentence pushed
+                // the pills onto two lines. The pills never wrap; this
+                // text shortens instead, then truncates.
+                ViewThatFits(in: .horizontal) {
+                    Text(summaryText)
+                    Text(shortSummaryText)
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(Color(white: 0.4))
+                .lineLimit(1)
             }
         }
         .padding(.horizontal, 12)
@@ -61,6 +69,12 @@ struct SummaryBar: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(summaryAccessibilityLabel)
+    }
+
+    /// "6 · 2 auto": the same facts when the sentence does not fit.
+    private var shortSummaryText: String {
+        if sessionCount == 0 { return "\(automatedCount) auto" }
+        return automatedCount > 0 ? "\(sessionCount) · \(automatedCount) auto" : "\(sessionCount)"
     }
 
     private var summaryText: String {
@@ -106,6 +120,8 @@ struct StatusPill: View {
                 .opacity(pulse && isPulsing ? 0.4 : 1.0)
 
             Text("\(count) \(label)")
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(color.opacity(0.9))
         }
