@@ -19,6 +19,11 @@ struct AdvisoryChip: View {
                 .font(.system(size: 8))
             Text(issue.chipLabel)
                 .font(.system(size: 10))
+                // A chip is one line or it is not a chip: squeezed
+                // between the pills and the count it folded "Shortcut
+                // off" onto two rows. The count gives way instead.
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .foregroundStyle(Color(red: 0.95, green: 0.75, blue: 0.35))
         .padding(.horizontal, 6)
