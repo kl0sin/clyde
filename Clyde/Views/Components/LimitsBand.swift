@@ -47,15 +47,28 @@ struct LimitsBand: View {
                 Text("Limits")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Color(white: 0.7))
-                if let w = limits.fiveHour {
-                    UsageMeter(label: "5h", window: w, level: level(w, isSession: true),
-                               stale: stale, barWidth: 44)
-                }
-                if let w = limits.sevenDay {
-                    UsageMeter(label: "7d", window: w, level: level(w, isSession: false),
-                               stale: stale, barWidth: 44)
-                }
                 Spacer(minLength: 4)
+                // Words, not bars. A grey bar at 1% is background
+                // pretending to be content, and six things in one row
+                // read as a form. The same voice as the summary bar's
+                // "6 sessions · 2 automated": a word and a figure, mono,
+                // muted. Colour arrives only with something to say —
+                // the bars live in the opened rows, where they have
+                // width and a reset beside them.
+                HStack(spacing: 0) {
+                    if let w = limits.fiveHour {
+                        quiet("Session", window: w, level: level(w, isSession: true))
+                    }
+                    if limits.fiveHour != nil, limits.sevenDay != nil {
+                        Text(" · ")
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.25))
+                    }
+                    if let w = limits.sevenDay {
+                        quiet("Week", window: w, level: level(w, isSession: false))
+                    }
+                }
+                .opacity(stale ? 0.55 : 1)
                 Image(systemName: expanded ? "chevron.down" : "chevron.up")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Color(white: 0.45))
@@ -69,6 +82,22 @@ struct LimitsBand: View {
         .accessibilityHint(expanded ? "Tap to collapse" : "Tap to expand")
     }
 
+    /// One window as a word and a figure. The figure alone carries the
+    /// level's colour; the word stays muted at every level.
+    private func quiet(_ name: String, window: UsageWindow, level: UsageLimits.Level) -> some View {
+        HStack(spacing: 4) {
+            Text(name)
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(TextColor.tertiary)
+            Text(UsageLimits.percentText(for: window, level: level))
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(level == .normal ? TextColor.secondary : UsageMeter.color(for: level))
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(name) \(UsageLimits.percentText(for: window, level: level)) used")
+    }
+
     private func rows(now: Date) -> some View {
         VStack(spacing: 0) {
             if let w = limits.fiveHour {
@@ -80,7 +109,8 @@ struct LimitsBand: View {
                 }
                 row(name: "Week", window: w, level: level(w, isSession: false), now: now)
             }
-            Text(limits.freshnessText(now: now, sessionName: sessionName, stale: stale))
+            Text(limits.freshnessText(now: now, sessionName: sessionName, stale: stale)
+                 + (limits.modelName.map { " · \($0)" } ?? ""))
                 .font(.system(size: 9.5))
                 .foregroundStyle(TextColor.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
