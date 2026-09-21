@@ -6,6 +6,10 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-09-21
+
+Two things Clyde could not tell you before. How much of your Claude plan a session has used: the 5-hour window and the 7-day week now sit above Activity with their resets, and the compact panel carries the session meter, so the moment the window closes mid-task stops being a surprise. It is off by default, because it needs a Claude Code status line and that changes what the terminal footer shows; the switch explains it. And which sessions are actually yours: a test suite or a script that starts forty Claude Code sessions no longer floods the panel and rings the ready sound forty times — those sessions are tracked but hidden, counted in the footer, and one switch shows them. Sessions from the Claude desktop app are yours and stay on the list.
+
 ### Added
 
 - Claude usage limits in the panel: how much of the 5-hour session and the 7-day week is used and when each resets, as a Limits band above Activity in the full panel and a session meter in the compact footer. Blue from 80%, red when a window is spent, dimmed when the numbers are more than half an hour old with no session to refresh them. One notification when the session window passes 80%, one when a spent window resets. Off by default: Clyde reads the numbers from a Claude Code status line wrapper, and a configured status line hides most of the terminal footer's keyboard hints. Any status line you already had keeps running behind it and is put back when the setting is turned off. Pro and Max plans only — Claude Code reports the windows for nothing else.
