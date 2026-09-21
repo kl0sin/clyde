@@ -353,10 +353,15 @@ struct GeneralSettingsTab: View {
                         Text("Show automated sessions")
                             .font(.system(size: 12))
                             .foregroundStyle(.white)
-                        Text("Sessions started by programs rather than from a terminal — the Agent SDK, `claude -p` in a script, a test suite. Off keeps them out of the panel, the counts and the sounds.")
+                        Text("Sessions started by programs rather than from a terminal — the Agent SDK, `claude -p` in a script, a test suite. Off keeps them out of the panel, the counts and the sounds. The panel's footer counts them as \"hidden\".")
                             .font(.system(size: 10))
                             .foregroundStyle(Color(white: 0.45))
                             .fixedSize(horizontal: false, vertical: true)
+                        if appViewModel.processMonitor.automatedSessionCount > 0 {
+                            Text("\(appViewModel.processMonitor.automatedSessionCount) hidden right now.")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color(white: 0.55))
+                        }
                     }
                 }
                 .toggleStyle(.switch)

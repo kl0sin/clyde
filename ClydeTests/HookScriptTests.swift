@@ -1790,6 +1790,16 @@ final class HookScriptTests: XCTestCase {
         XCTAssertEqual(try infoJSON(sid: sid, home: home)["headless"] as? Bool, true)
     }
 
+    /// The desktop app pipes its sessions' stdin, but a person watches
+    /// them in the app's window. Before this rule two of them sat hidden
+    /// and silent for a day.
+    func testDesktopAppSessionIsNotHeadlessDespiteThePipe() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "claude-desktop", "CLYDE_HOOK_STDIN": "pipe"])
+        XCTAssertNil(try infoJSON(sid: sid, home: home)["headless"])
+    }
+
     func testPipedStdinIsHeadless() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,

@@ -297,7 +297,7 @@ Tool/plan line transitions are crossfades, not slides. Status pill does not puls
 6. Open the review window and check today's session/turn/working-time numbers — wait for the next ingest (a minute) or reopen the window so the check isn't run before the spool has been ingested.
 
 **Expect:**
-- While the three headless sessions run: with no ordinary session visible the summary bar reads "3 automated" (no leading "·"); once the interactive one is also up it reads "1 session · 3 automated" (a leading "N sessions ·" only appears when there is a visible session to count). No session rows appear in the panel for the headless three; no ready sound plays for them.
+- While the three headless sessions run: with no ordinary session visible the summary bar reads "3 hidden" (no leading "·"); once the interactive one is also up it reads "1 session · 3 hidden" (a leading "N sessions ·" only appears when there is a visible session to count). No session rows appear in the panel for the headless three; no ready sound plays for them.
 - When the interactive `claude -p` session starts: a new row appears in the panel; the ready sound plays once for it, and only it.
 - `hook.log`'s `SessionStart` lines carry `headless=true` at the end for the three headless sessions (other event lines for the same sessions do not — the log field is only ever populated on `SessionStart`). Separately, each headless session's `-info` file under `~/.clyde/state/` carries `"headless": true` in its JSON body, for the life of the session.
 - Settings › General › Monitoring › Show automated sessions toggle exists; flipping it to ON makes the three headless rows visible; flipping back to OFF hides them again.

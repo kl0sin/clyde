@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 47
+# clyde-hook-version: 48
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -616,6 +616,11 @@ detect_headless() {
     HEADLESS=""
     case "${CLAUDE_CODE_ENTRYPOINT:-}" in
         sdk*) HEADLESS=true; HEADLESS_DETECTED=true; return 0 ;;
+        # The desktop app feeds its sessions through a pipe, so the
+        # stdin rule would call them automated — but a person is
+        # watching them, in another window. Found live: two homelab
+        # sessions hidden and silenced for a day.
+        claude-desktop) HEADLESS_DETECTED=true; return 0 ;;
     esac
     if [ -n "$CLEAT_RUNTIME" ]; then
         HEADLESS_DETECTED=true

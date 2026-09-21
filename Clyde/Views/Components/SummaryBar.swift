@@ -58,6 +58,12 @@ struct SummaryBar: View {
                 .font(.system(size: 10))
                 .foregroundStyle(Color(white: 0.4))
                 .lineLimit(1)
+                // "hidden" says what happened; "automated" said what kind
+                // of thing it happened to, which nobody asked. The why
+                // and the way back live in the hover and in Settings.
+                .help(automatedCount > 0
+                      ? "\(automatedCount) session\(automatedCount == 1 ? "" : "s") started by a program \(automatedCount == 1 ? "is" : "are") hidden. Show them: Settings › Monitoring."
+                      : "")
             }
         }
         .padding(.horizontal, 12)
@@ -73,22 +79,22 @@ struct SummaryBar: View {
 
     /// "6 · 2 auto": the same facts when the sentence does not fit.
     private var shortSummaryText: String {
-        if sessionCount == 0 { return "\(automatedCount) auto" }
-        return automatedCount > 0 ? "\(sessionCount) · \(automatedCount) auto" : "\(sessionCount)"
+        if sessionCount == 0 { return "\(automatedCount) hidden" }
+        return automatedCount > 0 ? "\(sessionCount) · \(automatedCount) hidden" : "\(sessionCount)"
     }
 
     private var summaryText: String {
         if sessionCount == 0 {
-            return "\(automatedCount) automated"
+            return "\(automatedCount) hidden"
         }
         let base = "\(sessionCount) \(sessionCount == 1 ? "session" : "sessions")"
         guard automatedCount > 0 else { return base }
-        return "\(base) · \(automatedCount) automated"
+        return "\(base) · \(automatedCount) hidden"
     }
 
     private var summaryAccessibilityLabel: String {
         if sessionCount == 0 {
-            if automatedCount > 0 { return "Waiting for sessions. \(automatedCount) automated." }
+            if automatedCount > 0 { return "Waiting for sessions. \(automatedCount) automated sessions hidden." }
             return "Waiting for sessions"
         }
         var parts: [String] = []
