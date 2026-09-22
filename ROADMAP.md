@@ -154,6 +154,8 @@ Worth noting where these came from. Five of the seven were found by the user wor
 - [x] ActivityLog remembers every tracked session and speaks only about the published ones, so toggling "Show automated sessions" no longer writes phantom sessionStarted/sessionEnded rows for sessions that never stopped !lo #ux
 - [x] `CLYDE_HOOK_CLEAT` names the container so the cleat branch of the headless rule runs under test !lo #hooks #qa
 
+- [x] v0.10.1: background-supervisor sessions (`claude bg-spare`) were invisible and the stdin-based headless rule hid desktop-app and background sessions; both identity checks now match the first word of the process name and the rule reads argv (`-p`/`--print`, `sdk-*`) instead. Field report from the second machine !hi #hooks
+
 ## Phase: v0.3.0+ — UX polish, content & reach
 
 Backlog. Pick when there's time or when community interest bumps priority.

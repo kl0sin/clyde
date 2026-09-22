@@ -1,5 +1,5 @@
 #!/bin/bash
-# clyde-hook-version: 48
+# clyde-hook-version: 49
 # Clyde notification hook — signals Clyde about Claude session state transitions.
 # Installed automatically by Clyde. Safe to remove manually.
 #
@@ -357,11 +357,18 @@ find_claude_pid() {
     local pid=$PPID
     local depth=0
     while [ "$pid" -gt 1 ] && [ "$depth" -lt 10 ]; do
-        local name=$(ps -p "$pid" -o comm= 2>/dev/null | tr -d ' ')
-        if [ "$(basename "$name")" = "claude" ]; then
-            echo "$pid"
-            return 0
-        fi
+        local name=$(ps -p "$pid" -o comm= 2>/dev/null | sed 's/^ *//; s/ *$//')
+        # A session hosted by the background supervisor names itself
+        # "claude bg-spare" (and its pty host "claude bg-pty-host"), so
+        # the first word is the identity, not the whole string. Found
+        # live: every /fork and --bg session invisible, "no claude
+        # ancestor" on each of their hooks.
+        case "$(basename "$name")" in
+            claude|claude\ *)
+                echo "$pid"
+                return 0
+                ;;
+        esac
         pid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ')
         depth=$((depth + 1))
     done
@@ -595,15 +602,23 @@ fi
 # was tried first and rejected: a server started from a terminal hands
 # it down to every claude it spawns.
 #
-# lsof costs a few tens of milliseconds, so this runs only where -info
-# is written. Several call sites can each be the first to need an
-# answer for the same event (SessionStart calls it before log_event,
-# then the generic backfill below calls it again because -info doesn't
-# exist yet) — HEADLESS_DETECTED memoizes so lsof only ever runs once
-# per hook invocation, no matter how many sites ask.
+# ps -o args= costs one process, so this runs only where -info is
+# written. Several call sites can each be the first to need an answer
+# for the same event (SessionStart calls it before log_event, then the
+# generic backfill below calls it again because -info doesn't exist
+# yet) — HEADLESS_DETECTED memoizes so ps only ever runs once per hook
+# invocation, no matter how many sites ask.
 #
-# CLYDE_HOOK_STDIN is a test seam — a test runner may or may not own a
-# terminal, so the tests say which case they mean.
+# Why the arguments and not stdin: a session nobody watches is one
+# started in print mode — `claude -p` from a script, or the SDK, which
+# runs the CLI the same way — and that shows in argv every time. Stdin
+# was tried first and misfiled the desktop app's sessions (a pipe from
+# the app) and the background supervisor's (a pty host), both of which
+# a person is watching. Nothing a launcher does to stdin can hide a
+# session now.
+#
+# CLYDE_HOOK_ARGS is a test seam: the argv the hook should pretend
+# `ps` returned. Never set in production.
 #
 # log_event prints $HEADLESS as it stood at the moment it ran. That's
 # only ever populated on SessionStart, which calls detect_headless
@@ -616,48 +631,45 @@ detect_headless() {
     HEADLESS=""
     case "${CLAUDE_CODE_ENTRYPOINT:-}" in
         sdk*) HEADLESS=true; HEADLESS_DETECTED=true; return 0 ;;
-        # The desktop app feeds its sessions through a pipe, so the
-        # stdin rule would call them automated — but a person is
-        # watching them, in another window. Found live: two homelab
-        # sessions hidden and silenced for a day.
-        claude-desktop) HEADLESS_DETECTED=true; return 0 ;;
     esac
     if [ -n "$CLEAT_RUNTIME" ]; then
         HEADLESS_DETECTED=true
         return 0
     fi
-    local stdin_name
-    if [ -n "${CLYDE_HOOK_STDIN:-}" ]; then
-        case "$CLYDE_HOOK_STDIN" in
-            # "unknown" stands in for lsof coming back empty (missing
-            # binary, sandboxed, whatever) — a test can't express
-            # "empty" any other way through this seam, since an empty
-            # CLYDE_HOOK_STDIN is indistinguishable from unset.
-            unknown) stdin_name="" ;;
+    local args
+    if [ -n "${CLYDE_HOOK_ARGS:-}" ]; then
+        case "$CLYDE_HOOK_ARGS" in
+            # "unknown" stands in for ps coming back empty — a test can't
+            # express "empty" any other way through this seam.
+            unknown) args="" ;;
             # "count" is a seam-only counter: it appends a line to
             # detect.log every time this branch actually runs the
             # lookup, so a test can assert the memoization above
-            # prevented a second lookup within one invocation. Never
-            # taken outside a test — CLYDE_HOOK_STDIN is never "count"
-            # in production.
+            # prevented a second lookup within one invocation.
             count)
                 mkdir -p "$HOME/.clyde/logs" 2>/dev/null
                 printf 'x\n' >>"$HOME/.clyde/logs/detect.log" 2>/dev/null || true
-                stdin_name="/dev/ttys004"
+                args="claude"
                 ;;
-            *) stdin_name=$CLYDE_HOOK_STDIN ;;
+            *) args=$CLYDE_HOOK_ARGS ;;
         esac
     else
-        stdin_name=$(lsof -a -p "$CLAUDE_PID" -d 0 -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1)
+        args=$(ps -ww -o args= -p "$CLAUDE_PID" 2>/dev/null)
     fi
-    case "$stdin_name" in
-        /dev/tty*) ;;
-        # lsof answering nothing is "we don't know", not "no terminal" —
-        # hiding a real session is the worse mistake than showing one we
-        # couldn't classify, so an unknown stdin fails toward visible.
-        "") ;;
-        *) HEADLESS=true ;;
-    esac
+    # Print mode is a flag, never a value: `-p` or `--print` anywhere
+    # before a `--` means nobody is at the keyboard. An empty answer is
+    # "we don't know", and hiding a real session is the worse mistake,
+    # so it fails toward visible.
+    # shellcheck disable=SC2086
+    set -- $args
+    [ $# -gt 0 ] && shift
+    local a
+    for a in "$@"; do
+        case "$a" in
+            --) break ;;
+            -p|--print) HEADLESS=true; break ;;
+        esac
+    done
     HEADLESS_DETECTED=true
     return 0
 }

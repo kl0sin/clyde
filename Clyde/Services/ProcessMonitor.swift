@@ -734,8 +734,17 @@ final class ProcessMonitor: ObservableObject {
         // `ps -o comm=` on macOS prints the absolute path of argv[0]
         // (or just the basename, depending on how the process was
         // launched). Match on the trailing path component.
+        return isClaudeCommand(raw)
+    }
+
+    /// Whether a `ps -o comm=` answer names the Claude CLI. The first
+    /// word is the identity: a session hosted by the background
+    /// supervisor calls itself "claude bg-spare", and its pty host
+    /// "claude bg-pty-host" — every such session used to fail this
+    /// check and lose its markers the instant the hook wrote them.
+    nonisolated static func isClaudeCommand(_ raw: String) -> Bool {
         let basename = (raw as NSString).lastPathComponent
-        return basename == "claude"
+        return basename.split(separator: " ").first.map(String.init) == "claude"
     }
 
     /// Reads -busy markers from disk into `hookBusyPIDs`. Pure side-effect on

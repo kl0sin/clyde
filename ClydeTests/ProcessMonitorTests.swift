@@ -1495,4 +1495,18 @@ final class ProcessMonitorTests: XCTestCase {
         XCTAssertTrue(monitor.sessions.isEmpty)
     }
 
+
+    // MARK: - Identity
+
+    /// The first word of `ps -o comm=` is the identity: the background
+    /// supervisor's sessions call themselves "claude bg-spare".
+    func testClaudeCommandIsMatchedByItsFirstWord() {
+        XCTAssertTrue(ProcessMonitor.isClaudeCommand("claude"))
+        XCTAssertTrue(ProcessMonitor.isClaudeCommand("/Users/me/.local/bin/claude"))
+        XCTAssertTrue(ProcessMonitor.isClaudeCommand("claude bg-spare"))
+        XCTAssertTrue(ProcessMonitor.isClaudeCommand("/Users/me/.local/bin/claude bg-pty-host"))
+        XCTAssertFalse(ProcessMonitor.isClaudeCommand("claude-helper"))
+        XCTAssertFalse(ProcessMonitor.isClaudeCommand("node"))
+        XCTAssertFalse(ProcessMonitor.isClaudeCommand(""))
+    }
 }

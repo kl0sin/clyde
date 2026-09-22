@@ -6,6 +6,11 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+### Fixed
+
+- Sessions run in the background — `/fork`, `/bg`, `claude --bg`, or the `←` key on an empty prompt, all hosted by Claude Code's background supervisor — were invisible to Clyde: their process is called `claude bg-spare`, which the hook did not recognise, so they never got a row, a sound or a count. They do now.
+- Whether a session is "automated" is decided by how it was started, not by what its input is connected to: `claude -p` and SDK sessions are automated, everything else is yours. v0.10.0 looked at the process's stdin, which hid sessions from the Claude desktop app and from the background supervisor.
+
 ## [0.10.0] — 2026-09-21
 
 Two things Clyde could not tell you before. How much of your Claude plan a session has used: the 5-hour window and the 7-day week now sit above Activity with their resets, and the compact panel carries the session meter, so the moment the window closes mid-task stops being a surprise. It is off by default, because it needs a Claude Code status line and that changes what the terminal footer shows; the switch explains it. And which sessions are actually yours: a test suite or a script that starts forty Claude Code sessions no longer floods the panel and rings the ready sound forty times — those sessions are tracked but hidden, counted in the footer, and one switch shows them. Sessions from the Claude desktop app are yours and stay on the list.

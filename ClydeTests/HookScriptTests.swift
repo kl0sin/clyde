@@ -57,6 +57,19 @@ final class HookScriptTests: XCTestCase {
         return claude
     }()
 
+    /// The same interposer under another argv[0]: the background
+    /// supervisor's sessions run as "claude bg-spare", and the hook has
+    /// to recognise that name too.
+    private static func fakeClaude(named name: String) -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clyde-hook-tests-bin-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let link = dir.appendingPathComponent(name)
+        try? FileManager.default.createSymbolicLink(
+            at: link, withDestinationURL: URL(fileURLWithPath: "/bin/bash"))
+        return link
+    }
+
     /// Fresh `$HOME`-equivalent per test so `~/.clyde/state/` and
     /// `~/.clyde/events/` start empty and don't leak between cases or
     /// pollute the developer's real Clyde install.
@@ -74,8 +87,9 @@ final class HookScriptTests: XCTestCase {
     /// is asserted by the caller since the hook MUST always exit 0 to
     /// avoid raising "Stop hook error" in Claude's session.
     @discardableResult
-    private func runHook(payload: String, home: URL, extraEnv: [String: String] = [:]) throws -> Int32 {
-        let task = try startHook(payload: payload, home: home, extraEnv: extraEnv)
+    private func runHook(payload: String, home: URL, extraEnv: [String: String] = [:],
+                         fakeClaudeName: String = "claude") throws -> Int32 {
+        let task = try startHook(payload: payload, home: home, extraEnv: extraEnv, fakeClaudeName: fakeClaudeName)
         task.waitUntilExit()
         return task.terminationStatus
     }
@@ -85,14 +99,15 @@ final class HookScriptTests: XCTestCase {
     /// them, so any test that runs events strictly one-after-another is
     /// modelling an execution order production does not provide. Tests
     /// that care about inter-event ordering use this to overlap them.
-    private func startHook(payload: String, home: URL, extraEnv: [String: String] = [:]) throws -> Process {
+    private func startHook(payload: String, home: URL, extraEnv: [String: String] = [:],
+                           fakeClaudeName: String = "claude") throws -> Process {
         let task = Process()
         // Launch as `claude → bash → hook` so the hook process has a
         // `claude` ancestor at its immediate PPID. The `; exit $?`
         // matters: with a single simple command bash tail-exec()s it,
         // replacing the `claude` process and losing the ancestor; the
         // explicit exit also propagates the hook's status.
-        task.executableURL = Self.fakeClaudeURL
+        task.executableURL = fakeClaudeName == "claude" ? Self.fakeClaudeURL : Self.fakeClaude(named: fakeClaudeName)
         task.arguments = ["-c", #"/bin/bash "$0"; exit $?"#, Self.hookScriptURL.path]
         var env = ProcessInfo.processInfo.environment
         env["HOME"] = home.path
@@ -1786,31 +1801,61 @@ final class HookScriptTests: XCTestCase {
     func testSDKEntrypointMarksTheSessionHeadless() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,
-                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "sdk-py", "CLYDE_HOOK_STDIN": "/dev/ttys004"])
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "sdk-py", "CLYDE_HOOK_ARGS": "claude"])
         XCTAssertEqual(try infoJSON(sid: sid, home: home)["headless"] as? Bool, true)
     }
 
-    /// The desktop app pipes its sessions' stdin, but a person watches
-    /// them in the app's window. Before this rule two of them sat hidden
-    /// and silent for a day.
-    func testDesktopAppSessionIsNotHeadlessDespiteThePipe() throws {
+    /// The desktop app pipes its sessions' stdin — which is why stdin
+    /// stopped being the rule. Its argv carries no print flag, and that
+    /// is what counts now.
+    func testDesktopAppSessionIsNotHeadless() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,
-                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "claude-desktop", "CLYDE_HOOK_STDIN": "pipe"])
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "claude-desktop",
+                               "CLYDE_HOOK_ARGS": "/Applications/Claude.app/Contents/MacOS/claude"])
         XCTAssertNil(try infoJSON(sid: sid, home: home)["headless"])
     }
 
-    func testPipedStdinIsHeadless() throws {
+    func testPrintModeIsHeadless() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,
-                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "pipe"])
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "claude -p hello"])
         XCTAssertEqual(try infoJSON(sid: sid, home: home)["headless"] as? Bool, true)
     }
 
-    func testTerminalSessionIsNotHeadlessAndInfoIsUnchanged() throws {
+    func testLongPrintFlagIsHeadless() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,
-                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "/dev/ttys004"])
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli",
+                               "CLYDE_HOOK_ARGS": "/Users/me/.local/bin/claude --output-format stream-json --print"])
+        XCTAssertEqual(try infoJSON(sid: sid, home: home)["headless"] as? Bool, true)
+    }
+
+    /// `-p` after `--` is a prompt word, not a flag.
+    func testPrintFlagAfterDoubleDashDoesNotCount() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "claude -- -p"])
+        XCTAssertNil(try infoJSON(sid: sid, home: home)["headless"])
+    }
+
+    /// A session hosted by the background supervisor names its process
+    /// "claude bg-spare". Found live: every /fork and --bg session
+    /// invisible, "no claude ancestor" on each of their hooks.
+    func testBackgroundSessionProcessIsRecognisedAsClaude() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "claude bg-spare --bg-spare /tmp/x.sock"],
+                    fakeClaudeName: "claude bg-spare")
+        let json = try infoJSON(sid: sid, home: home)
+        XCTAssertNil(json["headless"])
+        XCTAssertNotNil(json["pid"])
+    }
+
+    func testInteractiveSessionIsNotHeadlessAndInfoIsUnchanged() throws {
+        let home = tempHome(), sid = UUID().uuidString
+        try runHook(payload: sessionStart(sid: sid), home: home,
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "claude"])
         let json = try infoJSON(sid: sid, home: home)
         XCTAssertNil(json["headless"])
         XCTAssertEqual(Set(json.keys), ["session_id", "pid", "cwd", "started_at", "source"])
@@ -1833,7 +1878,7 @@ final class HookScriptTests: XCTestCase {
         let home = tempHome(), sid = UUID().uuidString
         let payload = #"{"session_id": "\#(sid)", "hook_event_name": "PreToolUse", "cwd": "/tmp/x", "tool_name": "Bash", "tool_input": {"command": "ls"}}"#
         try runHook(payload: payload, home: home,
-                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "pipe"])
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "claude -p hello"])
         XCTAssertEqual(try infoJSON(sid: sid, home: home)["headless"] as? Bool, true)
     }
 
@@ -1841,24 +1886,24 @@ final class HookScriptTests: XCTestCase {
     /// whatever) must not be read as "no terminal" — hiding a real
     /// session is the worse mistake, so an unclassifiable stdin leaves
     /// the session visible.
-    func testUnknownStdinIsNotHeadless() throws {
+    func testUnknownArgvIsNotHeadless() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,
-                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "unknown"])
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "unknown"])
         XCTAssertNil(try infoJSON(sid: sid, home: home)["headless"])
     }
 
     /// SessionStart calls `detect_headless` twice within one hook
     /// invocation — once before `log_event`, again in the generic
     /// any-event backfill (since -info doesn't exist yet the first
-    /// time it's checked). Without memoization that's two `lsof`
+    /// time it's checked). Without memoization that's two `ps`
     /// spawns per SessionStart. The `count` seam value appends a line
     /// to detect.log every time the lookup branch actually runs, so
     /// exactly one line proves the second call short-circuited.
     func testDetectionRunsOnceWithinOneEvent() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,
-                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "count"])
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "count"])
         let log = try String(contentsOf: home.appendingPathComponent(".clyde/logs/detect.log"), encoding: .utf8)
         let lines = log.split(separator: "\n")
         XCTAssertEqual(lines.count, 1, "detect_headless's lookup branch ran \(lines.count) times, expected exactly 1")
@@ -1866,12 +1911,12 @@ final class HookScriptTests: XCTestCase {
 
     /// A cleat session's headless verdict must not fall through to the
     /// stdin rule — CLEAT_RUNTIME being set short-circuits detect_headless
-    /// before it ever looks at $CLYDE_HOOK_STDIN, no matter how the seam
+    /// before it ever looks at $CLYDE_HOOK_ARGS, no matter how the seam
     /// stages it.
-    func testCleatSessionIsNeverClassifiedByStdin() throws {
+    func testCleatSessionIsNeverClassifiedByArgv() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,
-                    extraEnv: ["CLYDE_HOOK_CLEAT": "cleat-test-1", "CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "pipe"])
+                    extraEnv: ["CLYDE_HOOK_CLEAT": "cleat-test-1", "CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "claude -p hello"])
         let json = try infoJSON(sid: sid, home: home)
         XCTAssertNil(json["headless"])
         XCTAssertEqual(json["runtime"] as? String, "cleat")
@@ -1888,16 +1933,16 @@ final class HookScriptTests: XCTestCase {
     func testSpoolLineCarriesHeadless() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,
-                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "pipe"])
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "claude -p hello"])
         let spool = try String(contentsOf: home.appendingPathComponent(".clyde/history/spool.jsonl"), encoding: .utf8)
         let line = try XCTUnwrap(spool.split(separator: "\n").first { $0.contains(sid) })
         XCTAssertTrue(line.contains(#""headless": true"#), String(line))
     }
 
-    func testSpoolLineOmitsHeadlessForATerminalSession() throws {
+    func testSpoolLineOmitsHeadlessForAnInteractiveSession() throws {
         let home = tempHome(), sid = UUID().uuidString
         try runHook(payload: sessionStart(sid: sid), home: home,
-                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_STDIN": "/dev/ttys004"])
+                    extraEnv: ["CLAUDE_CODE_ENTRYPOINT": "cli", "CLYDE_HOOK_ARGS": "claude"])
         let spool = try String(contentsOf: home.appendingPathComponent(".clyde/history/spool.jsonl"), encoding: .utf8)
         XCTAssertFalse(spool.contains("headless"))
     }
