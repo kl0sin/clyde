@@ -6,6 +6,10 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-09-22
+
+A fix for v0.10.0's second day. Sessions you run in the background — `/fork`, `/bg`, `claude --bg` — were invisible to Clyde, and the new rule for telling a script's sessions from yours looked at the wrong thing and hid sessions from the desktop app and the background supervisor. Both are settled: Clyde recognises every process Claude Code names `claude …`, and "automated" now means one thing, started in print mode.
+
 ### Fixed
 
 - Sessions run in the background — `/fork`, `/bg`, `claude --bg`, or the `←` key on an empty prompt, all hosted by Claude Code's background supervisor — were invisible to Clyde: their process is called `claude bg-spare`, which the hook did not recognise, so they never got a row, a sound or a count. They do now.
