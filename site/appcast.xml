@@ -8,6 +8,23 @@
         <description>Auto-update feed for the Clyde menu bar app.</description>
         <language>en</language>
         <item>
+            <title>Version 0.10.1</title>
+            <pubDate>Tue, 22 Sep 2026 07:03:01 +0000</pubDate>
+            <sparkle:version>31</sparkle:version>
+            <sparkle:shortVersionString>0.10.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+<p>A fix for v0.10.0's second day. Sessions you run in the background — <code>/fork</code>, <code>/bg</code>, <code>claude --bg</code> — were invisible to Clyde, and the new rule for telling a script's sessions from yours looked at the wrong thing and hid sessions from the desktop app and the background supervisor. Both are settled: Clyde recognises every process Claude Code names <code>claude …</code>, and "automated" now means one thing, started in print mode.</p>
+<h3>Fixed</h3>
+<ul><li>Sessions run in the background — <code>/fork</code>, <code>/bg</code>, <code>claude --bg</code>, or the <code>←</code> key on an empty prompt, all hosted by Claude Code's background supervisor — were invisible to Clyde: their process is called <code>claude bg-spare</code>, which the hook did not recognise, so they never got a row, a sound or a count. They do now.</li><li>Whether a session is "automated" is decided by how it was started, not by what its input is connected to: <code>claude -p</code> and SDK sessions are automated, everything else is yours. v0.10.0 looked at the process's stdin, which hid sessions from the Claude desktop app and from the background supervisor.</li></ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/kl0sin/clyde/releases/download/v0.10.1/Clyde-0.10.1.dmg"
+                length="6731148"
+                type="application/octet-stream"
+                sparkle:edSignature="CyVxuSL027VFhh8dFlHVVpQYdDFHoCl7xr9ZEB6fsQL5ShRq5H5V0OiCmjGIRnlWkb/56X0SxNl89qVhZol3Dg==" />
+        </item>
+        <item>
             <title>Version 0.10.0</title>
             <pubDate>Mon, 21 Sep 2026 07:26:43 +0000</pubDate>
             <sparkle:version>30</sparkle:version>
