@@ -16,8 +16,11 @@ struct RealShellExecutor: ShellExecutor {
         process.standardOutput = pipe
         process.standardError = Pipe()
         try process.run()
-        process.waitUntilExit()
+        // Drain first: output larger than the pipe buffer would block the
+        // child on write while we sat in waitUntilExit — `ps -E` prints a
+        // whole environment.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
         return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 }

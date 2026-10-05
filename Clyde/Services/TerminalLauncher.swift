@@ -24,7 +24,7 @@ final class TerminalLauncher: ObservableObject {
         guard let (adapter, shellPID) = await findHostingTerminal(claudePID: session.pid) else {
             throw TerminalError.hostingTerminalNotFound
         }
-        try await adapter.focusSession(parentPID: shellPID)
+        try await adapter.focusSession(parentPID: shellPID, claudePID: session.pid)
     }
 
     /// Walk from claude PID → shell → terminal emulator.

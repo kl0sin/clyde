@@ -4,24 +4,11 @@ struct TerminalAppAdapter: TerminalAdapter {
     let name = "Terminal"
     let bundleIdentifier = "com.apple.Terminal"
 
-    func focusSession(parentPID: pid_t) async throws {
+    func focusSession(parentPID: pid_t, claudePID: pid_t) async throws {
         guard isInstalled else { throw TerminalError.terminalNotInstalled }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", "ps -p \(parentPID) -o tty="]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        try process.run()
-        process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let tty = (String(data: data, encoding: .utf8) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !tty.isEmpty else { throw TerminalError.hostingTerminalNotFound }
-        let fullTTY = tty.hasPrefix("/dev/") ? tty : "/dev/\(tty)"
-
-        try runAppleScript(focusScript(tty: fullTTY))
+        guard let tty = await tty(of: parentPID) else { throw TerminalError.hostingTerminalNotFound }
+        try runAppleScript(focusScript(tty: "/dev/\(tty)"))
     }
 
     /// See `ITermAdapter.focusScript` — the target is resolved by

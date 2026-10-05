@@ -4,7 +4,7 @@ struct ITermAdapter: TerminalAdapter {
     let name = "iTerm2"
     let bundleIdentifier = "com.googlecode.iterm2"
 
-    func focusSession(parentPID: pid_t) async throws {
+    func focusSession(parentPID: pid_t, claudePID: pid_t) async throws {
         guard isInstalled else { throw TerminalError.terminalNotInstalled }
         try runAppleScript(focusScript(parentPID: parentPID))
     }

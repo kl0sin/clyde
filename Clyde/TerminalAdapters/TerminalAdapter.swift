@@ -9,7 +9,7 @@ protocol TerminalAdapter {
     /// runs is no less installed for being the beta.
     var bundleIdentifiers: [String] { get }
     var isInstalled: Bool { get }
-    func focusSession(parentPID: pid_t) async throws
+    func focusSession(parentPID: pid_t, claudePID: pid_t) async throws
 }
 
 extension TerminalAdapter {
@@ -30,6 +30,14 @@ extension TerminalAdapter {
         if let error {
             throw TerminalError.scriptExecutionFailed(error.description)
         }
+    }
+
+    /// The controlling terminal of `pid` as `ps` names it (`ttys023`),
+    /// or nil for a process without one (`??`). The name ends up inside
+    /// scripts, so nothing but a tty name gets through.
+    func tty(of pid: pid_t) async -> String? {
+        let name = (try? await RealShellExecutor().run("ps -o tty= -p \(pid)")) ?? ""
+        return name.wholeMatch(of: #/ttys?[0-9]+/#) != nil ? name : nil
     }
 
     func activateApp() {

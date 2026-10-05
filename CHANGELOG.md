@@ -6,6 +6,10 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+### Fixed
+
+- Clicking a session that runs in Warp or Ghostty now brings you to that session's own tab, split or window. Before, Clyde only brought the app forward, which did not help when you keep several sessions as tabs in one window. Warp needs a build from May 2026 or later. Ghostty needs 1.3 or later and asks once for permission to let Clyde control it. On older versions, or if you decline, Clyde brings the app forward as before.
+
 ## [0.10.1] — 2026-09-22
 
 A fix for v0.10.0's second day. Sessions you run in the background — `/fork`, `/bg`, `claude --bg` — were invisible to Clyde, and the new rule for telling a script's sessions from yours looked at the wrong thing and hid sessions from the desktop app and the background supervisor. Both are settled: Clyde recognises every process Claude Code names `claude …`, and "automated" now means one thing, started in print mode.
