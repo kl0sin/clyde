@@ -11,7 +11,8 @@ final class TerminalLauncher: ObservableObject {
         ITermAdapter(),
         TerminalAppAdapter(),
         WarpAdapter(),
-        GhosttyAdapter()
+        GhosttyAdapter(),
+        CmuxAdapter()
     ]
 
     func detectTerminals() {
@@ -94,6 +95,9 @@ final class TerminalLauncher: ObservableObject {
         }
         if hasBundle("ghostty") {
             return allAdapters.first { $0 is GhosttyAdapter }
+        }
+        if hasBundle("cmux") {
+            return allAdapters.first { $0 is CmuxAdapter }
         }
         return nil
     }

@@ -83,4 +83,18 @@ final class TerminalAdapterTargetingTests: XCTestCase {
         XCTAssertTrue(script.contains("> /dev/ttys023"))
         XCTAssertTrue(script.contains(#"set marker to "clyde-x""#))
     }
+
+    func testCmuxSurfaceIsReadFromTheProcessEnvironment() {
+        let output = "claude CMUX_WORKSPACE_ID=229BDEE3-4788-4B8C-90FD-9B464F9527D0 CMUX_SURFACE_ID=D0F1E5BE-4FC2-4009-9A41-3CFDF27331E7 CMUX_PORT=9120"
+        XCTAssertEqual(CmuxAdapter.surfaceID(inProcessEnvironment: output), "D0F1E5BE-4FC2-4009-9A41-3CFDF27331E7")
+
+        XCTAssertNil(CmuxAdapter.surfaceID(inProcessEnvironment: "claude TERM_PROGRAM=ghostty"))
+        XCTAssertNil(CmuxAdapter.surfaceID(inProcessEnvironment: "claude CMUX_SURFACE_ID=x\" & quit"))
+    }
+
+    func testCmuxScriptTargetsTheBundleIdentifierAndTheSurface() {
+        let script = CmuxAdapter().focusScript(surfaceID: "D0F1E5BE-4FC2-4009-9A41-3CFDF27331E7")
+        XCTAssertTrue(script.contains(#"tell application id "com.cmuxterm.app""#), script)
+        XCTAssertTrue(script.contains(#"if id of t is "D0F1E5BE-4FC2-4009-9A41-3CFDF27331E7""#))
+    }
 }
