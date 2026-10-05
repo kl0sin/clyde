@@ -33,9 +33,11 @@ struct GhosttyAdapter: TerminalAdapter {
                 set termIDs to id of every terminal
                 set termNames to name of every terminal
             end tell
-            do shell script "printf '\\\\033]2;%s\\\\007' " & quoted form of marker & " > \(tty)"
             set focusedID to missing value
             repeat 20 times
+                -- Rewritten every pass: a working Claude animates its own
+                -- title and can overwrite the marker before Ghostty shows it.
+                do shell script "printf '\\\\033]2;%s\\\\007' " & quoted form of marker & " > \(tty)"
                 tell application id "\(bundleIdentifier)"
                     repeat with t in terminals
                         if name of t is marker then

@@ -50,30 +50,29 @@ final class TerminalAdapterTargetingTests: XCTestCase {
     /// Every adapter's identifier list starts with the one it declares.
     func testEveryAdapterListsItsPrimaryIdentifierFirst() {
         let adapters: [TerminalAdapter] = [ITermAdapter(), TerminalAppAdapter(),
-                                           WarpAdapter(), GhosttyAdapter()]
+                                           WarpAdapter(), GhosttyAdapter(), CmuxAdapter()]
         for adapter in adapters {
             XCTAssertEqual(adapter.bundleIdentifiers.first, adapter.bundleIdentifier, adapter.name)
         }
     }
 
     /// `ps -E` prints argv followed by the environment, space-separated.
-    /// Warp's per-session link is pulled out of that; anything that is
-    /// not a Warp session link is ignored so the fallback activates.
-    func testWarpFocusURLIsReadFromTheProcessEnvironment() {
-        let output = "claude --resume TERM_PROGRAM=WarpTerminal WARP_FOCUS_URL=warp://session/c17c6d3261a849288a7e8b00e82f796c WARP_HONOR_PS1=0"
-        XCTAssertEqual(WarpAdapter.focusURL(inProcessEnvironment: output)?.absoluteString,
+    /// The variable is the last whole-word `KEY=`, not the same text in
+    /// an argument or inside a longer name.
+    func testEnvironmentValueIsTheVariableNotAnArgument() {
+        let output = "claude -p WARP_FOCUS_URL=warp://session/0000 OLD_WARP_FOCUS_URL=x WARP_FOCUS_URL=warp://session/ab12 WARP_HONOR_PS1=0"
+        XCTAssertEqual(WarpAdapter.environmentValue("WARP_FOCUS_URL", in: output), "warp://session/ab12")
+        XCTAssertNil(WarpAdapter.environmentValue("WARP_FOCUS_URL", in: "claude OLD_WARP_FOCUS_URL=x"))
+        XCTAssertNil(WarpAdapter.environmentValue("WARP_FOCUS_URL", in: "claude TERM_PROGRAM=WarpTerminal"), "older Warp")
+    }
+
+    /// Only a Warp session link is opened.
+    func testWarpOpensOnlySessionLinks() {
+        XCTAssertEqual(WarpAdapter.focusURL("warp://session/c17c6d3261a849288a7e8b00e82f796c")?.absoluteString,
                        "warp://session/c17c6d3261a849288a7e8b00e82f796c")
-        XCTAssertEqual(WarpAdapter.focusURL(inProcessEnvironment: "claude WARP_FOCUS_URL=warppreview://session/ab12")?.absoluteString,
-                       "warppreview://session/ab12")
-
-        XCTAssertNil(WarpAdapter.focusURL(inProcessEnvironment: "claude TERM_PROGRAM=WarpTerminal"), "older Warp")
-        XCTAssertNil(WarpAdapter.focusURL(inProcessEnvironment: "claude WARP_FOCUS_URL=https://example.com/session/ab12"))
-        XCTAssertNil(WarpAdapter.focusURL(inProcessEnvironment: "claude WARP_FOCUS_URL=warp://session/ab12;rm"))
-        XCTAssertNil(WarpAdapter.focusURL(inProcessEnvironment: "claude OLD_WARP_FOCUS_URL=warp://session/ab12"))
-
-        let quotedInArgv = "claude -p WARP_FOCUS_URL=warp://session/0000 WARP_FOCUS_URL=warp://session/ab12"
-        XCTAssertEqual(WarpAdapter.focusURL(inProcessEnvironment: quotedInArgv)?.absoluteString,
-                       "warp://session/ab12", "the environment follows argv")
+        XCTAssertNotNil(WarpAdapter.focusURL("warppreview://session/ab12"))
+        XCTAssertNil(WarpAdapter.focusURL("https://example.com/session/ab12"))
+        XCTAssertNil(WarpAdapter.focusURL("warp://session/ab12;rm"))
     }
 
     func testGhosttyScriptTargetsTheBundleIdentifierAndTheSessionsTTY() {
@@ -84,12 +83,10 @@ final class TerminalAdapterTargetingTests: XCTestCase {
         XCTAssertTrue(script.contains(#"set marker to "clyde-x""#))
     }
 
-    func testCmuxSurfaceIsReadFromTheProcessEnvironment() {
-        let output = "claude CMUX_WORKSPACE_ID=229BDEE3-4788-4B8C-90FD-9B464F9527D0 CMUX_SURFACE_ID=D0F1E5BE-4FC2-4009-9A41-3CFDF27331E7 CMUX_PORT=9120"
-        XCTAssertEqual(CmuxAdapter.surfaceID(inProcessEnvironment: output), "D0F1E5BE-4FC2-4009-9A41-3CFDF27331E7")
-
-        XCTAssertNil(CmuxAdapter.surfaceID(inProcessEnvironment: "claude TERM_PROGRAM=ghostty"))
-        XCTAssertNil(CmuxAdapter.surfaceID(inProcessEnvironment: "claude CMUX_SURFACE_ID=x\" & quit"))
+    func testCmuxAcceptsOnlyASurfaceUUID() {
+        XCTAssertEqual(CmuxAdapter.surfaceID("D0F1E5BE-4FC2-4009-9A41-3CFDF27331E7"), "D0F1E5BE-4FC2-4009-9A41-3CFDF27331E7")
+        XCTAssertNil(CmuxAdapter.surfaceID("x\" & quit"))
+        XCTAssertNil(CmuxAdapter.surfaceID(""))
     }
 
     func testCmuxScriptTargetsTheBundleIdentifierAndTheSurface() {

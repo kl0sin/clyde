@@ -14,7 +14,7 @@ struct RealShellExecutor: ShellExecutor {
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = ["-c", command]
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
         try process.run()
         // Drain first: output larger than the pipe buffer would block the
         // child on write while we sat in waitUntilExit — `ps -E` prints a

@@ -6,6 +6,7 @@ import AppKit
 @MainActor
 final class TerminalLauncher: ObservableObject {
     @Published var availableTerminals: [TerminalAdapter] = []
+    private var isFocusing = false
 
     private let allAdapters: [TerminalAdapter] = [
         ITermAdapter(),
@@ -22,6 +23,12 @@ final class TerminalLauncher: ObservableObject {
     /// Focus the terminal tab hosting this Claude session.
     /// Walks the process tree to identify which terminal emulator owns the session.
     func focusSession(_ session: Session) async throws {
+        // A second click while one is in flight is dropped: two Ghostty
+        // scripts on one tty would each take the other's marker for the
+        // title to restore.
+        guard !isFocusing else { return }
+        isFocusing = true
+        defer { isFocusing = false }
         guard let (adapter, shellPID) = await findHostingTerminal(claudePID: session.pid) else {
             throw TerminalError.hostingTerminalNotFound
         }

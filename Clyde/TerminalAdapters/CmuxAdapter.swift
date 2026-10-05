@@ -12,8 +12,8 @@ struct CmuxAdapter: TerminalAdapter {
 
     func focusSession(parentPID: pid_t, claudePID: pid_t) async throws {
         guard isInstalled else { throw TerminalError.terminalNotInstalled }
-        let environment = (try? await RealShellExecutor().run("ps -E -ww -o command= -p \(claudePID)")) ?? ""
-        guard let surface = Self.surfaceID(inProcessEnvironment: environment) else {
+        guard let value = await environmentValue("CMUX_SURFACE_ID", of: claudePID),
+              let surface = Self.surfaceID(value) else {
             activateApp()
             return
         }
@@ -24,11 +24,9 @@ struct CmuxAdapter: TerminalAdapter {
         }
     }
 
-    /// A UUID and nothing else: it lands inside the script. Last match,
-    /// as for Warp — `ps -E` prints argv before the environment.
-    static func surfaceID(inProcessEnvironment output: String) -> String? {
-        output.matches(of: #/(?:^|\s)CMUX_SURFACE_ID=([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})(?=\s|$)/#)
-            .last.map { String($0.1) }
+    /// A UUID and nothing else: it lands inside the script.
+    static func surfaceID(_ value: String) -> String? {
+        value.wholeMatch(of: #/[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/#) != nil ? value : nil
     }
 
     func focusScript(surfaceID: String) -> String {

@@ -40,6 +40,22 @@ extension TerminalAdapter {
         return name.wholeMatch(of: #/ttys?[0-9]+/#) != nil ? name : nil
     }
 
+    /// `key`'s value in the environment of `pid`. Terminals that name
+    /// their sessions do it there, and claude inherits it.
+    func environmentValue(_ key: String, of pid: pid_t) async -> String? {
+        let output = (try? await RealShellExecutor().run("ps -E -ww -o command= -p \(pid)")) ?? ""
+        return Self.environmentValue(key, in: output)
+    }
+
+    /// `ps -E` prints argv before the environment, so the last
+    /// whole-word `key=` is the variable rather than the same text
+    /// inside an argument.
+    static func environmentValue(_ key: String, in psOutput: String) -> String? {
+        psOutput.split(whereSeparator: \.isWhitespace)
+            .last { $0.hasPrefix(key + "=") }
+            .map { String($0.dropFirst(key.count + 1)) }
+    }
+
     func activateApp() {
         for identifier in bundleIdentifiers {
             let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)

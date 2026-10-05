@@ -14,8 +14,8 @@ struct WarpAdapter: TerminalAdapter {
 
     func focusSession(parentPID: pid_t, claudePID: pid_t) async throws {
         guard isInstalled else { throw TerminalError.terminalNotInstalled }
-        let environment = (try? await RealShellExecutor().run("ps -E -ww -o command= -p \(claudePID)")) ?? ""
-        guard let url = Self.focusURL(inProcessEnvironment: environment),
+        guard let value = await environmentValue("WARP_FOCUS_URL", of: claudePID),
+              let url = Self.focusURL(value),
               NSWorkspace.shared.open(url) else {
             activateApp()
             return
@@ -24,13 +24,9 @@ struct WarpAdapter: TerminalAdapter {
 
     /// Only a Warp session link is accepted — the value comes from
     /// another process's environment, and anything else in it is not
-    /// something Clyde should be opening. `ps -E` prints argv before the
-    /// environment, so the last whole-word match is the variable itself
-    /// rather than the same text inside an argument.
-    static func focusURL(inProcessEnvironment output: String) -> URL? {
-        guard let match = output.matches(of: #/(?:^|\s)WARP_FOCUS_URL=(warp[a-z]*://session/[0-9a-fA-F]+)(?=\s|$)/#).last else {
-            return nil
-        }
-        return URL(string: String(match.1))
+    /// something Clyde should be opening.
+    static func focusURL(_ value: String) -> URL? {
+        guard value.wholeMatch(of: #/warp[a-z]*://session/[0-9a-fA-F]+/#) != nil else { return nil }
+        return URL(string: value)
     }
 }
