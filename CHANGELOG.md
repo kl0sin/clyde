@@ -6,6 +6,10 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.10.2] — 2026-10-05
+
+Clicking a session now takes you to that session, not just to its terminal app. If you keep several Claude sessions as tabs, workspaces or splits in one window of Warp, Ghostty or cmux, Clyde opens the exact one you clicked. Terminal.app and iTerm2 already worked this way, and Clyde now recognises cmux too.
+
 ### Fixed
 
 - Clicking a session that runs in Warp or Ghostty now brings you to that session's own tab, split or window. Before, Clyde only brought the app forward, which did not help when you keep several sessions as tabs in one window. Warp needs a build from May 2026 or later. Ghostty needs 1.3 or later and asks once for permission to let Clyde control it. On older versions, or if you decline, Clyde brings the app forward as before.
