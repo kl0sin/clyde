@@ -6,9 +6,13 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+## [0.10.3] — 2026-10-06
+
+A small follow-up to v0.10.2. Sessions running in the integrated terminal of VS Code or Cursor are now recognised, and clicking one brings its editor forward instead of showing an error.
+
 ### Fixed
 
-- Clicking a session that runs in the terminal of VS Code or Cursor now brings that editor forward. Before, Clyde did not recognise either editor and the click ended in an error. Choosing the right terminal tab inside the editor is still up to you.
+- Clicking a session that runs in the terminal of VS Code, VS Code Insiders or Cursor now brings that editor forward. Before, Clyde did not recognise these editors and the click ended in an error. Choosing the right terminal tab inside the editor is still up to you.
 
 ## [0.10.2] — 2026-10-05
 
