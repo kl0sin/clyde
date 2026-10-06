@@ -50,7 +50,8 @@ final class TerminalAdapterTargetingTests: XCTestCase {
     /// Every adapter's identifier list starts with the one it declares.
     func testEveryAdapterListsItsPrimaryIdentifierFirst() {
         let adapters: [TerminalAdapter] = [ITermAdapter(), TerminalAppAdapter(),
-                                           WarpAdapter(), GhosttyAdapter(), CmuxAdapter()]
+                                           WarpAdapter(), GhosttyAdapter(), CmuxAdapter(),
+                                           EditorAdapter.vsCode, EditorAdapter.cursor]
         for adapter in adapters {
             XCTAssertEqual(adapter.bundleIdentifiers.first, adapter.bundleIdentifier, adapter.name)
         }

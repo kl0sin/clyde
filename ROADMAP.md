@@ -160,6 +160,7 @@ Worth noting where these came from. Five of the seven were found by the user wor
 
 Backlog. Pick when there's time or when community interest bumps priority.
 
+- [ ] VS Code / Cursor integrated terminal: focus the right window (open the session's folder in its editor; watch for a new window when claude started in a subfolder), and the exact terminal tab, which needs a small editor extension (`terminal.processId` → `show()`, reached through a `vscode://` link) published to the Marketplace and Open VSX. Today a click only brings the editor forward !lo #ux
 - [x] Coachmark first-run tour — four anchored popovers (session row + tool/plan line + snooze + collapse with ⌃⌘C hotkey discovery) using SwiftUI's native `.popover`. Empty-state branch handles "panel opened before any session exists" with a three-step degraded tour. Migration suppresses the tour for users upgrading from a Clyde version that didn't have it !md #ux
 - [x] Accessibility pass — every interactive surface has a VoiceOver label, traits, hints, and (where relevant) values; the pixel-art mascot and inner indicators are marked decorative; reduce-motion freezes the sprite, disables auto-running pulses, and swaps slide transitions for opacity crossfades while leaving drag-and-drop and color crossfades alone !md #ux
 - [ ] Copy proofread by a second pair of eyes !lo #ux

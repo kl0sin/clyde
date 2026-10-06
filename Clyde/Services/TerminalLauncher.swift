@@ -13,7 +13,9 @@ final class TerminalLauncher: ObservableObject {
         TerminalAppAdapter(),
         WarpAdapter(),
         GhosttyAdapter(),
-        CmuxAdapter()
+        CmuxAdapter(),
+        EditorAdapter.vsCode,
+        EditorAdapter.cursor
     ]
 
     func detectTerminals() {
@@ -105,6 +107,12 @@ final class TerminalLauncher: ObservableObject {
         }
         if hasBundle("cmux") {
             return allAdapters.first { $0 is CmuxAdapter }
+        }
+        if hasBundle("visual studio code") {
+            return allAdapters.first { $0.bundleIdentifier == EditorAdapter.vsCode.bundleIdentifier }
+        }
+        if hasBundle("cursor") {
+            return allAdapters.first { $0.bundleIdentifier == EditorAdapter.cursor.bundleIdentifier }
         }
         return nil
     }

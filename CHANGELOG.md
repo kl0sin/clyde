@@ -6,6 +6,10 @@ Sparkle reads each version's section from this file and shows it inside the "Upd
 
 ## [Unreleased]
 
+### Fixed
+
+- Clicking a session that runs in the terminal of VS Code or Cursor now brings that editor forward. Before, Clyde did not recognise either editor and the click ended in an error. Choosing the right terminal tab inside the editor is still up to you.
+
 ## [0.10.2] — 2026-10-05
 
 Clicking a session now takes you to that session, not just to its terminal app. If you keep several Claude sessions as tabs, workspaces or splits in one window of Warp, Ghostty or cmux, Clyde opens the exact one you clicked. Terminal.app and iTerm2 already worked this way, and Clyde now recognises cmux too.

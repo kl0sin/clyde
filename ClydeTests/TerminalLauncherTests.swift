@@ -45,6 +45,21 @@ final class TerminalHostMatchingTests: XCTestCase {
         XCTAssertTrue(TerminalLauncher().adapter(forBundleIdentifier: "dev.warp.Warp-Preview") is WarpAdapter)
     }
 
+    /// An editor's integrated terminal runs under a helper process; the
+    /// helper's own identifier matches nothing, so the walk carries on to
+    /// the editor itself. VS Code and Cursor stay apart, so a click
+    /// activates the one the session runs in.
+    func testMatchesEditorsAndCmuxByBundleIdentifier() {
+        let launcher = TerminalLauncher()
+
+        XCTAssertTrue(launcher.adapter(forBundleIdentifier: "com.cmuxterm.app") is CmuxAdapter)
+        XCTAssertEqual(launcher.adapter(forBundleIdentifier: "com.microsoft.VSCode")?.name, "VS Code")
+        XCTAssertEqual(launcher.adapter(forBundleIdentifier: "com.todesktop.230313mzl4w4u92")?.name, "Cursor")
+        XCTAssertNil(launcher.adapter(forBundleIdentifier: "com.microsoft.VSCode.helper"))
+        XCTAssertEqual(launcher.adapter(forProcessPath: "/applications/visual studio code.app/contents/frameworks/code helper (plugin).app/contents/macos/code helper (plugin)")?.name, "VS Code")
+        XCTAssertEqual(launcher.adapter(forProcessPath: "/applications/cursor.app/contents/macos/cursor")?.name, "Cursor")
+    }
+
     func testAnUnknownTerminalMatchesNothing() {
         XCTAssertNil(TerminalLauncher().adapter(forBundleIdentifier: "net.kovidgoyal.kitty"))
         XCTAssertNil(TerminalLauncher().adapter(forBundleIdentifier: ""))
