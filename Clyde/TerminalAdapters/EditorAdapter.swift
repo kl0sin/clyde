@@ -10,6 +10,7 @@ struct EditorAdapter: TerminalAdapter {
     let bundleIdentifier: String
 
     static let vsCode = EditorAdapter(name: "VS Code", bundleIdentifier: "com.microsoft.VSCode")
+    static let vsCodeInsiders = EditorAdapter(name: "VS Code Insiders", bundleIdentifier: "com.microsoft.VSCodeInsiders")
     static let cursor = EditorAdapter(name: "Cursor", bundleIdentifier: "com.todesktop.230313mzl4w4u92")
 
     func focusSession(parentPID: pid_t, claudePID: pid_t) async throws {

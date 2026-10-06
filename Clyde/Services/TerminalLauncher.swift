@@ -15,6 +15,7 @@ final class TerminalLauncher: ObservableObject {
         GhosttyAdapter(),
         CmuxAdapter(),
         EditorAdapter.vsCode,
+        EditorAdapter.vsCodeInsiders,
         EditorAdapter.cursor
     ]
 
@@ -108,12 +109,9 @@ final class TerminalLauncher: ObservableObject {
         if hasBundle("cmux") {
             return allAdapters.first { $0 is CmuxAdapter }
         }
-        if hasBundle("visual studio code") {
-            return allAdapters.first { $0.bundleIdentifier == EditorAdapter.vsCode.bundleIdentifier }
-        }
-        if hasBundle("cursor") {
-            return allAdapters.first { $0.bundleIdentifier == EditorAdapter.cursor.bundleIdentifier }
-        }
+        if hasBundle("visual studio code") { return EditorAdapter.vsCode }
+        if hasBundle("visual studio code - insiders") { return EditorAdapter.vsCodeInsiders }
+        if hasBundle("cursor") { return EditorAdapter.cursor }
         return nil
     }
 }
